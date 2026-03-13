@@ -75,3 +75,14 @@ def test_enforce_loop_budget_uses_fallback_for_invalid_budget_values() -> None:
 def test_enforce_loop_budget_clamps_invalid_configured_max() -> None:
     d = enforce_loop_budget(budgets={}, configured_max_loops=0)
     assert d.max_loops == 1
+
+
+def test_enforce_loop_budget_respects_plan_max_iterations() -> None:
+    d = enforce_loop_budget(
+        budgets={"current_loop": 1, "max_loops": 3},
+        configured_max_loops=5,
+        plan_max_iterations=1,
+    )
+    assert d.allow is False
+    assert d.max_loops == 1
+    assert d.halt_reason == "plan_max_iterations_exhausted"

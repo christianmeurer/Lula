@@ -31,6 +31,22 @@ def write_run_trace(*, repo_root: Path, out_dir: Path, state: dict[str, Any]) ->
     verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
     undo_raw = state.get("undo", {})
     undo = dict(undo_raw) if isinstance(undo_raw, dict) else {}
+    recovery_packet_raw = state.get("recovery_packet", {})
+    recovery_packet = (
+        dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else None
+    )
+    correlation: dict[str, Any] = {}
+    request_id_raw = state.get("_request_id")
+    if isinstance(request_id_raw, str) and request_id_raw.strip():
+        correlation["request_id"] = request_id_raw.strip()
+    remote_api_context_raw = state.get("_remote_api_context", {})
+    remote_api_context = (
+        dict(remote_api_context_raw) if isinstance(remote_api_context_raw, dict) else {}
+    )
+    for key in ("auth_subject", "client_ip"):
+        value = remote_api_context.get(key)
+        if isinstance(value, str) and value.strip():
+            correlation[key] = value.strip()
     out_dir_abs = (repo_root / out_dir).resolve()
     try:
         out_dir_abs.mkdir(parents=True, exist_ok=True)
@@ -47,10 +63,12 @@ def write_run_trace(*, repo_root: Path, out_dir: Path, state: dict[str, Any]) ->
         "events": list(state.get("_trace_events", [])),
         "tool_results": list(state.get("tool_results", [])),
         "verification": verification,
+        "recovery_packet": recovery_packet,
         "loop_summaries": list(state.get("loop_summaries", [])),
         "checkpoint": checkpoint,
         "snapshots": list(state.get("snapshots", [])),
         "undo": undo,
+        "correlation": correlation,
         "telemetry": dict(state.get("telemetry", {})),
         "provenance": list(state.get("provenance", [])),
     }

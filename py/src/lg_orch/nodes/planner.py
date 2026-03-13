@@ -72,6 +72,17 @@ def _planner_mcp_prompt(repo_context: dict[str, Any]) -> str:
             "mcp_capabilities: " + json.dumps(mcp_capabilities_raw, ensure_ascii=False, sort_keys=True)
         )
 
+    mcp_recovery_hints = str(repo_context.get("mcp_recovery_hints", "")).strip()
+    if mcp_recovery_hints:
+        parts.append(f"mcp_recovery_hints: {mcp_recovery_hints}")
+
+    mcp_relevant_tools_raw = repo_context.get("mcp_relevant_tools", [])
+    if isinstance(mcp_relevant_tools_raw, list) and mcp_relevant_tools_raw:
+        parts.append(
+            "mcp_relevant_tools: "
+            + json.dumps(mcp_relevant_tools_raw, ensure_ascii=False, sort_keys=True)
+        )
+
     return "\n".join(parts)
 
 
@@ -112,6 +123,17 @@ def _default_plan(request: str = "") -> PlannerOutput:
     )
 
 
+def _recovery_action_from_packet(packet: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "failure_class": str(packet.get("failure_class", "")).strip(),
+        "failure_fingerprint": str(packet.get("failure_fingerprint", "")).strip(),
+        "rationale": str(packet.get("rationale", "")).strip(),
+        "retry_target": str(packet.get("retry_target", "planner")).strip() or "planner",
+        "context_scope": str(packet.get("context_scope", "working_set")).strip() or "working_set",
+        "plan_action": str(packet.get("plan_action", "keep")).strip() or "keep",
+    }
+
+
 def _planner_model_output(
     state: dict[str, Any],
     *,
@@ -136,16 +158,29 @@ def _planner_model_output(
 
     runtime_raw = state.get("_model_provider_runtime", {})
     runtime = runtime_raw if isinstance(runtime_raw, dict) else {}
-    do_raw = runtime.get("digitalocean", {})
-    do_cfg = do_raw if isinstance(do_raw, dict) else {}
-    api_key = str(do_cfg.get("api_key", "")).strip()
-    if not api_key:
-        return None, None
-    base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
-    if not base_url:
-        return None, None
-    timeout_raw = do_cfg.get("timeout_s", 60)
-    timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+
+    if provider == "openai_compatible":
+        oc_raw = runtime.get("openai_compatible", {})
+        oc_cfg = oc_raw if isinstance(oc_raw, dict) else {}
+        api_key = str(oc_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None, None
+        base_url = str(oc_cfg.get("base_url", "https://api.openai.com/v1")).strip().rstrip("/")
+        if not base_url:
+            return None, None
+        timeout_raw = oc_cfg.get("timeout_s", 60)
+        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+    else:
+        do_raw = runtime.get("digitalocean", {})
+        do_cfg = do_raw if isinstance(do_raw, dict) else {}
+        api_key = str(do_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None, None
+        base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
+        if not base_url:
+            return None, None
+        timeout_raw = do_cfg.get("timeout_s", 60)
+        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
 
     repo_root = Path(str(state.get("_repo_root", "."))).resolve()
     planner_prompt_path = repo_root / "prompts" / "planner.md"
@@ -259,8 +294,16 @@ def planner(state: dict[str, Any]) -> dict[str, Any]:
             plan_payload["acceptance_criteria"] = _default_plan(request).acceptance_criteria
         verification_raw = state.get("verification", {})
         verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
+        recovery_packet_raw = state.get("recovery_packet", verification.get("recovery_packet", {}))
+        recovery_packet = (
+            dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+        )
         if plan_payload.get("recovery") is None and isinstance(verification.get("recovery"), dict):
             plan_payload["recovery"] = dict(verification["recovery"])
+        elif plan_payload.get("recovery") is None and recovery_packet:
+            plan_payload["recovery"] = _recovery_action_from_packet(recovery_packet)
+        if plan_payload.get("recovery_packet") is None and recovery_packet:
+            plan_payload["recovery_packet"] = recovery_packet
         out = {**state, "intent": intent, "plan": plan_payload}
         out = record_inference_telemetry(
             out,

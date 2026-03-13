@@ -195,3 +195,111 @@ def test_context_builder_records_model_routing_telemetry() -> None:
         assert len(routes) >= 1
         assert routes[-1]["node"] == "context_builder"
         assert routes[-1]["task_class"] == "summarization"
+
+
+@patch("lg_orch.nodes.context_builder.MCPClient")
+def test_context_builder_records_mcp_recovery_hints(mock_mcp_cls: MagicMock) -> None:
+    with tempfile.TemporaryDirectory() as td:
+        mock_mcp = MagicMock()
+        mock_mcp.summarize_tools.return_value = {
+            "server_count": 1,
+            "tool_count": 2,
+            "servers": [
+                {
+                    "server_name": "mock",
+                    "tool_count": 2,
+                    "tools": [
+                        {"name": "echo", "description": "Echoes text back to the caller."},
+                        {"name": "search", "description": "Searches diagnostic traces."},
+                    ],
+                }
+            ],
+            "summary": "mock: echo, search",
+        }
+        mock_mcp_cls.return_value = mock_mcp
+
+        out = context_builder(
+            _base_state(
+                repo_root=td,
+                _mcp_enabled=True,
+                _mcp_servers={"mock": {"command": "python", "args": ["server.py"]}},
+                _runner_base_url="http://127.0.0.1:8088",
+                recovery_packet={
+                    "failure_class": "verification_failed",
+                    "last_check": "search diagnostic traces",
+                },
+                request="search diagnostic traces",
+            )
+        )
+        repo_context = out["repo_context"]
+        assert "mcp_recovery_hints" in repo_context
+        assert "candidate_tools:" in repo_context["mcp_recovery_hints"]
+        assert repo_context["mcp_relevant_tools"][0]["name"] in {"echo", "search"}
+
+
+def test_context_builder_loads_episodic_facts(tmp_path: Path) -> None:
+    from lg_orch.run_store import RunStore
+
+    db_path = tmp_path / "runs.sqlite"
+    store = RunStore(db_path=db_path)
+    try:
+        store.upsert_recovery_facts(
+            "run-seed",
+            [
+                {
+                    "failure_fingerprint": "fp-abc",
+                    "failure_class": "lint",
+                    "summary": "ruff E501 violation",
+                    "loop": 2,
+                    "salience": 7,
+                }
+            ],
+        )
+    finally:
+        store.close()
+
+    with tempfile.TemporaryDirectory() as td:
+        out = context_builder(
+            _base_state(
+                repo_root=td,
+                _run_store_path=str(db_path),
+                recovery_packet={
+                    "failure_fingerprint": "fp-abc",
+                    "failure_class": "lint",
+                },
+            )
+        )
+    repo_context = out["repo_context"]
+    assert "episodic_facts" in repo_context
+    assert len(repo_context["episodic_facts"]) >= 1
+    assert repo_context["episodic_facts"][0]["fingerprint"] == "fp-abc"
+
+
+def test_context_builder_loads_cached_procedures(tmp_path: Any) -> None:
+    from lg_orch.procedure_cache import ProcedureCache
+
+    db_path = tmp_path / "procedures.sqlite"
+    cache = ProcedureCache(db_path=db_path)
+    steps = [{"id": "s1", "tools": [{"tool": "run_tests"}, {"tool": "check_output"}]}]
+    cache.store_procedure(
+        canonical_name="run_tests_check_output",
+        request="run the tests and verify",
+        task_class="testing",
+        steps=steps,
+        verification=[],
+        created_at="2026-01-01T00:00:00Z",
+    )
+    cache.close()
+
+    with tempfile.TemporaryDirectory() as td:
+        out = context_builder(
+            _base_state(
+                repo_root=td,
+                request="run the tests and verify",
+                _procedure_cache_path=str(db_path),
+            )
+        )
+    repo_context = out["repo_context"]
+    assert "cached_procedures" in repo_context
+    assert len(repo_context["cached_procedures"]) >= 1
+    assert repo_context["cached_procedures"][0]["canonical_name"] == "run_tests_check_output"

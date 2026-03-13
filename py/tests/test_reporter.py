@@ -58,6 +58,28 @@ def test_reporter_includes_tool_count_when_results_exist() -> None:
     assert "tool_calls: 2" in out["final"]
 
 
+def test_reporter_includes_acceptance_status() -> None:
+    out = reporter(
+        _base_state(
+            verification={
+                "ok": False,
+                "acceptance_ok": False,
+                "acceptance_checks": [
+                    {
+                        "criterion": "Necessary repository context was gathered.",
+                        "ok": False,
+                        "detail": "repo_context_missing",
+                    }
+                ],
+            },
+            halt_reason="plan_max_iterations_exhausted",
+        )
+    )
+    assert "verification_ok: False" in out["final"]
+    assert "acceptance_ok: False" in out["final"]
+    assert "halt_reason: plan_max_iterations_exhausted" in out["final"]
+
+
 def test_reporter_omits_tool_count_when_no_results() -> None:
     out = reporter(_base_state(tool_results=[]))
     assert "tool_calls" not in out["final"]

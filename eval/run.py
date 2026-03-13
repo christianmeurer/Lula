@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,6 +26,10 @@ class EvalTask:
     expected_intent: str
     expected_halt_reason: str = ""
     require_final: bool = True
+    expected_acceptance_ok: bool = True
+    budget_max_loops: int = 1
+    expected_recovery_packet_present: bool = False
+    description: str = ""
 
 
 def load_tasks(tasks_dir: Path) -> list[EvalTask]:
@@ -39,6 +43,10 @@ def load_tasks(tasks_dir: Path) -> list[EvalTask]:
                 expected_intent=str(data["expected_intent"]),
                 expected_halt_reason=str(data.get("expected_halt_reason", "")),
                 require_final=bool(data.get("require_final", True)),
+                expected_acceptance_ok=bool(data.get("expected_acceptance_ok", True)),
+                budget_max_loops=int(data.get("budget_max_loops", 1)),
+                expected_recovery_packet_present=bool(data.get("expected_recovery_packet_present", False)),
+                description=str(data.get("description", "")),
             )
         )
     return tasks
@@ -55,7 +63,7 @@ def run_task(task: EvalTask, *, repo_root: Path) -> dict[str, Any]:
             "_repo_root": str(repo_root),
             "_runner_base_url": "http://127.0.0.1:8088",
             "_runner_enabled": False,
-            "_budget_max_loops": 1,
+            "_budget_max_loops": task.budget_max_loops,
             "_config_policy": {
                 "network_default": "deny",
                 "require_approval_for_mutations": True,
@@ -66,17 +74,39 @@ def run_task(task: EvalTask, *, repo_root: Path) -> dict[str, Any]:
     return dict(output)
 
 
+def _score_recovery_packet(task: EvalTask, output: dict[str, Any]) -> bool:
+    packet = output.get("recovery_packet")
+    present = isinstance(packet, dict) and bool(packet)
+    return present == task.expected_recovery_packet_present
+
+
+def _score_loop_summary_quality(output: dict[str, Any]) -> bool:
+    # passes if: either verification passed (ok=True) OR loop_summaries is non-empty
+    verification = output.get("verification", {})
+    if isinstance(verification, dict) and bool(verification.get("ok", False)):
+        return True
+    loop_summaries = output.get("loop_summaries", [])
+    return isinstance(loop_summaries, list) and len(loop_summaries) > 0
+
+
 def score_task(task: EvalTask, output: dict[str, Any]) -> dict[str, Any]:
     actual_intent = str(output.get("intent", "")).strip()
     halt_reason = str(output.get("halt_reason", "")).strip()
     final_present = bool(str(output.get("final", "")).strip())
     tool_results_raw = output.get("tool_results", [])
     tool_results = tool_results_raw if isinstance(tool_results_raw, list) else []
+    verification_raw = output.get("verification", {})
+    verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
+    acceptance_ok = bool(verification.get("acceptance_ok", False))
 
     checks = {
         "intent_match": actual_intent == task.expected_intent,
         "halt_reason_match": halt_reason == task.expected_halt_reason,
         "final_present": final_present if task.require_final else True,
+        "acceptance_ok_match": acceptance_ok == task.expected_acceptance_ok,
+        "recovery_packet_match": _score_recovery_packet(task, output),
+        "loop_summary_quality": _score_loop_summary_quality(output),
+        "route_lane_set": bool(str(output.get("route", {}).get("lane", "")).strip()),
     }
     passed_checks = sum(1 for ok in checks.values() if ok)
     max_checks = len(checks)
@@ -90,6 +120,7 @@ def score_task(task: EvalTask, output: dict[str, Any]) -> dict[str, Any]:
         "expected_halt_reason": task.expected_halt_reason,
         "actual_halt_reason": halt_reason,
         "final_present": final_present,
+        "acceptance_ok": acceptance_ok,
         "tool_results_count": len(tool_results),
         "checks": checks,
         "score": score,
@@ -117,6 +148,14 @@ def evaluate_tasks(
     avg_tool_results = (
         sum(int(result.get("tool_results_count", 0)) for result in results) / total if total else 0.0
     )
+    recovery_packet_accuracy = sum(
+        1 for result in results
+        if bool(result.get("checks", {}).get("recovery_packet_match", False))
+    ) / total if total else 0.0
+    loop_summary_quality = sum(
+        1 for result in results
+        if bool(result.get("checks", {}).get("loop_summary_quality", False))
+    ) / total if total else 0.0
 
     return {
         "summary": {
@@ -127,6 +166,8 @@ def evaluate_tasks(
             "intent_accuracy": intent_matches / total if total else 0.0,
             "average_score": avg_score,
             "average_tool_results": avg_tool_results,
+            "recovery_packet_accuracy": recovery_packet_accuracy,
+            "loop_summary_quality": loop_summary_quality,
         },
         "results": results,
     }
@@ -144,7 +185,9 @@ def _render_text_report(report: dict[str, Any]) -> str:
             f"passed={int(summary.get('passed_tasks', 0))}/{int(summary.get('total_tasks', 0))} "
             f"pass_rate={float(summary.get('pass_rate', 0.0)):.2f} "
             f"intent_accuracy={float(summary.get('intent_accuracy', 0.0)):.2f} "
-            f"avg_score={float(summary.get('average_score', 0.0)):.2f}"
+            f"avg_score={float(summary.get('average_score', 0.0)):.2f} "
+            f"recovery_packet_acc={float(summary.get('recovery_packet_accuracy', 0.0)):.2f} "
+            f"loop_summary_quality={float(summary.get('loop_summary_quality', 0.0)):.2f}"
         )
     ]
     for result in results:
@@ -158,6 +201,7 @@ def _render_text_report(report: dict[str, Any]) -> str:
                 f"score={float(result.get('score', 0.0)):.2f} "
                 f"intent={str(result.get('actual_intent', '')) or '(missing)'} "
                 f"halt={halt_reason} "
+                f"acceptance_ok={bool(result.get('acceptance_ok', False))} "
                 f"tools={int(result.get('tool_results_count', 0))}"
             )
         )

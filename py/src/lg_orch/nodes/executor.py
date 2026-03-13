@@ -166,8 +166,10 @@ def executor(state: dict[str, Any]) -> dict[str, Any]:
 
     api_key = state.get("_runner_api_key")
     api_key_s = str(api_key).strip() if api_key is not None else None
+    request_id = state.get("_request_id")
+    request_id_s = str(request_id).strip() if request_id is not None else None
     try:
-        client = RunnerClient(base_url=runner_base_url, api_key=api_key_s)
+        client = RunnerClient(base_url=runner_base_url, api_key=api_key_s, request_id=request_id_s)
     except Exception as exc:
         log.error("executor_client_init_failed", error=str(exc))
         return append_event(

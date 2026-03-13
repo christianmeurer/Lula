@@ -40,6 +40,14 @@ class RecoveryAction(BaseModel):
     plan_action: PlanAction = "keep"
 
 
+class RecoveryPacket(RecoveryAction):
+    loop: int = 0
+    origin: str = "verifier"
+    summary: str = ""
+    last_check: str = ""
+    discard_reason: str = ""
+
+
 class PlannerOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,6 +57,7 @@ class PlannerOutput(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list)
     max_iterations: int = Field(default=1, ge=1)
     recovery: RecoveryAction | None = None
+    recovery_packet: RecoveryPacket | None = None
 
 
 class RouterDecision(BaseModel):
@@ -65,6 +74,9 @@ class RouterDecision(BaseModel):
     provider_used: Literal["local", "remote"] = "local"
     provider: str = ""
     model: str = ""
+    context_tokens: int = 0
+    compression_pressure: int = 0
+    fact_count: int = 0
 
 
 class VerificationCheck(BaseModel):
@@ -82,11 +94,14 @@ class VerifierReport(BaseModel):
 
     ok: bool
     checks: list[VerificationCheck]
+    acceptance_ok: bool = True
+    acceptance_checks: list[dict[str, Any]] = Field(default_factory=list)
     retry_target: RetryTarget | None = None
     plan_action: PlanAction = "keep"
     failure_class: str = ""
     failure_fingerprint: str = ""
     recovery: RecoveryAction | None = None
+    recovery_packet: RecoveryPacket | None = None
     loop_summary: str = ""
 
 
@@ -109,6 +124,7 @@ class OrchState(BaseModel):
     telemetry: dict[str, Any] = Field(default_factory=dict)
     route: RouterDecision | None = None
     retry_target: RetryTarget | None = None
+    recovery_packet: RecoveryPacket | None = None
     context_reset_requested: bool = False
     plan_discarded: bool = False
     plan_discard_reason: str = ""
@@ -135,6 +151,8 @@ class ModelRoutingDecision(BaseModel):
     cache_affinity: str = ""
     prefix_segment: str = ""
     context_tokens: int = 0
+    compression_pressure: int = 0
+    fact_count: int = 0
     retry_count: int = 0
     latency_sensitive: bool = True
 

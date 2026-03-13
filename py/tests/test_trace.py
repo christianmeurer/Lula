@@ -70,6 +70,24 @@ def test_write_run_trace_creates_file() -> None:
     with tempfile.TemporaryDirectory() as td:
         state: dict[str, Any] = {
             "_run_id": "test123",
+            "_request_id": "req-1",
+            "_remote_api_context": {
+                "auth_subject": "bearer",
+                "client_ip": "203.0.113.10",
+            },
+            "recovery_packet": {
+                "failure_class": "verification_failed",
+                "failure_fingerprint": "fp-1",
+                "rationale": "retry planning",
+                "retry_target": "planner",
+                "context_scope": "working_set",
+                "plan_action": "keep",
+                "loop": 1,
+                "origin": "verifier",
+                "summary": "verification_failed: failed test",
+                "last_check": "failed test",
+                "discard_reason": "",
+            },
             "request": "hello",
             "intent": "analysis",
             "final": "done",
@@ -92,10 +110,14 @@ def test_write_run_trace_creates_file() -> None:
         assert len(data["events"]) == 1
         assert data["tool_results"] == []
         assert data["verification"]["ok"] is True
+        assert data["recovery_packet"]["failure_fingerprint"] == "fp-1"
         assert data["loop_summaries"][0]["loop"] == 1
         assert data["checkpoint"]["thread_id"] == "thread-a"
         assert data["snapshots"][0]["id"] == "snap-1"
         assert data["undo"]["available"] is True
+        assert data["correlation"]["request_id"] == "req-1"
+        assert data["correlation"]["auth_subject"] == "bearer"
+        assert data["correlation"]["client_ip"] == "203.0.113.10"
         assert data["provenance"][0]["event"] == "read_file_payload_evicted"
 
 

@@ -7,6 +7,7 @@ from lg_orch.state import (
     OrchState,
     PlannerOutput,
     PlanStep,
+    RecoveryPacket,
     ToolCall,
     VerificationCheck,
     VerifierReport,
@@ -74,6 +75,28 @@ def test_planner_output_valid() -> None:
     assert len(po.steps) == 1
 
 
+def test_planner_output_accepts_recovery_packet() -> None:
+    po = PlannerOutput(
+        steps=[PlanStep(id="s1", description="d", expected_outcome="ok")],
+        verification=[],
+        rollback="none",
+        recovery_packet=RecoveryPacket(
+            failure_class="verification_failed",
+            failure_fingerprint="fp-1",
+            rationale="retry planning with same context",
+            retry_target="planner",
+            context_scope="working_set",
+            plan_action="keep",
+            loop=1,
+            summary="verification_failed: test assertion failed",
+            last_check="test assertion failed",
+            discard_reason="",
+        ),
+    )
+    assert po.recovery_packet is not None
+    assert po.recovery_packet.failure_fingerprint == "fp-1"
+
+
 def test_planner_output_forbids_extra() -> None:
     with pytest.raises(ValidationError):
         PlannerOutput(steps=[], verification=[], rollback="none", extra="bad")  # type: ignore[call-arg]
@@ -114,6 +137,28 @@ def test_verifier_report_with_checks() -> None:
     assert vr.ok is False
 
 
+def test_verifier_report_accepts_recovery_packet() -> None:
+    vr = VerifierReport(
+        ok=False,
+        checks=[],
+        retry_target="planner",
+        recovery_packet=RecoveryPacket(
+            failure_class="verification_failed",
+            failure_fingerprint="fp-2",
+            rationale="retry planning",
+            retry_target="planner",
+            context_scope="working_set",
+            plan_action="keep",
+            loop=2,
+            summary="verification_failed: lint failed",
+            last_check="lint failed",
+            discard_reason="",
+        ),
+    )
+    assert vr.recovery_packet is not None
+    assert vr.recovery_packet.loop == 2
+
+
 # --- OrchState ---
 
 
@@ -151,6 +196,7 @@ def test_orch_state_model_dump_roundtrip() -> None:
 def test_orch_state_new_phase1_fields_defaults() -> None:
     os_ = OrchState(request="hi")
     assert os_.retry_target is None
+    assert os_.recovery_packet is None
     assert os_.context_reset_requested is False
     assert os_.plan_discarded is False
     assert os_.plan_discard_reason == ""

@@ -1,0 +1,8 @@
+{
+  "id": "debug-routing-001",
+  "request": "Debug the panic: thread 'main' panicked at src/main.rs:42",
+  "expected_intent": "debug",
+  "expected_acceptance_ok": false,
+  "require_final": false,
+  "description": "A debug request with a stack-trace hint should be classified as debug intent."
+}

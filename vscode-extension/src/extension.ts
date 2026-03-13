@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { spawn, type ChildProcess } from 'child_process';
 import * as http from 'http';
 import * as https from 'https';
@@ -5,9 +6,6 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-const RUNNER_BIND = '127.0.0.1:8088';
-const RUNNER_BASE_URL = 'http://127.0.0.1:8088';
-const RUNNER_API_KEY = 'dev-insecure';
 const DEFAULT_REMOTE_POLL_INTERVAL_MS = 1000;
 const LOG_LIMIT = 1000;
 
@@ -16,7 +14,18 @@ const COMMANDS = {
   runRequest: 'lgOrch.runRequest',
   startRunner: 'lgOrch.startRunner',
   stopRunner: 'lgOrch.stopRunner',
+  openRunHistory: 'lgOrch.openRunHistory',
+  clearRunHistory: 'lgOrch.clearRunHistory',
 } as const;
+
+interface RunHistoryEntry {
+  runId: string;
+  request: string;
+  status: string;
+  startedAt: string;
+  tracePath: string | null;
+  finalOutput: string;
+}
 
 interface TraceSummary {
   tracePath: string | null;
@@ -27,15 +36,21 @@ interface ViewModel {
   workspaceRoot: string;
   runnerStatus: string;
   requestStatus: string;
+  stopLabel: string;
   latestTracePath: string;
   finalOutput: string;
   logs: string;
+  runHistory: RunHistoryEntry[];
+  showInlineDiff: boolean;
+  inlineDiff: string;
 }
 
 interface RemoteRunDetails {
   run_id?: unknown;
   status?: unknown;
   exit_code?: unknown;
+  cancel_requested?: unknown;
+  cancellable?: unknown;
   trace_path?: unknown;
   trace_ready?: unknown;
   trace?: unknown;
@@ -51,11 +66,14 @@ class LgOrchExtension {
   private readonly logLines: string[] = [];
   private latestTracePath: string | null = null;
   private latestFinalOutput = '';
+  private latestInlineDiff = '';
   private runnerStatus = 'stopped';
   private requestStatus = 'idle';
   private requestRunning = false;
+  private activeRemoteRunId: string | null = null;
+  private readonly runHistory: RunHistoryEntry[] = [];
 
-  public constructor(private readonly context: vscode.ExtensionContext) {}
+  public constructor(private readonly context: vscode.ExtensionContext) { }
 
   public register(): void {
     this.context.subscriptions.push(
@@ -70,6 +88,13 @@ class LgOrchExtension {
       }),
       vscode.commands.registerCommand(COMMANDS.runRequest, async (request: unknown) => {
         await this.runRequest(typeof request === 'string' ? request : undefined);
+      }),
+      vscode.commands.registerCommand(COMMANDS.openRunHistory, async () => {
+        await this.openPanel();
+      }),
+      vscode.commands.registerCommand(COMMANDS.clearRunHistory, () => {
+        this.runHistory.splice(0, this.runHistory.length);
+        this.refresh();
       }),
     );
   }
@@ -123,6 +148,10 @@ class LgOrchExtension {
       case 'stopRunner':
         await this.stopRunner();
         return;
+      case 'clearRunHistory':
+        this.runHistory.splice(0, this.runHistory.length);
+        this.refresh();
+        return;
       default:
         return;
     }
@@ -143,24 +172,36 @@ class LgOrchExtension {
       return;
     }
 
-    const cwd = path.join(workspaceRoot, 'rs');
-    const args = [
-      'run',
-      '--',
-      '--bind',
-      RUNNER_BIND,
-      '--root-dir',
-      workspaceRoot,
-      '--profile',
-      'dev',
-      '--api-key',
-      RUNNER_API_KEY,
-    ];
+    const binaryPath = this.getRunnerBinaryPath();
+    let command: string;
+    let args: string[];
+    let cwd: string;
+
+    if (binaryPath) {
+      command = binaryPath;
+      args = [
+        '--bind', this.getRunnerBindAddress(),
+        '--root-dir', workspaceRoot,
+        '--profile', 'dev',
+        '--api-key', this.getRunnerApiKey(),
+      ];
+      cwd = workspaceRoot;
+    } else {
+      command = 'cargo';
+      args = [
+        'run', '--',
+        '--bind', this.getRunnerBindAddress(),
+        '--root-dir', workspaceRoot,
+        '--profile', 'dev',
+        '--api-key', this.getRunnerApiKey(),
+      ];
+      cwd = path.join(workspaceRoot, 'rs');
+    }
 
     this.runnerStatus = 'starting';
-    this.appendLog(`[runner] starting: cargo ${args.join(' ')}`);
+    this.appendLog(`[runner] starting: ${command} ${args.join(' ')}`);
 
-    const child = spawn('cargo', args, {
+    const child = spawn(command, args, {
       cwd,
       detached: process.platform !== 'win32',
       env: process.env,
@@ -200,6 +241,14 @@ class LgOrchExtension {
   private async stopRunner(logWhenMissing = true): Promise<void> {
     await this.openPanel();
 
+    if (this.requestRunning && this.activeRemoteRunId) {
+      const remoteApiBaseUrl = this.getRemoteApiBaseUrl();
+      if (remoteApiBaseUrl) {
+        await this.cancelRemoteRun(remoteApiBaseUrl, this.activeRemoteRunId);
+        return;
+      }
+    }
+
     const child = this.runnerProcess;
     if (!child) {
       if (logWhenMissing) {
@@ -237,8 +286,10 @@ class LgOrchExtension {
 
     this.requestRunning = true;
     this.requestStatus = 'starting';
+    this.activeRemoteRunId = null;
     this.latestTracePath = null;
     this.latestFinalOutput = '';
+    this.latestInlineDiff = '';
     this.appendLog(`[run] request: ${request}`);
     this.refresh();
 
@@ -254,6 +305,19 @@ class LgOrchExtension {
       this.appendLog(`[run] failed: ${asErrorMessage(error)}`);
     } finally {
       this.requestRunning = false;
+      const maxHistory = this.getMaxRunHistory();
+      this.runHistory.push({
+        runId: this.activeRemoteRunId ?? `local-${Date.now()}`,
+        request: request || '',
+        status: this.requestStatus,
+        startedAt: new Date().toISOString(),
+        tracePath: this.latestTracePath,
+        finalOutput: this.latestFinalOutput,
+      });
+      if (this.runHistory.length > maxHistory) {
+        this.runHistory.splice(0, this.runHistory.length - maxHistory);
+      }
+      this.activeRemoteRunId = null;
       this.refresh();
     }
   }
@@ -278,7 +342,7 @@ class LgOrchExtension {
       '--view',
       'classic',
       '--runner-base-url',
-      RUNNER_BASE_URL,
+      this.getRunnerBaseUrl(),
     ];
     const runCode = await this.runCommand('cli', 'uv', runArgs, pyDir);
     const summary = await this.findLatestTrace(workspaceRoot);
@@ -302,24 +366,41 @@ class LgOrchExtension {
 
   private async runRemoteRequest(request: string, remoteApiBaseUrl: string): Promise<void> {
     const pollIntervalMs = this.getRemotePollIntervalMs();
+    const remoteApiBearerToken = this.getRemoteApiBearerToken();
     this.appendLog(`[remote] using API: ${remoteApiBaseUrl}`);
-    await this.requestJson('GET', `${remoteApiBaseUrl}/healthz`);
+    await this.requestJson('GET', `${remoteApiBaseUrl}/healthz`, undefined, remoteApiBearerToken);
     this.appendLog('[remote] healthz ok');
 
-    const created = await this.requestJson<RemoteRunDetails>('POST', `${remoteApiBaseUrl}/v1/runs`, {
-      request,
-      view: 'classic',
-    });
+    const created = await this.requestJson<RemoteRunDetails>(
+      'POST',
+      `${remoteApiBaseUrl}/v1/runs`,
+      {
+        request,
+        view: 'classic',
+      },
+      remoteApiBearerToken,
+    );
     const runId = this.readRemoteRunId(created);
+    this.activeRemoteRunId = runId;
     this.appendLog(`[remote] run started: ${runId}`);
     this.applyRemoteRunDetails(created);
 
     let logCount = 0;
     while (true) {
-      const detail = await this.requestJson<RemoteRunDetails>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`);
+      const detail = await this.requestJson<RemoteRunDetails>(
+        'GET',
+        `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`,
+        undefined,
+        remoteApiBearerToken,
+      );
       this.applyRemoteRunDetails(detail);
 
-      const logs = await this.requestJson<RemoteRunLogs>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`);
+      const logs = await this.requestJson<RemoteRunLogs>(
+        'GET',
+        `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`,
+        undefined,
+        remoteApiBearerToken,
+      );
       logCount = this.appendRemoteLogs(logs, logCount);
 
       if (!isRemoteRunInProgress(this.requestStatus)) {
@@ -329,16 +410,40 @@ class LgOrchExtension {
       await delay(pollIntervalMs);
     }
 
-    const finalDetail = await this.requestJson<RemoteRunDetails>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`);
+    const finalDetail = await this.requestJson<RemoteRunDetails>(
+      'GET',
+      `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`,
+      undefined,
+      remoteApiBearerToken,
+    );
     this.applyRemoteRunDetails(finalDetail);
     this.appendRemoteLogs(
-      await this.requestJson<RemoteRunLogs>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`),
+      await this.requestJson<RemoteRunLogs>(
+        'GET',
+        `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`,
+        undefined,
+        remoteApiBearerToken,
+      ),
       logCount,
     );
 
     if (typeof finalDetail.exit_code === 'number') {
       this.appendLog(`[remote] completed exit_code=${finalDetail.exit_code}`);
     }
+  }
+
+  private async cancelRemoteRun(remoteApiBaseUrl: string, runId: string): Promise<void> {
+    const remoteApiBearerToken = this.getRemoteApiBearerToken();
+    this.requestStatus = 'cancelling';
+    this.refresh();
+    this.appendLog(`[remote] cancel requested: ${runId}`);
+    const detail = await this.requestJson<RemoteRunDetails>(
+      'POST',
+      `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+      remoteApiBearerToken,
+    );
+    this.applyRemoteRunDetails(detail);
   }
 
   private async runCommand(label: string, command: string, args: readonly string[], cwd: string): Promise<number> {
@@ -374,6 +479,33 @@ class LgOrchExtension {
     });
   }
 
+  private getRunnerBindAddress(): string {
+    return vscode.workspace.getConfiguration('lula').get<string>('runnerBindAddress', '127.0.0.1:8088').trim() || '127.0.0.1:8088';
+  }
+
+  private getRunnerBaseUrl(): string {
+    const bind = this.getRunnerBindAddress();
+    return `http://${bind}`;
+  }
+
+  private getRunnerApiKey(): string {
+    return vscode.workspace.getConfiguration('lula').get<string>('runnerApiKey', 'dev-insecure').trim() || 'dev-insecure';
+  }
+
+  private getRunnerBinaryPath(): string {
+    return vscode.workspace.getConfiguration('lula').get<string>('runnerBinaryPath', '').trim();
+  }
+
+  private isShowInlineDiff(): boolean {
+    return vscode.workspace.getConfiguration('lula').get<boolean>('showInlineDiff', true);
+  }
+
+  private getMaxRunHistory(): number {
+    const val = vscode.workspace.getConfiguration('lula').get<number>('maxRunHistory', 20);
+    if (!Number.isFinite(val) || val < 1) return 20;
+    return Math.min(val, 200);
+  }
+
   private getRemoteApiBaseUrl(): string | null {
     const raw = vscode.workspace.getConfiguration('lula').get<string>('remoteApiBaseUrl', '').trim();
     if (!raw) {
@@ -394,6 +526,11 @@ class LgOrchExtension {
     return parsed.toString().replace(/\/+$/, '');
   }
 
+  private getRemoteApiBearerToken(): string | null {
+    const raw = vscode.workspace.getConfiguration('lula').get<string>('remoteApiBearerToken', '').trim();
+    return raw || null;
+  }
+
   private getRemotePollIntervalMs(): number {
     const configured = vscode.workspace
       .getConfiguration('lula')
@@ -407,15 +544,55 @@ class LgOrchExtension {
   private applyRemoteRunDetails(detail: RemoteRunDetails): void {
     this.requestStatus = typeof detail.status === 'string' && detail.status.trim() ? detail.status : 'running';
 
+    if (typeof detail.run_id === 'string' && detail.run_id.trim()) {
+      this.activeRemoteRunId = detail.run_id.trim();
+    }
+
+    if (detail.cancellable === false || this.requestStatus === 'cancelled' || !isRemoteRunInProgress(this.requestStatus)) {
+      this.activeRemoteRunId = null;
+    }
+
     if (typeof detail.trace_path === 'string' && detail.trace_path.trim()) {
       this.latestTracePath = detail.trace_path;
     }
 
     if (detail.trace_ready === true && isRecord(detail.trace)) {
       this.latestFinalOutput = this.formatOutput(detail.trace.final);
+      if (this.isShowInlineDiff()) {
+        this.latestInlineDiff = this.extractInlineDiff(detail.trace);
+      }
     }
 
     this.refresh();
+  }
+
+  private extractInlineDiff(traceData: unknown): string {
+    if (!isRecord(traceData)) return '';
+    const toolResults = Array.isArray(traceData.tool_results) ? traceData.tool_results : [];
+    const patches: string[] = [];
+    for (const result of toolResults) {
+      if (!isRecord(result)) continue;
+      if (String(result.tool || '').includes('apply_patch') && Boolean(result.ok)) {
+        const input = isRecord(result.input) ? result.input : {};
+        const patch = typeof input.patch === 'string' ? input.patch.trim() : '';
+        const changes = Array.isArray(input.changes) ? input.changes : [];
+        if (patch) {
+          patches.push(patch);
+        } else {
+          for (const change of changes) {
+            if (isRecord(change)) {
+              const content = typeof change.patch === 'string' ? change.patch.trim()
+                : typeof change.content === 'string' ? change.content.trim() : '';
+              const filePath = typeof change.path === 'string' ? change.path : '(unknown)';
+              if (content) {
+                patches.push(`--- ${filePath}\n${content}`);
+              }
+            }
+          }
+        }
+      }
+    }
+    return patches.join('\n\n---\n\n');
   }
 
   private appendRemoteLogs(payload: RemoteRunLogs, seenCount: number): number {
@@ -438,7 +615,7 @@ class LgOrchExtension {
     throw new Error('remote API response missing run_id');
   }
 
-  private async requestJson<T>(method: 'GET' | 'POST', requestUrl: string, body?: unknown): Promise<T> {
+  private async requestJson<T>(method: 'GET' | 'POST', requestUrl: string, body?: unknown, bearerToken?: string | null): Promise<T> {
     const url = new URL(requestUrl);
     const client = url.protocol === 'https:' ? https : url.protocol === 'http:' ? http : null;
     if (!client) {
@@ -446,6 +623,17 @@ class LgOrchExtension {
     }
 
     const payload = body === undefined ? undefined : JSON.stringify(body);
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'X-Request-ID': randomUUID(),
+    };
+    if (bearerToken && bearerToken.trim()) {
+      headers.Authorization = `Bearer ${bearerToken.trim()}`;
+    }
+    if (payload !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(payload).toString();
+    }
 
     return await new Promise<T>((resolve, reject) => {
       const request = client.request(
@@ -454,14 +642,7 @@ class LgOrchExtension {
           port: url.port,
           path: `${url.pathname}${url.search}`,
           method,
-          headers:
-            payload === undefined
-              ? { Accept: 'application/json' }
-              : {
-                  Accept: 'application/json',
-                  'Content-Type': 'application/json',
-                  'Content-Length': Buffer.byteLength(payload).toString(),
-                },
+          headers,
         },
         (response) => {
           const chunks: Buffer[] = [];
@@ -672,9 +853,13 @@ class LgOrchExtension {
       workspaceRoot: this.getWorkspaceRoot() ?? '(no workspace)',
       runnerStatus: this.runnerStatus,
       requestStatus: this.requestStatus,
+      stopLabel: this.requestRunning && this.activeRemoteRunId ? 'Cancel Remote Run' : 'Stop Runner',
       latestTracePath: this.latestTracePath ?? '(none)',
       finalOutput: this.latestFinalOutput || '(empty)',
       logs: this.logLines.length > 0 ? this.logLines.join('\n') : '(no logs yet)',
+      runHistory: [...this.runHistory].reverse(),
+      showInlineDiff: this.isShowInlineDiff(),
+      inlineDiff: this.latestInlineDiff,
     };
   }
 
@@ -751,6 +936,12 @@ class LgOrchExtension {
         white-space: pre-wrap;
         word-break: break-word;
       }
+
+      .run-history { display: flex; flex-direction: column; gap: 4px; }
+      .run-entry { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 4px 8px; background: var(--vscode-textCodeBlock-background); border-radius: 4px; font-size: 11px; }
+      .run-entry .status-ok { color: var(--vscode-testing-iconPassed); }
+      .run-entry .status-fail { color: var(--vscode-testing-iconFailed); }
+      .run-entry .status-other { color: var(--vscode-descriptionForeground); }
     </style>
   </head>
   <body>
@@ -774,6 +965,16 @@ class LgOrchExtension {
     <section>
       <h2>Final Output</h2>
       <pre id="finalOutput"></pre>
+    </section>
+
+    <section id="diffSection" style="display:none">
+      <h2>Inline Diff</h2>
+      <pre id="inlineDiff"></pre>
+    </section>
+
+    <section>
+      <h2>Run History <button id="clearHistory" style="font-size:10px;padding:2px 6px">Clear</button></h2>
+      <div id="runHistory" class="run-history"></div>
     </section>
 
     <section>
@@ -801,15 +1002,44 @@ class LgOrchExtension {
         }
       });
 
+      function escapeHtml(text) {
+        return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+
       window.addEventListener('message', (event) => {
         const state = event.data;
         document.getElementById('workspace').textContent = 'Workspace: ' + state.workspaceRoot;
         document.getElementById('runner').textContent = 'Runner: ' + state.runnerStatus;
         document.getElementById('requestStatus').textContent = 'Request: ' + state.requestStatus;
+        document.getElementById('stop').textContent = state.stopLabel;
         document.getElementById('tracePath').textContent = 'Latest trace: ' + state.latestTracePath;
         document.getElementById('finalOutput').textContent = state.finalOutput;
         logs.textContent = state.logs;
         logs.scrollTop = logs.scrollHeight;
+
+        const diffSection = document.getElementById('diffSection');
+        const inlineDiff = document.getElementById('inlineDiff');
+        if (state.showInlineDiff && state.inlineDiff) {
+          inlineDiff.textContent = state.inlineDiff;
+          diffSection.style.display = '';
+        } else {
+          diffSection.style.display = 'none';
+        }
+
+        const historyContainer = document.getElementById('runHistory');
+        historyContainer.innerHTML = '';
+        for (const entry of (state.runHistory || [])) {
+          const div = document.createElement('div');
+          div.className = 'run-entry';
+          const statusClass = entry.status === 'succeeded' ? 'status-ok'
+            : entry.status === 'failed' ? 'status-fail' : 'status-other';
+          div.innerHTML = '<span class="' + statusClass + '">' + escapeHtml(entry.status) + '</span><span title="' + escapeHtml(entry.request) + '">' + escapeHtml(entry.request.length > 60 ? entry.request.slice(0, 60) + '...' : entry.request) + '</span><span>' + escapeHtml(entry.startedAt.slice(11, 19)) + '</span>';
+          historyContainer.appendChild(div);
+        }
+      });
+
+      document.getElementById('clearHistory').addEventListener('click', () => {
+        vscodeApi.postMessage({ type: 'clearRunHistory' });
       });
     </script>
   </body>

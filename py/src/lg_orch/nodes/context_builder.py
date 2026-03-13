@@ -36,7 +36,9 @@ def _runner_client_from_state(state: dict[str, Any]) -> RunnerClient | None:
         return None
     raw_api_key = state.get("_runner_api_key")
     api_key = str(raw_api_key).strip() if raw_api_key is not None else None
-    return RunnerClient(base_url=base_url, api_key=api_key)
+    raw_request_id = state.get("_request_id")
+    request_id = str(raw_request_id).strip() if raw_request_id is not None else None
+    return RunnerClient(base_url=base_url, api_key=api_key, request_id=request_id)
 
 
 def _runner_context_snapshot(
@@ -75,6 +77,62 @@ def _mcp_catalog_snapshot(state: dict[str, Any]) -> tuple[dict[str, Any], str]:
     return summary, str(summary.get("summary", "")).strip()
 
 
+def _mcp_recovery_hints(state: dict[str, Any], mcp_summary: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    if not mcp_summary:
+        return "", []
+
+    recovery_packet_raw = state.get("recovery_packet", {})
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    request = str(state.get("request", "")).strip().lower()
+    keywords = {token.lower() for token in _WORD_RE.findall(request)}
+    failure_class = str(recovery_packet.get("failure_class", "")).strip().lower()
+    last_check = str(recovery_packet.get("last_check", "")).strip().lower()
+    keywords.update(token.lower() for token in _WORD_RE.findall(failure_class))
+    keywords.update(token.lower() for token in _WORD_RE.findall(last_check))
+
+    servers_raw = mcp_summary.get("servers", [])
+    servers = [entry for entry in servers_raw if isinstance(entry, dict)] if isinstance(servers_raw, list) else []
+    relevant_tools: list[dict[str, Any]] = []
+    fallback_tools: list[dict[str, Any]] = []
+    for server in servers:
+        server_name = str(server.get("server_name", "")).strip() or "unknown"
+        tools_raw = server.get("tools", [])
+        tools = [entry for entry in tools_raw if isinstance(entry, dict)] if isinstance(tools_raw, list) else []
+        for tool in tools:
+            name = str(tool.get("name", "")).strip()
+            description = str(tool.get("description", "")).strip()
+            if not name:
+                continue
+            entry = {
+                "server_name": server_name,
+                "name": name,
+                "description": description,
+            }
+            fallback_tools.append(entry)
+            haystack = f"{name} {description}".lower()
+            if keywords and any(keyword in haystack for keyword in keywords if keyword):
+                relevant_tools.append(entry)
+
+    if not relevant_tools:
+        relevant_tools = fallback_tools[:5]
+    else:
+        relevant_tools = relevant_tools[:5]
+
+    lines: list[str] = []
+    if recovery_packet:
+        lines.append(
+            f"recovery_focus: {recovery_packet.get('failure_class', '')} | {recovery_packet.get('last_check', '')}"
+        )
+    if relevant_tools:
+        lines.append(
+            "candidate_tools: "
+            + ", ".join(
+                f"{tool['server_name']}.{tool['name']}" for tool in relevant_tools if tool.get("name")
+            )
+        )
+    return "\n".join(line for line in lines if line.strip()).strip(), relevant_tools
+
+
 def _generate_repo_map(root: Path, max_depth: int = 3) -> str:
     """Generates a tree-like repo map, respecting a max depth to prevent huge context."""
     lines = []
@@ -100,6 +158,53 @@ def _generate_repo_map(root: Path, max_depth: int = 3) -> str:
 
     _walk(root)
     return "\n".join(lines)
+
+
+def _load_cached_procedures(state: dict[str, Any]) -> list[dict[str, Any]]:
+    procedure_cache_path = str(state.get("_procedure_cache_path", "")).strip()
+    if not procedure_cache_path:
+        return []
+    request = str(state.get("request", "")).strip()
+    if not request:
+        return []
+    try:
+        from lg_orch.procedure_cache import ProcedureCache
+        cache = ProcedureCache(db_path=Path(procedure_cache_path))
+        try:
+            return cache.lookup_procedure(request=request, limit=3)
+        finally:
+            cache.close()
+    except Exception:
+        return []
+
+
+def _load_episodic_context(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Load cross-session recovery facts from the run store if configured.
+    Returns empty list if no run store path or on any error.
+    """
+    run_store_path = str(state.get("_run_store_path", "")).strip()
+    if not run_store_path:
+        return []
+    recovery_packet_raw = state.get("recovery_packet", {})
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    fingerprint = str(recovery_packet.get("failure_fingerprint", "")).strip()
+    failure_class = str(recovery_packet.get("failure_class", "")).strip()
+    if not fingerprint and not failure_class:
+        return []
+    try:
+        from lg_orch.run_store import RunStore
+        store = RunStore(db_path=Path(run_store_path))
+        try:
+            return store.get_episodic_context(
+                failure_fingerprint=fingerprint,
+                failure_class=failure_class,
+                limit=5,
+            )
+        finally:
+            store.close()
+    except Exception:
+        return []
 
 
 def context_builder(state: dict[str, Any]) -> dict[str, Any]:
@@ -164,8 +269,30 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
             repo_context["mcp_capabilities"] = mcp_summary
         if mcp_catalog:
             repo_context["mcp_catalog"] = mcp_catalog
+        mismatch_servers = mcp_summary.get("mismatch_servers", [])
+        if mismatch_servers:
+            log.warning(
+                "mcp_schema_hash_mismatch_servers_excluded",
+                servers=mismatch_servers,
+            )
+            repo_context["mcp_hash_mismatches"] = mismatch_servers
+        mcp_recovery_hints, mcp_relevant_tools = _mcp_recovery_hints(state, mcp_summary)
+        if mcp_recovery_hints:
+            repo_context["mcp_recovery_hints"] = mcp_recovery_hints
+        if mcp_relevant_tools:
+            repo_context["mcp_relevant_tools"] = mcp_relevant_tools
     except Exception as exc:
         log.warning("context_builder_mcp_catalog_failed", error=str(exc))
+
+    # Episodic memory: cross-session recovery facts
+    episodic_facts = _load_episodic_context(state)
+    if episodic_facts:
+        repo_context["episodic_facts"] = episodic_facts
+
+    # Procedural memory: inject cached procedures for routine operations
+    cached_procedures = _load_cached_procedures(state)
+    if cached_procedures:
+        repo_context["cached_procedures"] = cached_procedures
 
     layers = build_context_layers(state=state, repo_context=repo_context)
     repo_context["semantic_hits"] = layers["semantic_hits"]

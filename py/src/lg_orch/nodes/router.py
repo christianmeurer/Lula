@@ -48,6 +48,10 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
     verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
     recovery_raw = verification.get("recovery", {})
     recovery = dict(recovery_raw) if isinstance(recovery_raw, dict) else {}
+    recovery_packet_raw = verification.get("recovery_packet", state.get("recovery_packet", {}))
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    if recovery_packet:
+        recovery = recovery_packet
 
     routing_raw = state.get("_model_routing_policy", {})
     routing = dict(routing_raw) if isinstance(routing_raw, dict) else {}
@@ -62,6 +66,27 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
     token_estimate = int(token_estimate_raw) if isinstance(token_estimate_raw, int) else 0
     if token_estimate <= 0:
         token_estimate = approx_token_count(str(repo_context.get("repo_map", "")))
+    working_set_raw = repo_context.get("working_set", {})
+    working_set = dict(working_set_raw) if isinstance(working_set_raw, dict) else {}
+    working_set_tokens_raw = planner_context.get(
+        "working_set_token_estimate",
+        working_set.get("token_estimate", 0),
+    )
+    working_set_tokens = (
+        int(working_set_tokens_raw) if isinstance(working_set_tokens_raw, int) else token_estimate
+    )
+    compression_raw = repo_context.get("compression", {})
+    compression = dict(compression_raw) if isinstance(compression_raw, dict) else {}
+    pressure_raw = compression.get("pressure", {})
+    pressure = dict(pressure_raw) if isinstance(pressure_raw, dict) else {}
+    overall_pressure_raw = pressure.get("overall", {})
+    overall_pressure = dict(overall_pressure_raw) if isinstance(overall_pressure_raw, dict) else {}
+    compression_score_raw = planner_context.get("compression_pressure", overall_pressure.get("score", 0))
+    compression_score = int(compression_score_raw) if isinstance(compression_score_raw, int) else 0
+    facts_raw = state.get("facts", [])
+    state_fact_count = len(facts_raw) if isinstance(facts_raw, list) else 0
+    fact_count_raw = planner_context.get("fact_count", state_fact_count)
+    fact_count = int(fact_count_raw) if isinstance(fact_count_raw, int) else state_fact_count
 
     retry_target = str(state.get("retry_target", "")).strip()
     failure_fingerprint = str(verification.get("failure_fingerprint", "")).strip()
@@ -71,27 +96,48 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
 
     if retry_target == "router" or recovery:
         failure_class = str(recovery.get("failure_class", verification.get("failure_class", "verification_failed")))
+        context_scope = str(recovery.get("context_scope", "working_set")) or "working_set"
+        prefix_segment = "recovery_working_set" if context_scope != "stable_prefix" else "stable_prefix"
         return RouterDecision(
             intent=intent,
             task_class=failure_class or "recovery",
             lane="recovery",
-            rationale="verification requested a recovery route",
-            context_scope=str(recovery.get("context_scope", "working_set")) or "working_set",
+            rationale="verification requested a recovery route"
+            if compression_score <= 0
+            else "verification requested recovery and compression pressure favors a stronger lane",
+            context_scope=context_scope,
             latency_sensitive=False,
-            cache_affinity=f"{default_cache_affinity}:recovery",
-            prefix_segment="recovery_working_set",
+            cache_affinity=f"{default_cache_affinity}:recovery:{failure_fingerprint or current_loop}",
+            prefix_segment=prefix_segment,
+            context_tokens=max(token_estimate, working_set_tokens),
+            compression_pressure=compression_score,
+            fact_count=fact_count,
         )
 
-    if intent in {"code_change", "refactor", "debug"} or token_estimate > interactive_limit:
+    if (
+        intent in {"code_change", "refactor", "debug"}
+        or token_estimate > interactive_limit
+        or working_set_tokens > interactive_limit
+        or compression_score > 0
+        or fact_count >= 3
+    ):
+        rationale = "request complexity or context size requires deeper planning"
+        if compression_score > 0:
+            rationale = "context compression pressure requires deeper planning"
+        elif fact_count >= 3:
+            rationale = "recovery memory indicates deeper planning is needed"
         return RouterDecision(
             intent=intent,
             task_class="deep_planning",
             lane="deep_planning",
-            rationale="request complexity or context size requires deeper planning",
+            rationale=rationale,
             context_scope="stable_prefix",
             latency_sensitive=False,
-            cache_affinity=f"{default_cache_affinity}:planner:{current_loop}",
+            cache_affinity=f"{default_cache_affinity}:planner:{current_loop}:c{compression_score}",
             prefix_segment="stable_prefix",
+            context_tokens=max(token_estimate, working_set_tokens),
+            compression_pressure=compression_score,
+            fact_count=fact_count,
         )
 
     rationale = "interactive lane selected for low-latency reasoning"
@@ -106,6 +152,9 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
         latency_sensitive=True,
         cache_affinity=f"{default_cache_affinity}:interactive",
         prefix_segment="stable_prefix",
+        context_tokens=max(token_estimate, working_set_tokens),
+        compression_pressure=compression_score,
+        fact_count=fact_count,
     )
 
 
@@ -134,16 +183,29 @@ def _router_model_output(
 
     runtime_raw = state.get("_model_provider_runtime", {})
     runtime = runtime_raw if isinstance(runtime_raw, dict) else {}
-    do_raw = runtime.get("digitalocean", {})
-    do_cfg = do_raw if isinstance(do_raw, dict) else {}
-    api_key = str(do_cfg.get("api_key", "")).strip()
-    if not api_key:
-        return None, None
-    base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
-    if not base_url:
-        return None, None
-    timeout_raw = do_cfg.get("timeout_s", 60)
-    timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+
+    if provider == "openai_compatible":
+        oc_raw = runtime.get("openai_compatible", {})
+        oc_cfg = oc_raw if isinstance(oc_raw, dict) else {}
+        api_key = str(oc_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None, None
+        base_url = str(oc_cfg.get("base_url", "https://api.openai.com/v1")).strip().rstrip("/")
+        if not base_url:
+            return None, None
+        timeout_raw = oc_cfg.get("timeout_s", 60)
+        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+    else:
+        do_raw = runtime.get("digitalocean", {})
+        do_cfg = do_raw if isinstance(do_raw, dict) else {}
+        api_key = str(do_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None, None
+        base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
+        if not base_url:
+            return None, None
+        timeout_raw = do_cfg.get("timeout_s", 60)
+        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
 
     repo_root = Path(str(state.get("_repo_root", "."))).resolve()
     router_prompt_path = repo_root / "prompts" / "router.md"

@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import os
+import re as _re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+_SHA256_RE = _re.compile(r'^[0-9a-f]{64}$')
+_NAMESPACE_RE = _re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+
+def _is_valid_sha256_hex(value: str) -> bool:
+    return bool(_SHA256_RE.fullmatch(value))
 
 
 class ConfigError(ValueError):
@@ -46,6 +54,24 @@ def _get_int(tbl: dict[str, object], key: str, *, default: int) -> int:
     if key not in tbl:
         return default
     return _require_int(tbl, key)
+
+
+def _get_bool(tbl: dict[str, object], key: str, *, default: bool) -> bool:
+    if key not in tbl:
+        return default
+    return _require_bool(tbl, key)
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"missing/invalid env {name}")
 
 
 def _optional_str_tuple(tbl: dict[str, object], key: str) -> tuple[str, ...]:
@@ -95,6 +121,7 @@ class MCPServerConfig:
     cwd: str | None
     env: dict[str, str]
     timeout_s: int
+    schema_hash: str | None = None  # SHA-256 of sorted tools/list JSON; None = unpinned
 
 
 @dataclass(frozen=True)
@@ -108,6 +135,19 @@ class Trace:
     enabled: bool
     output_dir: str
     capture_model_metadata: bool = True
+
+
+@dataclass(frozen=True)
+class RemoteAPIConfig:
+    auth_mode: str = "off"
+    bearer_token: str | None = None
+    allow_unauthenticated_healthz: bool = True
+    trust_forwarded_headers: bool = False
+    access_log_enabled: bool = True
+    run_store_path: str | None = None
+    rate_limit_rps: int = 0
+    procedure_cache_path: str | None = None
+    default_namespace: str = ""
 
 
 @dataclass(frozen=True)
@@ -141,10 +181,18 @@ class Models:
     planner: ModelEndpoint
     routing: ModelRouting
     digitalocean: "DigitalOceanServerless"
+    openai_compatible: "OpenAICompatibleServerless"
 
 
 @dataclass(frozen=True)
 class DigitalOceanServerless:
+    base_url: str
+    api_key: str | None
+    timeout_s: int
+
+
+@dataclass(frozen=True)
+class OpenAICompatibleServerless:
     base_url: str
     api_key: str | None
     timeout_s: int
@@ -159,6 +207,7 @@ class AppConfig:
     runner: Runner
     mcp: MCPConfig
     trace: Trace
+    remote_api: RemoteAPIConfig
     checkpoint: Checkpoint
 
 
@@ -298,6 +347,40 @@ def _parse_digitalocean_serverless(models_raw: dict[str, object]) -> DigitalOcea
     return DigitalOceanServerless(base_url=base_url, api_key=api_key, timeout_s=timeout_raw)
 
 
+def _parse_openai_compatible_serverless(models_raw: dict[str, object]) -> OpenAICompatibleServerless:
+    section = models_raw.get("openai_compatible")
+    section_dict = section if isinstance(section, dict) else {}
+
+    base_url_raw = section_dict.get("base_url", "https://api.openai.com/v1")
+    if not isinstance(base_url_raw, str) or not base_url_raw.strip():
+        raise ConfigError("missing/invalid models.openai_compatible.base_url")
+    base_url = base_url_raw.strip().rstrip("/")
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        raise ConfigError("models.openai_compatible.base_url must start with http:// or https://")
+
+    api_key_raw = section_dict.get("api_key")
+    api_key: str | None
+    if api_key_raw is None:
+        api_key = (
+            os.environ.get("OPENAI_COMPATIBLE_API_KEY")
+            or os.environ.get("MODEL_ACCESS_KEY")
+        )
+    elif isinstance(api_key_raw, str):
+        api_key = api_key_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid models.openai_compatible.api_key")
+    if api_key is not None:
+        api_key = api_key.strip() or None
+
+    timeout_raw = section_dict.get("timeout_s", 60)
+    if isinstance(timeout_raw, bool) or not isinstance(timeout_raw, int):
+        raise ConfigError("missing/invalid models.openai_compatible.timeout_s")
+    if timeout_raw < 1:
+        raise ConfigError("models.openai_compatible.timeout_s must be >= 1")
+
+    return OpenAICompatibleServerless(base_url=base_url, api_key=api_key, timeout_s=timeout_raw)
+
+
 def load_config(*, repo_root: Path) -> AppConfig:
     profile = os.environ.get("LG_PROFILE", "dev").strip() or "dev"
     cfg_path = repo_root / "configs" / f"runtime.{profile}.toml"
@@ -315,6 +398,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
     runner_raw = raw.get("runner")
     mcp_raw = raw.get("mcp", {})
     trace_raw = raw.get("trace", {})
+    remote_api_raw = raw.get("remote_api", {})
     checkpoint_raw = raw.get("checkpoint", {})
     if not isinstance(models_raw, dict):
         raise ConfigError("missing/invalid models")
@@ -328,6 +412,8 @@ def load_config(*, repo_root: Path) -> AppConfig:
         raise ConfigError("missing/invalid mcp")
     if not isinstance(trace_raw, dict):
         raise ConfigError("missing/invalid trace")
+    if not isinstance(remote_api_raw, dict):
+        raise ConfigError("missing/invalid remote_api")
     if not isinstance(checkpoint_raw, dict):
         raise ConfigError("missing/invalid checkpoint")
 
@@ -360,6 +446,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
         planner=_parse_model_endpoint(models_raw, "planner"),
         routing=_parse_model_routing(models_raw),
         digitalocean=_parse_digitalocean_serverless(models_raw),
+        openai_compatible=_parse_openai_compatible_serverless(models_raw),
     )
 
     policy = Policy(
@@ -437,12 +524,27 @@ def load_config(*, repo_root: Path) -> AppConfig:
         if timeout_s_raw < 1:
             raise ConfigError(f"mcp.servers.{server_name}.timeout_s must be >= 1")
 
+        schema_hash_raw = server_data.get("schema_hash")
+        schema_hash: str | None
+        if schema_hash_raw is None:
+            schema_hash = None
+        elif isinstance(schema_hash_raw, str):
+            value = schema_hash_raw.strip().lower()
+            if value and not _is_valid_sha256_hex(value):
+                raise ConfigError(
+                    f"mcp.servers.{server_name}.schema_hash must be a 64-char lowercase hex SHA-256 or absent"
+                )
+            schema_hash = value or None
+        else:
+            raise ConfigError(f"missing/invalid mcp.servers.{server_name}.schema_hash")
+
         servers[server_name.strip()] = MCPServerConfig(
             command=command_raw.strip(),
             args=tuple(args),
             cwd=cwd,
             env=env,
             timeout_s=timeout_s_raw,
+            schema_hash=schema_hash,
         )
 
     mcp = MCPConfig(enabled=mcp_enabled_raw, servers=servers)
@@ -451,6 +553,102 @@ def load_config(*, repo_root: Path) -> AppConfig:
         enabled=bool(trace_raw.get("enabled", False)),
         output_dir=str(trace_raw.get("output_dir", "artifacts/runs")),
         capture_model_metadata=bool(trace_raw.get("capture_model_metadata", True)),
+    )
+
+    auth_mode_raw = remote_api_raw.get("auth_mode", os.environ.get("LG_REMOTE_API_AUTH_MODE", "off"))
+    if not isinstance(auth_mode_raw, str):
+        raise ConfigError("missing/invalid remote_api.auth_mode")
+    auth_mode = auth_mode_raw.strip().lower() or "off"
+    if auth_mode not in {"off", "bearer"}:
+        raise ConfigError("remote_api.auth_mode must be one of: off, bearer")
+
+    bearer_token_raw = remote_api_raw.get("bearer_token")
+    bearer_token: str | None
+    if bearer_token_raw is None:
+        bearer_token = os.environ.get("LG_REMOTE_API_BEARER_TOKEN")
+    elif isinstance(bearer_token_raw, str):
+        bearer_token = bearer_token_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid remote_api.bearer_token")
+    if bearer_token is not None:
+        bearer_token = bearer_token.strip() or None
+    if auth_mode == "bearer" and bearer_token is None:
+        raise ConfigError("remote_api.bearer_token is required when remote_api.auth_mode=bearer")
+
+    run_store_path_raw = remote_api_raw.get("run_store_path")
+    run_store_path: str | None
+    if run_store_path_raw is None:
+        env_rsp = os.environ.get("LG_REMOTE_API_RUN_STORE_PATH")
+        run_store_path = env_rsp.strip() or None if isinstance(env_rsp, str) else None
+    elif isinstance(run_store_path_raw, str):
+        run_store_path = run_store_path_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid remote_api.run_store_path")
+
+    rate_limit_rps_raw = remote_api_raw.get("rate_limit_rps")
+    rate_limit_rps: int
+    if rate_limit_rps_raw is None:
+        env_rlr = os.environ.get("LG_REMOTE_API_RATE_LIMIT_RPS")
+        if env_rlr is not None:
+            try:
+                rate_limit_rps = int(env_rlr.strip())
+            except ValueError as exc:
+                raise ConfigError("missing/invalid LG_REMOTE_API_RATE_LIMIT_RPS") from exc
+        else:
+            rate_limit_rps = 0
+    else:
+        if isinstance(rate_limit_rps_raw, bool) or not isinstance(rate_limit_rps_raw, int):
+            raise ConfigError("missing/invalid remote_api.rate_limit_rps")
+        rate_limit_rps = rate_limit_rps_raw
+    if rate_limit_rps != 0 and rate_limit_rps < 1:
+        raise ConfigError("remote_api.rate_limit_rps must be 0 (disabled) or >= 1")
+
+    procedure_cache_path_raw = remote_api_raw.get("procedure_cache_path")
+    procedure_cache_path: str | None
+    if procedure_cache_path_raw is None:
+        env_pcp = os.environ.get("LG_REMOTE_API_PROCEDURE_CACHE_PATH")
+        procedure_cache_path = env_pcp.strip() or None if isinstance(env_pcp, str) else None
+    elif isinstance(procedure_cache_path_raw, str):
+        procedure_cache_path = procedure_cache_path_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid remote_api.procedure_cache_path")
+
+    default_namespace_raw = remote_api_raw.get("default_namespace")
+    default_namespace: str
+    if default_namespace_raw is None:
+        env_dn = os.environ.get("LG_REMOTE_API_DEFAULT_NAMESPACE")
+        default_namespace = env_dn.strip() if isinstance(env_dn, str) else ""
+    elif isinstance(default_namespace_raw, str):
+        default_namespace = default_namespace_raw.strip()
+    else:
+        raise ConfigError("missing/invalid remote_api.default_namespace")
+    if default_namespace and not _NAMESPACE_RE.fullmatch(default_namespace):
+        raise ConfigError(
+            "remote_api.default_namespace must match [A-Za-z0-9_-]{1,64} or be empty"
+        )
+
+    remote_api = RemoteAPIConfig(
+        auth_mode=auth_mode,
+        bearer_token=bearer_token,
+        allow_unauthenticated_healthz=_get_bool(
+            remote_api_raw,
+            "allow_unauthenticated_healthz",
+            default=_env_bool("LG_REMOTE_API_ALLOW_UNAUTHENTICATED_HEALTHZ", default=True),
+        ),
+        trust_forwarded_headers=_get_bool(
+            remote_api_raw,
+            "trust_forwarded_headers",
+            default=_env_bool("LG_REMOTE_API_TRUST_FORWARDED_HEADERS", default=False),
+        ),
+        access_log_enabled=_get_bool(
+            remote_api_raw,
+            "access_log_enabled",
+            default=_env_bool("LG_REMOTE_API_ACCESS_LOG_ENABLED", default=True),
+        ),
+        run_store_path=run_store_path,
+        rate_limit_rps=rate_limit_rps,
+        procedure_cache_path=procedure_cache_path,
+        default_namespace=default_namespace,
     )
 
     checkpoint_enabled = checkpoint_raw.get("enabled", True)
@@ -487,5 +685,6 @@ def load_config(*, repo_root: Path) -> AppConfig:
         runner=runner,
         mcp=mcp,
         trace=trace,
+        remote_api=remote_api,
         checkpoint=checkpoint,
     )

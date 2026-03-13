@@ -45,6 +45,16 @@ def test_client_close_is_idempotent() -> None:
     client.close()  # should not raise
 
 
+def test_client_sets_request_id_header() -> None:
+    client = RunnerClient(base_url="http://127.0.0.1:8088", api_key="token", request_id="req-1")
+    try:
+        assert client._client is not None
+        assert client._client.headers["x-request-id"] == "req-1"
+        assert client._client.headers["authorization"] == "Bearer token"
+    finally:
+        client.close()
+
+
 def test_batch_envelope_keys() -> None:
     client = RunnerClient(base_url="http://127.0.0.1:0")
     results = client.batch_execute_tools(calls=[{"tool": "t", "input": {}}])

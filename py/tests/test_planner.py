@@ -129,6 +129,30 @@ def test_planner_clears_reset_flags_after_context_reset() -> None:
     assert len(out["plan"]["steps"]) == 1
 
 
+def test_planner_carries_recovery_packet_into_plan() -> None:
+    recovery_packet = {
+        "failure_class": "verification_failed",
+        "failure_fingerprint": "fp-1",
+        "rationale": "retry planning with the latest failure context",
+        "retry_target": "planner",
+        "context_scope": "working_set",
+        "plan_action": "keep",
+        "loop": 1,
+        "origin": "verifier",
+        "summary": "verification_failed: test assertion failed",
+        "last_check": "test assertion failed",
+        "discard_reason": "",
+    }
+    out = planner(
+        _base_state(
+            verification={"recovery_packet": recovery_packet},
+            recovery_packet=recovery_packet,
+        )
+    )
+    assert out["plan"]["recovery_packet"]["failure_fingerprint"] == "fp-1"
+    assert out["plan"]["recovery"]["failure_fingerprint"] == "fp-1"
+
+
 def test_planner_applies_pre_verification_sliding_window() -> None:
     results = [
         {
@@ -320,6 +344,79 @@ def test_planner_injects_mcp_context_into_remote_prompt(monkeypatch: pytest.Monk
     assert "mcp_catalog:" in captured["user_prompt"]
     assert "mock.echo" in captured["user_prompt"]
     assert "mcp_capabilities:" in captured["user_prompt"]
+    assert "mcp_recovery_hints:" not in captured["user_prompt"]
+
+
+def test_planner_remote_model_prompt_includes_mcp_recovery_hints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    class _FakeInferenceClient:
+        def __init__(self, *, base_url: str, api_key: str, timeout_s: int = 60) -> None:
+            self.base_url = base_url
+            self.api_key = api_key
+            self.timeout_s = timeout_s
+
+        def close(self) -> None:
+            return None
+
+        def chat_completion(
+            self,
+            *,
+            model: str,
+            system_prompt: str,
+            user_prompt: str,
+            temperature: float,
+            max_tokens: int = 1200,
+        ) -> str:
+            captured["user_prompt"] = user_prompt
+            return json.dumps(
+                {
+                    "steps": [
+                        {
+                            "id": "remote-step-1",
+                            "description": "Inspect MCP tools.",
+                            "tools": [],
+                            "expected_outcome": "MCP-aware plan generated.",
+                            "files_touched": [],
+                        }
+                    ],
+                    "verification": [],
+                    "rollback": "No rollback needed.",
+                }
+            )
+
+    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    out = planner(
+        _base_state(
+            request="inspect available MCP tools",
+            _repo_root=".",
+            repo_context={
+                "mcp_catalog": "mock.echo - Echoes text back to the caller.",
+                "mcp_capabilities": {"server_count": 1, "tool_count": 1},
+                "mcp_recovery_hints": "candidate_tools: mock.echo",
+                "mcp_relevant_tools": [{"server_name": "mock", "name": "echo"}],
+            },
+            _models={
+                "planner": {
+                    "provider": "remote_digitalocean",
+                    "model": "anthropic-claude-3.5-haiku",
+                    "temperature": 0.1,
+                }
+            },
+            _model_provider_runtime={
+                "digitalocean": {
+                    "base_url": "https://inference.do-ai.run/v1",
+                    "api_key": "test-key",
+                    "timeout_s": 30,
+                }
+            },
+        )
+    )
+    assert out["plan"]["steps"][0]["id"] == "remote-step-1"
+    assert "mcp_recovery_hints:" in captured["user_prompt"]
+    assert "mcp_relevant_tools:" in captured["user_prompt"]
 
 
 def test_planner_remote_failure_falls_back_to_deterministic(

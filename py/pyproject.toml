@@ -86,4 +86,7 @@ files = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end smoke tests (run with LG_E2E=1)",
+]
 

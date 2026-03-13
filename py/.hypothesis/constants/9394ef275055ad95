@@ -1,0 +1,4 @@
+# file: C:\Users\chris\Projects\LG-Orchestration-Platform\py\src\lg_orch\run_store.py
+# hypothesis_version: 6.151.4
+
+[', ', '?', 'auth_subject', 'client_ip', 'created_at', 'exit_code', 'finished_at', 'request', 'request_id', 'run_id', 'started_at', 'status', 'trace_out_dir', 'trace_path']

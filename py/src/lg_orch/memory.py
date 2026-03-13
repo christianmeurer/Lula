@@ -235,6 +235,72 @@ def _fit_segments(
     return "\n\n".join(chunk for chunk in chunks if chunk.strip()).strip(), decisions
 
 
+def _compression_pressure(decisions: list[dict[str, Any]]) -> dict[str, Any]:
+    compressed = 0
+    dropped = 0
+    kept = 0
+    for decision in decisions:
+        if not isinstance(decision, dict):
+            continue
+        action = str(decision.get("action", "")).strip()
+        if action == "compressed":
+            compressed += 1
+        elif action == "dropped":
+            dropped += 1
+        else:
+            kept += 1
+    return {
+        "compressed_segments": compressed,
+        "dropped_segments": dropped,
+        "kept_segments": kept,
+        "score": compressed + (dropped * 2),
+    }
+
+
+def _fact_pack(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for fact in facts:
+        if not isinstance(fact, dict):
+            continue
+        entry = dict(fact)
+        fingerprint = str(entry.get("failure_fingerprint", "")).strip()
+        summary = str(entry.get("summary", entry.get("loop_summary", ""))).strip()
+        if not fingerprint and not summary:
+            continue
+        loop_raw = entry.get("loop", 0)
+        salience_raw = entry.get("salience", 0)
+        entry["kind"] = str(entry.get("kind", "fact")).strip() or "fact"
+        entry["summary"] = summary
+        entry["loop"] = loop_raw if isinstance(loop_raw, int) and not isinstance(loop_raw, bool) else 0
+        entry["salience"] = (
+            salience_raw if isinstance(salience_raw, int) and not isinstance(salience_raw, bool) else 0
+        )
+        normalized.append(entry)
+
+    deduped: dict[str, dict[str, Any]] = {}
+    for entry in normalized:
+        key = str(entry.get("failure_fingerprint", "")).strip() or str(entry.get("summary", "")).strip()
+        current = deduped.get(key)
+        if current is None:
+            deduped[key] = entry
+            continue
+        current_rank = (int(current.get("salience", 0) or 0), int(current.get("loop", 0) or 0))
+        next_rank = (int(entry.get("salience", 0) or 0), int(entry.get("loop", 0) or 0))
+        if next_rank >= current_rank:
+            deduped[key] = entry
+
+    fact_pack = list(deduped.values())
+    fact_pack.sort(
+        key=lambda item: (
+            int(item.get("salience", 0) or 0),
+            int(item.get("loop", 0) or 0),
+            1 if str(item.get("kind", "")).strip() == "recovery_fact" else 0,
+        ),
+        reverse=True,
+    )
+    return fact_pack[:8]
+
+
 def build_context_layers(
     *,
     state: dict[str, Any],
@@ -280,12 +346,23 @@ def build_context_layers(
     if mcp_catalog:
         stable_segments.append(("mcp_catalog", mcp_catalog))
 
+    episodic_facts_raw = repo_context.get("episodic_facts", [])
+    if isinstance(episodic_facts_raw, list) and episodic_facts_raw:
+        stable_segments.append(("episodic_facts", _safe_json(episodic_facts_raw[:5])))
+
+    mcp_recovery_hints = str(repo_context.get("mcp_recovery_hints", "")).strip()
+    if mcp_recovery_hints:
+        stable_segments.append(("mcp_recovery_hints", mcp_recovery_hints))
+
     verification_raw = state.get("verification", {})
     verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
+    recovery_packet_raw = state.get("recovery_packet", verification.get("recovery_packet", {}))
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
     plan_raw = state.get("plan", {})
     plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
     facts_raw = state.get("facts", [])
     facts = facts_raw if isinstance(facts_raw, list) else []
+    fact_pack = _fact_pack([fact for fact in facts if isinstance(fact, dict)])
     loop_summaries_raw = state.get("loop_summaries", [])
     loop_summaries = loop_summaries_raw if isinstance(loop_summaries_raw, list) else []
 
@@ -306,10 +383,33 @@ def build_context_layers(
                         "failure_fingerprint": verification.get("failure_fingerprint", ""),
                         "loop_summary": verification.get("loop_summary", ""),
                         "recovery": verification.get("recovery"),
+                        "recovery_packet": verification.get("recovery_packet"),
                     }
                 ),
             )
         )
+    if recovery_packet:
+        working_segments.append(
+            (
+                "recovery_packet",
+                _safe_json(
+                    {
+                        "failure_class": recovery_packet.get("failure_class", ""),
+                        "failure_fingerprint": recovery_packet.get("failure_fingerprint", ""),
+                        "summary": recovery_packet.get("summary", ""),
+                        "last_check": recovery_packet.get("last_check", ""),
+                        "context_scope": recovery_packet.get("context_scope", ""),
+                        "plan_action": recovery_packet.get("plan_action", ""),
+                        "retry_target": recovery_packet.get("retry_target", ""),
+                    }
+                ),
+            )
+        )
+    if fact_pack:
+        working_segments.append(("recovery_fact_pack", _safe_json(fact_pack[:5])))
+    mcp_relevant_tools_raw = repo_context.get("mcp_relevant_tools", [])
+    if isinstance(mcp_relevant_tools_raw, list) and mcp_relevant_tools_raw:
+        working_segments.append(("mcp_relevant_tools", _safe_json(mcp_relevant_tools_raw[:5])))
     if loop_summaries:
         working_segments.append(("loop_summaries", _safe_json(loop_summaries[-3:])))
     if plan:
@@ -322,6 +422,7 @@ def build_context_layers(
                         "acceptance_criteria": plan.get("acceptance_criteria", []),
                         "max_iterations": plan.get("max_iterations", 1),
                         "recovery": plan.get("recovery"),
+                        "recovery_packet": plan.get("recovery_packet"),
                     }
                 ),
             )
@@ -330,6 +431,9 @@ def build_context_layers(
         working_segments.append(("recent_tool_results", _safe_json(recent_tool_summaries)))
     if facts:
         working_segments.append(("recent_facts", _safe_json(facts[-5:])))
+    cached_procedures_raw = repo_context.get("cached_procedures", [])
+    if isinstance(cached_procedures_raw, list) and cached_procedures_raw:
+        working_segments.append(("cached_procedures", _safe_json(cached_procedures_raw[:3])))
 
     stable_text, stable_decisions = _fit_segments(
         stable_segments,
@@ -342,6 +446,14 @@ def build_context_layers(
     planner_context = "\n\n".join(
         part for part in [stable_text, working_text] if part.strip()
     ).strip()
+    stable_pressure = _compression_pressure(stable_decisions)
+    working_pressure = _compression_pressure(working_decisions)
+    overall_pressure = {
+        "score": max(stable_pressure["score"], working_pressure["score"]),
+        "compressed_segments": stable_pressure["compressed_segments"]
+        + working_pressure["compressed_segments"],
+        "dropped_segments": stable_pressure["dropped_segments"] + working_pressure["dropped_segments"],
+    }
 
     return {
         "semantic_hits": semantic_hits,
@@ -358,10 +470,19 @@ def build_context_layers(
         "planner_context": {
             "content": planner_context,
             "token_estimate": approx_token_count(planner_context),
+            "stable_token_estimate": approx_token_count(stable_text),
+            "working_set_token_estimate": approx_token_count(working_text),
+            "compression_pressure": overall_pressure["score"],
+            "fact_count": len(fact_pack),
         },
         "compression": {
             "stable_prefix": stable_decisions,
             "working_set": working_decisions,
+            "pressure": {
+                "stable_prefix": stable_pressure,
+                "working_set": working_pressure,
+                "overall": overall_pressure,
+            },
         },
     }
 

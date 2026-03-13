@@ -22,6 +22,7 @@ _ORCH_DEFAULTS: dict[str, Any] = {
     "telemetry": {},
     "route": None,
     "retry_target": None,
+    "recovery_packet": None,
     "context_reset_requested": False,
     "plan_discarded": False,
     "plan_discard_reason": "",

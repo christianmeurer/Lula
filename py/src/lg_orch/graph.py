@@ -20,7 +20,7 @@ from lg_orch.visualize import GraphEdge, graph_mermaid
 
 def route_after_policy_gate(state: dict[str, Any]) -> str:
     halt_reason = str(state.get("halt_reason", "")).strip()
-    if halt_reason == "max_loops_exhausted":
+    if halt_reason in {"max_loops_exhausted", "plan_max_iterations_exhausted"}:
         return "reporter"
 
     if bool(state.get("context_reset_requested", False)):
