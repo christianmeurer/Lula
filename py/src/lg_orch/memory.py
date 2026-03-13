@@ -431,6 +431,9 @@ def build_context_layers(
         working_segments.append(("recent_tool_results", _safe_json(recent_tool_summaries)))
     if facts:
         working_segments.append(("recent_facts", _safe_json(facts[-5:])))
+    cached_procedures_raw = repo_context.get("cached_procedures", [])
+    if isinstance(cached_procedures_raw, list) and cached_procedures_raw:
+        working_segments.append(("cached_procedures", _safe_json(cached_procedures_raw[:3])))
 
     stable_text, stable_decisions = _fit_segments(
         stable_segments,

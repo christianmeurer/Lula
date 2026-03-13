@@ -273,3 +273,33 @@ def test_context_builder_loads_episodic_facts(tmp_path: Path) -> None:
     assert "episodic_facts" in repo_context
     assert len(repo_context["episodic_facts"]) >= 1
     assert repo_context["episodic_facts"][0]["fingerprint"] == "fp-abc"
+
+
+def test_context_builder_loads_cached_procedures(tmp_path: Any) -> None:
+    from lg_orch.procedure_cache import ProcedureCache
+
+    db_path = tmp_path / "procedures.sqlite"
+    cache = ProcedureCache(db_path=db_path)
+    steps = [{"id": "s1", "tools": [{"tool": "run_tests"}, {"tool": "check_output"}]}]
+    cache.store_procedure(
+        canonical_name="run_tests_check_output",
+        request="run the tests and verify",
+        task_class="testing",
+        steps=steps,
+        verification=[],
+        created_at="2026-01-01T00:00:00Z",
+    )
+    cache.close()
+
+    with tempfile.TemporaryDirectory() as td:
+        out = context_builder(
+            _base_state(
+                repo_root=td,
+                request="run the tests and verify",
+                _procedure_cache_path=str(db_path),
+            )
+        )
+    repo_context = out["repo_context"]
+    assert "cached_procedures" in repo_context
+    assert len(repo_context["cached_procedures"]) >= 1
+    assert repo_context["cached_procedures"][0]["canonical_name"] == "run_tests_check_output"

@@ -473,6 +473,28 @@ def test_mcp_server_config_schema_hash_valid(monkeypatch: pytest.MonkeyPatch) ->
         assert cfg.mcp.servers["mock"].schema_hash == _VALID_HASH
 
 
+def test_procedure_cache_path_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    toml = _VALID_TOML.replace(
+        "access_log_enabled = true\n",
+        'access_log_enabled = true\nprocedure_cache_path = "artifacts/remote-api/procedures.sqlite"\n',
+        1,
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=toml)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.procedure_cache_path == "artifacts/remote-api/procedures.sqlite"
+
+
+def test_procedure_cache_path_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.setenv("LG_REMOTE_API_PROCEDURE_CACHE_PATH", "artifacts/env-procedures.sqlite")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=_VALID_TOML)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.procedure_cache_path == "artifacts/env-procedures.sqlite"
+
+
 def test_mcp_server_config_schema_hash_invalid_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     from lg_orch.config import ConfigError
 

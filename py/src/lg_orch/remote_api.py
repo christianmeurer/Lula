@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from lg_orch.config import load_config
 from lg_orch.logging import get_logger
+from lg_orch.procedure_cache import ProcedureCache, _canonical_procedure_name
 from lg_orch.run_store import RunStore
 
 _JSON_CONTENT_TYPE = "application/json; charset=utf-8"
@@ -190,6 +191,7 @@ class RemoteAPIService:
         repo_root: Path,
         run_store: RunStore | None = None,
         rate_limiter: _RateLimiter | None = None,
+        procedure_cache: ProcedureCache | None = None,
     ) -> None:
         self._repo_root = repo_root.resolve()
         self._lock = threading.Lock()
@@ -197,6 +199,7 @@ class RemoteAPIService:
         self._log = get_logger()
         self._run_store = run_store
         self._rate_limiter = rate_limiter
+        self._procedure_cache = procedure_cache
 
     def create_run(
         self,
@@ -454,6 +457,31 @@ class RemoteAPIService:
             except Exception:
                 pass
 
+        # Procedural memory: cache verified tool sequences on success
+        if exit_code == 0 and self._procedure_cache is not None:
+            try:
+                trace = self._load_trace(trace_path)
+                if trace is not None:
+                    state_raw = trace.get("state", trace)
+                    plan_raw = state_raw.get("plan", {})
+                    plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
+                    steps = plan.get("steps", [])
+                    verification = plan.get("verification", [])
+                    request = str(state_raw.get("request", record.request)).strip()
+                    task_class = str(state_raw.get("route", {}).get("task_class", "")).strip() or "analysis"
+                    if isinstance(steps, list) and steps:
+                        canonical_name = _canonical_procedure_name(steps)
+                        self._procedure_cache.store_procedure(
+                            canonical_name=canonical_name,
+                            request=request,
+                            task_class=task_class,
+                            steps=steps,
+                            verification=verification if isinstance(verification, list) else [],
+                            created_at=record.finished_at or _utc_now(),
+                        )
+            except Exception:
+                pass
+
     def _refresh_record_locked(self, record: RunRecord) -> None:
         if record.finished_at is not None:
             return
@@ -613,7 +641,15 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
     if remote_api_cfg.rate_limit_rps > 0:
         rps = remote_api_cfg.rate_limit_rps
         rate_limiter = _RateLimiter(capacity=max(rps * 2, 10), rate=float(rps))
-    service = RemoteAPIService(repo_root=repo_root, run_store=run_store, rate_limiter=rate_limiter)
+    procedure_cache: ProcedureCache | None = None
+    if remote_api_cfg.procedure_cache_path:
+        procedure_cache = ProcedureCache(db_path=Path(remote_api_cfg.procedure_cache_path))
+    service = RemoteAPIService(
+        repo_root=repo_root,
+        run_store=run_store,
+        rate_limiter=rate_limiter,
+        procedure_cache=procedure_cache,
+    )
 
     class RemoteAPIRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802

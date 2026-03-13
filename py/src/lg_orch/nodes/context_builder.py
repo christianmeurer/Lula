@@ -160,6 +160,24 @@ def _generate_repo_map(root: Path, max_depth: int = 3) -> str:
     return "\n".join(lines)
 
 
+def _load_cached_procedures(state: dict[str, Any]) -> list[dict[str, Any]]:
+    procedure_cache_path = str(state.get("_procedure_cache_path", "")).strip()
+    if not procedure_cache_path:
+        return []
+    request = str(state.get("request", "")).strip()
+    if not request:
+        return []
+    try:
+        from lg_orch.procedure_cache import ProcedureCache
+        cache = ProcedureCache(db_path=Path(procedure_cache_path))
+        try:
+            return cache.lookup_procedure(request=request, limit=3)
+        finally:
+            cache.close()
+    except Exception:
+        return []
+
+
 def _load_episodic_context(state: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Load cross-session recovery facts from the run store if configured.
@@ -270,6 +288,11 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
     episodic_facts = _load_episodic_context(state)
     if episodic_facts:
         repo_context["episodic_facts"] = episodic_facts
+
+    # Procedural memory: inject cached procedures for routine operations
+    cached_procedures = _load_cached_procedures(state)
+    if cached_procedures:
+        repo_context["cached_procedures"] = cached_procedures
 
     layers = build_context_layers(state=state, repo_context=repo_context)
     repo_context["semantic_hits"] = layers["semantic_hits"]

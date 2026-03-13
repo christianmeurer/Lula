@@ -145,6 +145,7 @@ class RemoteAPIConfig:
     access_log_enabled: bool = True
     run_store_path: str | None = None
     rate_limit_rps: int = 0
+    procedure_cache_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -600,6 +601,16 @@ def load_config(*, repo_root: Path) -> AppConfig:
     if rate_limit_rps != 0 and rate_limit_rps < 1:
         raise ConfigError("remote_api.rate_limit_rps must be 0 (disabled) or >= 1")
 
+    procedure_cache_path_raw = remote_api_raw.get("procedure_cache_path")
+    procedure_cache_path: str | None
+    if procedure_cache_path_raw is None:
+        env_pcp = os.environ.get("LG_REMOTE_API_PROCEDURE_CACHE_PATH")
+        procedure_cache_path = env_pcp.strip() or None if isinstance(env_pcp, str) else None
+    elif isinstance(procedure_cache_path_raw, str):
+        procedure_cache_path = procedure_cache_path_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid remote_api.procedure_cache_path")
+
     remote_api = RemoteAPIConfig(
         auth_mode=auth_mode,
         bearer_token=bearer_token,
@@ -620,6 +631,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
         ),
         run_store_path=run_store_path,
         rate_limit_rps=rate_limit_rps,
+        procedure_cache_path=procedure_cache_path,
     )
 
     checkpoint_enabled = checkpoint_raw.get("enabled", True)
