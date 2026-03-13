@@ -563,6 +563,14 @@ def _api_http_response(
     if service._rate_limiter is not None and not service._rate_limiter.acquire():
         return _json_response(429, {"error": "rate_limit_exceeded"})
 
+    if route in {"/", "/ui"}:
+        if method != "GET":
+            return _json_response(405, {"error": "method_not_allowed"})
+        from lg_orch.visualize import render_run_viewer_spa
+        html = render_run_viewer_spa(api_base_url="")
+        body = html.encode("utf-8")
+        return 200, "text/html; charset=utf-8", body
+
     if route == "/healthz":
         if method != "GET":
             return _json_response(405, {"error": "method_not_allowed"})

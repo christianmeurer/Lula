@@ -450,3 +450,46 @@ def test_remote_api_service_namespace_isolation(tmp_path: Path) -> None:
 
     store_a.close()
     store_b.close()
+
+
+# ---------------------------------------------------------------------------
+# SPA route tests
+# ---------------------------------------------------------------------------
+
+
+def test_spa_served_at_root(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, content_type, body = _api_http_response(
+        service,
+        method="GET",
+        request_path="/",
+        request_body=None,
+    )
+    assert status == 200
+    assert content_type == "text/html; charset=utf-8"
+    assert b"<!DOCTYPE html>" in body
+
+
+def test_spa_served_at_ui(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, content_type, body = _api_http_response(
+        service,
+        method="GET",
+        request_path="/ui",
+        request_body=None,
+    )
+    assert status == 200
+    assert content_type == "text/html; charset=utf-8"
+    assert b"<!DOCTYPE html>" in body
+
+
+def test_spa_method_not_allowed(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/",
+        request_body=None,
+    )
+    assert status == 405
+    assert json.loads(body.decode("utf-8"))["error"] == "method_not_allowed"

@@ -6,6 +6,7 @@ from lg_orch.visualize import (
     GraphEdge,
     graph_mermaid,
     render_run_header,
+    render_run_viewer_spa,
     render_trace_dashboard_html,
     render_trace_site_index_html,
     render_timeline,
@@ -144,6 +145,33 @@ def test_render_trace_dashboard_html_combines_sections() -> None:
     assert "thread-a" in result
     assert "cp-1" in result
     assert "Done" in result
+
+
+def test_render_run_viewer_spa_returns_html() -> None:
+    result = render_run_viewer_spa()
+    assert result.startswith("<!DOCTYPE html>")
+    assert "<script" in result
+
+
+def test_render_run_viewer_spa_contains_api_calls() -> None:
+    result = render_run_viewer_spa()
+    assert "/v1/runs" in result
+
+
+def test_render_run_viewer_spa_contains_submit_form() -> None:
+    result = render_run_viewer_spa()
+    assert "<input" in result
+
+
+def test_render_run_viewer_spa_custom_api_base_url() -> None:
+    result = render_run_viewer_spa(api_base_url="https://api.example.com")
+    assert "https://api.example.com" in result
+
+
+def test_render_run_viewer_spa_diff_css_classes() -> None:
+    result = render_run_viewer_spa()
+    assert ".diff-add" in result
+    assert ".diff-remove" in result
 
 
 def test_render_trace_site_index_html_lists_runs() -> None:
