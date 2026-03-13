@@ -558,6 +558,7 @@ def cli(argv: list[str] | None = None) -> int:
         "_trace_enabled": trace_enabled,
         "_trace_out_dir": trace_out_dir or cfg.trace.output_dir,
         "_trace_capture_model_metadata": cfg.trace.capture_model_metadata,
+        "_run_store_path": cfg.remote_api.run_store_path or "",
     }
     if request_id:
         state["_request_id"] = request_id

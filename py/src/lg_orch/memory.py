@@ -346,6 +346,10 @@ def build_context_layers(
     if mcp_catalog:
         stable_segments.append(("mcp_catalog", mcp_catalog))
 
+    episodic_facts_raw = repo_context.get("episodic_facts", [])
+    if isinstance(episodic_facts_raw, list) and episodic_facts_raw:
+        stable_segments.append(("episodic_facts", _safe_json(episodic_facts_raw[:5])))
+
     mcp_recovery_hints = str(repo_context.get("mcp_recovery_hints", "")).strip()
     if mcp_recovery_hints:
         stable_segments.append(("mcp_recovery_hints", mcp_recovery_hints))

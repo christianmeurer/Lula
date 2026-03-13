@@ -440,8 +440,19 @@ class RemoteAPIService:
             else:
                 record.status = "succeeded" if exit_code == 0 else "failed"
             payload = self._summary_payload_locked(record)
+            trace_path = record.trace_path
         if self._run_store is not None:
             self._run_store.upsert(payload)
+            try:
+                trace_raw = self._load_trace(trace_path)
+                if trace_raw is not None:
+                    state_dict = trace_raw.get("state", trace_raw)
+                    facts_raw = state_dict.get("facts", []) if isinstance(state_dict, dict) else []
+                    facts = facts_raw if isinstance(facts_raw, list) else []
+                    if facts:
+                        self._run_store.upsert_recovery_facts(run_id, facts)
+            except Exception:
+                pass
 
     def _refresh_record_locked(self, record: RunRecord) -> None:
         if record.finished_at is not None:

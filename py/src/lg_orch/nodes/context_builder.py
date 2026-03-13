@@ -160,6 +160,35 @@ def _generate_repo_map(root: Path, max_depth: int = 3) -> str:
     return "\n".join(lines)
 
 
+def _load_episodic_context(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Load cross-session recovery facts from the run store if configured.
+    Returns empty list if no run store path or on any error.
+    """
+    run_store_path = str(state.get("_run_store_path", "")).strip()
+    if not run_store_path:
+        return []
+    recovery_packet_raw = state.get("recovery_packet", {})
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    fingerprint = str(recovery_packet.get("failure_fingerprint", "")).strip()
+    failure_class = str(recovery_packet.get("failure_class", "")).strip()
+    if not fingerprint and not failure_class:
+        return []
+    try:
+        from lg_orch.run_store import RunStore
+        store = RunStore(db_path=Path(run_store_path))
+        try:
+            return store.get_episodic_context(
+                failure_fingerprint=fingerprint,
+                failure_class=failure_class,
+                limit=5,
+            )
+        finally:
+            store.close()
+    except Exception:
+        return []
+
+
 def context_builder(state: dict[str, Any]) -> dict[str, Any]:
     state = ensure_history_policy(state)
     state = record_model_route(
@@ -229,6 +258,11 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
             repo_context["mcp_relevant_tools"] = mcp_relevant_tools
     except Exception as exc:
         log.warning("context_builder_mcp_catalog_failed", error=str(exc))
+
+    # Episodic memory: cross-session recovery facts
+    episodic_facts = _load_episodic_context(state)
+    if episodic_facts:
+        repo_context["episodic_facts"] = episodic_facts
 
     layers = build_context_layers(state=state, repo_context=repo_context)
     repo_context["semantic_hits"] = layers["semantic_hits"]

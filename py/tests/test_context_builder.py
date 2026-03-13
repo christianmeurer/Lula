@@ -235,3 +235,41 @@ def test_context_builder_records_mcp_recovery_hints(mock_mcp_cls: MagicMock) -> 
         assert "mcp_recovery_hints" in repo_context
         assert "candidate_tools:" in repo_context["mcp_recovery_hints"]
         assert repo_context["mcp_relevant_tools"][0]["name"] in {"echo", "search"}
+
+
+def test_context_builder_loads_episodic_facts(tmp_path: Path) -> None:
+    from lg_orch.run_store import RunStore
+
+    db_path = tmp_path / "runs.sqlite"
+    store = RunStore(db_path=db_path)
+    try:
+        store.upsert_recovery_facts(
+            "run-seed",
+            [
+                {
+                    "failure_fingerprint": "fp-abc",
+                    "failure_class": "lint",
+                    "summary": "ruff E501 violation",
+                    "loop": 2,
+                    "salience": 7,
+                }
+            ],
+        )
+    finally:
+        store.close()
+
+    with tempfile.TemporaryDirectory() as td:
+        out = context_builder(
+            _base_state(
+                repo_root=td,
+                _run_store_path=str(db_path),
+                recovery_packet={
+                    "failure_fingerprint": "fp-abc",
+                    "failure_class": "lint",
+                },
+            )
+        )
+    repo_context = out["repo_context"]
+    assert "episodic_facts" in repo_context
+    assert len(repo_context["episodic_facts"]) >= 1
+    assert repo_context["episodic_facts"][0]["fingerprint"] == "fp-abc"

@@ -115,3 +115,88 @@ def test_db_created_on_disk(tmp_path: Path) -> None:
     store = RunStore(db_path=db_path)
     store.close()
     assert db_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# recovery_facts / episodic memory
+# ---------------------------------------------------------------------------
+
+def _make_fact(
+    fingerprint: str = "fp1",
+    failure_class: str = "lint",
+    summary: str = "test failed",
+    loop: int = 1,
+    salience: int = 5,
+) -> dict:
+    return {
+        "failure_fingerprint": fingerprint,
+        "failure_class": failure_class,
+        "summary": summary,
+        "loop": loop,
+        "salience": salience,
+        "last_check": "ruff",
+        "context_scope": "py/",
+        "plan_action": "retry",
+    }
+
+
+def test_upsert_recovery_facts_stores_rows(tmp_path: Path) -> None:
+    store = RunStore(db_path=tmp_path / "runs.sqlite")
+    try:
+        facts = [_make_fact("fp1"), _make_fact("fp2", failure_class="typecheck")]
+        store.upsert_recovery_facts("run-A", facts)
+        rows = store.get_recent_recovery_facts()
+        fingerprints = {r["fingerprint"] for r in rows}
+        assert "fp1" in fingerprints
+        assert "fp2" in fingerprints
+    finally:
+        store.close()
+
+
+def test_get_recent_recovery_facts_by_fingerprint(tmp_path: Path) -> None:
+    store = RunStore(db_path=tmp_path / "runs.sqlite")
+    try:
+        store.upsert_recovery_facts("run-B", [_make_fact("target_fp"), _make_fact("other_fp")])
+        rows = store.get_recent_recovery_facts(fingerprint="target_fp")
+        assert len(rows) == 1
+        assert rows[0]["fingerprint"] == "target_fp"
+    finally:
+        store.close()
+
+
+def test_get_recent_recovery_facts_by_class(tmp_path: Path) -> None:
+    store = RunStore(db_path=tmp_path / "runs.sqlite")
+    try:
+        store.upsert_recovery_facts("run-C", [
+            _make_fact("fp3", failure_class="mypy"),
+            _make_fact("fp4", failure_class="lint"),
+        ])
+        # fingerprint lookup yields nothing for "fp_nope", falls back to failure_class
+        rows = store.get_recent_recovery_facts(fingerprint="fp_nope", failure_class="mypy")
+        assert len(rows) == 1
+        assert rows[0]["failure_class"] == "mypy"
+    finally:
+        store.close()
+
+
+def test_upsert_recovery_facts_skips_empty_fingerprint(tmp_path: Path) -> None:
+    store = RunStore(db_path=tmp_path / "runs.sqlite")
+    try:
+        bad_fact: dict = {"failure_fingerprint": "", "summary": "should be ignored"}
+        store.upsert_recovery_facts("run-D", [bad_fact])
+        rows = store.get_recent_recovery_facts()
+        assert rows == []
+    finally:
+        store.close()
+
+
+def test_get_episodic_context_returns_empty_when_no_match(tmp_path: Path) -> None:
+    store = RunStore(db_path=tmp_path / "runs.sqlite")
+    try:
+        result = store.get_episodic_context(
+            failure_fingerprint="no_such_fp",
+            failure_class="no_such_class",
+        )
+        assert result == []
+    finally:
+        store.close()
