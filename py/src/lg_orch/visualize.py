@@ -167,14 +167,31 @@ def render_trace_dashboard(payload: dict[str, Any], *, width: int = 88) -> str:
     intent = str(intent_raw) if isinstance(intent_raw, str) else None
     events_raw = payload.get("events", [])
     tools_raw = payload.get("tool_results", [])
+    verification_raw = payload.get("verification", {})
+    verification = verification_raw if isinstance(verification_raw, dict) else {}
+    halt_reason = str(payload.get("halt_reason", "")).strip()
     final = str(payload.get("final", ""))
 
     events = [e for e in events_raw if isinstance(e, dict)]
     tool_results = [t for t in tools_raw if isinstance(t, dict)]
     final_lines = final.splitlines() or ["(empty)"]
+    summary_lines: list[str] = []
+    if "ok" in verification:
+        summary_lines.append(
+            f"verification: {'passed' if bool(verification.get('ok', False)) else 'failed'}"
+        )
+    if "acceptance_ok" in verification:
+        summary_lines.append(
+            f"acceptance: {'passed' if bool(verification.get('acceptance_ok', False)) else 'failed'}"
+        )
+    if halt_reason:
+        summary_lines.append(f"halt_reason: {halt_reason}")
+    if not summary_lines:
+        summary_lines.append("No verification summary captured.")
 
     sections = [
         render_run_header(request=request, intent=intent),
+        _box("Verification", summary_lines, width=width),
         render_timeline(events, width=width),
         render_tool_results(tool_results, width=width),
         _box("Final Output", final_lines[:8], width=width),
@@ -196,10 +213,19 @@ def render_trace_dashboard_html(
     run_id = str(run_id_raw).strip() if isinstance(run_id_raw, str) else "(not captured)"
     verification_raw = payload.get("verification", {})
     verification = verification_raw if isinstance(verification_raw, dict) else {}
+    telemetry_raw = payload.get("telemetry", {})
+    telemetry = telemetry_raw if isinstance(telemetry_raw, dict) else {}
+    diagnostics_raw = telemetry.get("diagnostics", [])
+    diagnostics = [entry for entry in diagnostics_raw if isinstance(entry, dict)]
+    context_budget_raw = telemetry.get("context_budget", {})
+    context_budget = context_budget_raw if isinstance(context_budget_raw, dict) else {}
+    working_set_raw = context_budget.get("working_set", {})
+    working_set = working_set_raw if isinstance(working_set_raw, dict) else {}
     checkpoint_raw = payload.get("checkpoint", {})
     checkpoint = checkpoint_raw if isinstance(checkpoint_raw, dict) else {}
     events_raw = payload.get("events", [])
     tools_raw = payload.get("tool_results", [])
+    halt_reason = str(payload.get("halt_reason", "")).strip()
     final = str(payload.get("final", ""))
 
     events = [e for e in events_raw if isinstance(e, dict)]
@@ -250,6 +276,24 @@ def render_trace_dashboard_html(
         verification_text = "passed" if bool(verification.get("ok", False)) else "failed"
         summary_lines.append(
             f"  <li><strong>verification</strong><span>{escape(verification_text)}</span></li>"
+        )
+    if "acceptance_ok" in verification:
+        acceptance_text = "passed" if bool(verification.get("acceptance_ok", False)) else "failed"
+        summary_lines.append(
+            f"  <li><strong>acceptance</strong><span>{escape(acceptance_text)}</span></li>"
+        )
+    if halt_reason:
+        summary_lines.append(
+            f"  <li><strong>halt_reason</strong><span>{escape(halt_reason)}</span></li>"
+        )
+    working_set_tokens = working_set.get("token_estimate", 0)
+    if isinstance(working_set_tokens, int) and working_set_tokens > 0:
+        summary_lines.append(
+            f"  <li><strong>working_set_tokens</strong><span>{working_set_tokens}</span></li>"
+        )
+    if diagnostics:
+        summary_lines.append(
+            f"  <li><strong>diagnostics</strong><span>{len(diagnostics)}</span></li>"
         )
     checkpoint_thread_id = str(checkpoint.get("thread_id", "")).strip()
     checkpoint_id = str(
@@ -305,6 +349,17 @@ def render_trace_site_index_html(runs: list[dict[str, Any]]) -> str:
                 parts.append("verify=ok")
             elif verification_ok is False:
                 parts.append("verify=fail")
+            acceptance_ok = run.get("acceptance_ok")
+            if acceptance_ok is True:
+                parts.append("accept=ok")
+            elif acceptance_ok is False:
+                parts.append("accept=fail")
+            halt_reason = str(run.get("halt_reason", "")).strip()
+            if halt_reason:
+                parts.append(f"halt={halt_reason}")
+            working_set_tokens = run.get("working_set_tokens", 0)
+            if isinstance(working_set_tokens, int) and working_set_tokens > 0:
+                parts.append(f"working_set={working_set_tokens}")
             checkpoint_id = str(run.get("checkpoint_id", "")).strip()
             if checkpoint_id:
                 parts.append(f"checkpoint={checkpoint_id}")

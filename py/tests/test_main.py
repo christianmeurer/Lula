@@ -93,7 +93,9 @@ def test_trace_site_writes_index_and_dashboards(tmp_path: Path) -> None:
         "intent": "debug",
         "events": [{"ts_ms": 1, "kind": "node", "data": {"name": "ingest", "phase": "end"}}],
         "tool_results": [{"tool": "search_files", "ok": True}],
-        "verification": {"ok": True},
+        "verification": {"ok": True, "acceptance_ok": False},
+        "halt_reason": "plan_max_iterations_exhausted",
+        "telemetry": {"context_budget": {"working_set": {"token_estimate": 256}}},
         "checkpoint": {"thread_id": "thread-a", "latest_checkpoint_id": "cp-1"},
         "final": "Completed",
     }
@@ -117,6 +119,8 @@ def test_trace_site_writes_index_and_dashboards(tmp_path: Path) -> None:
     assert "run-abc.html" in index_html
     assert "run-def.html" in index_html
     assert "traces/run-abc.json" in index_html
+    assert "accept=fail" in index_html
+    assert "plan_max_iterations_exhausted" in index_html
 
     dashboard_html = (output_dir / "run-abc.html").read_text(encoding="utf-8")
     assert "All runs" in dashboard_html

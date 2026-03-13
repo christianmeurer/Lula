@@ -29,6 +29,36 @@ def test_decide_model_route_keeps_remote_for_non_fallback_task_class() -> None:
     assert decision.reason == "primary_provider_path"
 
 
+def test_decide_model_route_prefers_remote_for_recovery_lane() -> None:
+    decision = decide_model_route(
+        task_class="verification_failed",
+        primary_provider="remote_openai",
+        primary_model="gpt-4.1",
+        local_provider="local",
+        fallback_task_classes=("summarization",),
+        lane="recovery",
+        retry_count=0,
+    )
+    assert decision.provider_used == "remote"
+    assert decision.reason == "recovery_capability_path"
+
+
+def test_decide_model_route_uses_remote_when_compression_pressure_exists() -> None:
+    decision = decide_model_route(
+        task_class="analysis",
+        primary_provider="remote_openai",
+        primary_model="gpt-4.1",
+        local_provider="local",
+        fallback_task_classes=(),
+        lane="interactive",
+        context_tokens=900,
+        latency_sensitive=True,
+        compression_pressure=2,
+    )
+    assert decision.provider_used == "remote"
+    assert decision.reason == "compression_pressure_capability_path"
+
+
 def test_record_model_route_appends_telemetry_marker() -> None:
     state = {
         "telemetry": {},
@@ -72,6 +102,8 @@ def test_record_inference_telemetry_captures_route_metadata() -> None:
             "context_scope": "stable_prefix",
             "cache_affinity": "workspace:planner:1",
             "prefix_segment": "stable_prefix",
+            "compression_pressure": 2,
+            "fact_count": 4,
         },
         "telemetry": {
             "model_routing": [
@@ -105,6 +137,8 @@ def test_record_inference_telemetry_captures_route_metadata() -> None:
     assert entry["rationale"] == "context requires a stronger planner"
     assert entry["context_scope"] == "stable_prefix"
     assert entry["context_tokens"] == 2048
+    assert entry["compression_pressure"] == 2
+    assert entry["fact_count"] == 4
     assert entry["retry_count"] == 1
     assert entry["latency_sensitive"] is False
     assert entry["usage"]["input_tokens"] == 120

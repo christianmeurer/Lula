@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from lg_orch.memory import (
+    build_context_layers,
     ensure_history_policy,
     prune_post_verification_history,
     prune_pre_verification_history,
@@ -82,3 +83,47 @@ def test_prune_post_verification_skips_without_successful_apply_patch() -> None:
     out = prune_post_verification_history(state)
     assert out["tool_results"][0]["stdout"] == large
     assert out["provenance"] == []
+
+
+def test_build_context_layers_emits_recovery_fact_pack_and_pressure() -> None:
+    layers = build_context_layers(
+        state={
+            "facts": [
+                {
+                    "kind": "recovery_fact",
+                    "loop": 2,
+                    "failure_class": "verification_failed",
+                    "failure_fingerprint": "fp-1",
+                    "summary": "verification_failed: test assertion failed",
+                    "last_check": "test assertion failed",
+                    "salience": 8,
+                }
+            ],
+            "recovery_packet": {
+                "failure_class": "verification_failed",
+                "failure_fingerprint": "fp-1",
+                "summary": "verification_failed: test assertion failed",
+                "last_check": "test assertion failed",
+                "context_scope": "working_set",
+                "plan_action": "keep",
+                "retry_target": "planner",
+            },
+            "_budget_context": {
+                "stable_prefix_tokens": 220,
+                "working_set_tokens": 220,
+                "tool_result_summary_chars": 160,
+            },
+        },
+        repo_context={
+            "repo_root": ".",
+            "has_py": True,
+            "has_rs": False,
+            "top_level": ["py", "README.md"],
+            "repo_map": "py\nREADME.md",
+            "semantic_hits": [],
+        },
+    )
+    assert "recovery_fact_pack" in layers["working_set"]["content"]
+    assert layers["planner_context"]["fact_count"] == 1
+    assert "pressure" in layers["compression"]
+    assert isinstance(layers["compression"]["pressure"]["overall"]["score"], int)

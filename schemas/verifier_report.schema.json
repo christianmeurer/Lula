@@ -2,23 +2,78 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/schemas/verifier_report.schema.json",
   "type": "object",
-  "required": ["ok", "checks", "retry_target", "plan_action"],
+  "required": [
+    "ok",
+    "checks",
+    "retry_target",
+    "plan_action"
+  ],
   "additionalProperties": false,
   "properties": {
-    "ok": { "type": "boolean" },
+    "ok": {
+      "type": "boolean"
+    },
+    "acceptance_ok": {
+      "type": "boolean"
+    },
+    "acceptance_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "criterion",
+          "ok",
+          "detail"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "retry_target": {
-      "type": ["string", "null"],
-      "enum": ["planner", "context_builder", "router", null]
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "planner",
+        "context_builder",
+        "router",
+        null
+      ]
     },
     "plan_action": {
       "type": "string",
-      "enum": ["keep", "amend", "discard_reset"]
+      "enum": [
+        "keep",
+        "amend",
+        "discard_reset"
+      ]
     },
-    "failure_class": { "type": "string" },
-    "failure_fingerprint": { "type": "string" },
-    "loop_summary": { "type": "string" },
+    "failure_class": {
+      "type": "string"
+    },
+    "failure_fingerprint": {
+      "type": "string"
+    },
+    "loop_summary": {
+      "type": "string"
+    },
     "recovery": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "required": [
         "failure_class",
         "failure_fingerprint",
@@ -29,20 +84,109 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "failure_class": { "type": "string" },
-        "failure_fingerprint": { "type": "string" },
-        "rationale": { "type": "string" },
+        "failure_class": {
+          "type": "string"
+        },
+        "failure_fingerprint": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
         "retry_target": {
           "type": "string",
-          "enum": ["planner", "context_builder", "router"]
+          "enum": [
+            "planner",
+            "context_builder",
+            "router"
+          ]
         },
         "context_scope": {
           "type": "string",
-          "enum": ["stable_prefix", "working_set", "full_reset"]
+          "enum": [
+            "stable_prefix",
+            "working_set",
+            "full_reset"
+          ]
         },
         "plan_action": {
           "type": "string",
-          "enum": ["keep", "amend", "discard_reset"]
+          "enum": [
+            "keep",
+            "amend",
+            "discard_reset"
+          ]
+        }
+      }
+    },
+    "recovery_packet": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "failure_class",
+        "failure_fingerprint",
+        "rationale",
+        "retry_target",
+        "context_scope",
+        "plan_action",
+        "loop",
+        "origin",
+        "summary",
+        "last_check",
+        "discard_reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "failure_class": {
+          "type": "string"
+        },
+        "failure_fingerprint": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "retry_target": {
+          "type": "string",
+          "enum": [
+            "planner",
+            "context_builder",
+            "router"
+          ]
+        },
+        "context_scope": {
+          "type": "string",
+          "enum": [
+            "stable_prefix",
+            "working_set",
+            "full_reset"
+          ]
+        },
+        "plan_action": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "amend",
+            "discard_reset"
+          ]
+        },
+        "loop": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "origin": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "last_check": {
+          "type": "string"
+        },
+        "discard_reason": {
+          "type": "string"
         }
       }
     },
@@ -50,17 +194,33 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "ok", "tool", "exit_code"],
+        "required": [
+          "name",
+          "ok",
+          "tool",
+          "exit_code"
+        ],
         "additionalProperties": false,
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "ok": { "type": "boolean" },
-          "tool": { "type": "string", "minLength": 1 },
-          "exit_code": { "type": "integer" },
-          "summary": { "type": "string" }
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "tool": {
+            "type": "string",
+            "minLength": 1
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "string"
+          }
         }
       }
     }
   }
 }
-

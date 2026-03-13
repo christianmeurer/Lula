@@ -14,11 +14,32 @@ class DummyProcess:
     def __init__(self, *, output: str, returncode: int) -> None:
         self.stdout = io.StringIO(output)
         self._returncode = returncode
+        self.terminated = False
 
     def poll(self) -> int | None:
         return self._returncode
 
     def wait(self) -> int:
+        return self._returncode
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+
+class RunningDummyProcess(DummyProcess):
+    def __init__(self, *, output: str = "") -> None:
+        super().__init__(output=output, returncode=0)
+        self._running = True
+
+    def poll(self) -> int | None:
+        return None if self._running else self._returncode
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self._running = False
+
+    def wait(self) -> int:
+        self._running = False
         return self._returncode
 
 
@@ -28,10 +49,14 @@ def test_api_http_response_creates_run_lists_runs_and_loads_trace(
     service = RemoteAPIService(repo_root=tmp_path)
     captured_argv: list[str] = []
     captured_cwd: list[Path] = []
+    captured_env: dict[str, str] = {}
 
-    def fake_spawn(*, argv: list[str], cwd: Path) -> DummyProcess:
+    def fake_spawn(*, argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> DummyProcess:
         captured_argv[:] = list(argv)
         captured_cwd[:] = [cwd]
+        captured_env.clear()
+        if env is not None:
+            captured_env.update(env)
         return DummyProcess(output="step 1\nstep 2\n", returncode=0)
 
     monkeypatch.setattr(remote_api, "_spawn_run_subprocess", fake_spawn)
@@ -44,6 +69,8 @@ def test_api_http_response_creates_run_lists_runs_and_loads_trace(
         request_body=json.dumps(
             {"request": "Analyze logs", "run_id": "abc", "trace_out_dir": "artifacts/api"}
         ).encode("utf-8"),
+        request_id="req-123",
+        client_ip="203.0.113.10",
     )
     assert status == 201
     assert content_type == "application/json; charset=utf-8"
@@ -51,10 +78,14 @@ def test_api_http_response_creates_run_lists_runs_and_loads_trace(
     assert payload["run_id"] == "abc"
     assert payload["status"] == "succeeded"
     assert payload["trace_ready"] is False
+    assert payload["request_id"] == "req-123"
+    assert payload["client_ip"] == "203.0.113.10"
     assert captured_cwd == [tmp_path.resolve()]
     assert "--trace" in captured_argv
     assert captured_argv[captured_argv.index("--run-id") + 1] == "abc"
     assert Path(captured_argv[captured_argv.index("--trace-out-dir") + 1]) == Path("artifacts/api")
+    assert captured_env["LG_REQUEST_ID"] == "req-123"
+    assert captured_env["LG_REMOTE_API_CLIENT_IP"] == "203.0.113.10"
 
     status, _, body = _api_http_response(
         service,
@@ -102,7 +133,7 @@ def test_api_http_response_rejects_invalid_payloads_and_duplicates(
     monkeypatch.setattr(
         remote_api,
         "_spawn_run_subprocess",
-        lambda *, argv, cwd: DummyProcess(output="", returncode=0),
+        lambda *, argv, cwd, env=None: DummyProcess(output="", returncode=0),
     )
     monkeypatch.setattr(remote_api, "_start_daemon_thread", lambda *, target, name: target())
 
@@ -142,6 +173,57 @@ def test_api_http_response_rejects_invalid_payloads_and_duplicates(
     assert json.loads(body.decode("utf-8"))["error"] == "duplicate_run_id"
 
 
+def test_api_http_response_enforces_bearer_auth(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+
+    status, _, body = _api_http_response(
+        service,
+        method="GET",
+        request_path="/v1/runs",
+        request_body=None,
+        auth_mode="bearer",
+        expected_bearer_token="secret-token",
+    )
+    assert status == 401
+    assert json.loads(body.decode("utf-8"))["error"] == "missing_bearer_token"
+
+    status, _, body = _api_http_response(
+        service,
+        method="GET",
+        request_path="/v1/runs",
+        request_body=None,
+        auth_mode="bearer",
+        expected_bearer_token="secret-token",
+        authorization_header="Bearer wrong-token",
+    )
+    assert status == 403
+    assert json.loads(body.decode("utf-8"))["error"] == "invalid_bearer_token"
+
+    status, _, body = _api_http_response(
+        service,
+        method="GET",
+        request_path="/v1/runs",
+        request_body=None,
+        auth_mode="bearer",
+        expected_bearer_token="secret-token",
+        authorization_header="Bearer secret-token",
+    )
+    assert status == 200
+    assert json.loads(body.decode("utf-8"))["runs"] == []
+
+    status, _, body = _api_http_response(
+        service,
+        method="GET",
+        request_path="/healthz",
+        request_body=None,
+        auth_mode="bearer",
+        expected_bearer_token="secret-token",
+        allow_unauthenticated_healthz=True,
+    )
+    assert status == 200
+    assert json.loads(body.decode("utf-8"))["ok"] is True
+
+
 def test_api_http_response_healthz_and_missing_run(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
 
@@ -159,6 +241,61 @@ def test_api_http_response_healthz_and_missing_run(tmp_path: Path) -> None:
         service,
         method="GET",
         request_path="/v1/runs/missing",
+        request_body=None,
+    )
+    assert status == 404
+    assert json.loads(body.decode("utf-8"))["error"] == "not_found"
+
+
+def test_api_http_response_can_cancel_running_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    process = RunningDummyProcess(output="running\n")
+
+    monkeypatch.setattr(
+        remote_api,
+        "_spawn_run_subprocess",
+        lambda *, argv, cwd, env=None: process,
+    )
+    monkeypatch.setattr(remote_api, "_start_daemon_thread", lambda *, target, name: None)
+
+    status, _, body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/v1/runs",
+        request_body=json.dumps({"request": "Analyze", "run_id": "abc"}).encode("utf-8"),
+    )
+    assert status == 201
+    created = json.loads(body.decode("utf-8"))
+    assert created["status"] == "running"
+    assert created["cancellable"] is True
+
+    status, _, body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/v1/runs/abc/cancel",
+        request_body=None,
+    )
+    assert status == 202
+    payload = json.loads(body.decode("utf-8"))
+    assert payload["run_id"] == "abc"
+    assert payload["status"] in {"cancelling", "cancelled"}
+    assert payload["cancel_requested"] is True
+    assert process.terminated is True
+
+    detail = service.get_run("abc")
+    assert detail is not None
+    assert detail["cancel_requested"] is True
+
+
+def test_api_http_response_cancel_returns_not_found_for_missing_run(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+
+    status, _, body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/v1/runs/missing/cancel",
         request_body=None,
     )
     assert status == 404

@@ -29,6 +29,7 @@ def test_score_task_passes_with_matching_output() -> None:
             "halt_reason": "",
             "final": "done",
             "tool_results": [],
+            "verification": {"acceptance_ok": True},
         },
     )
 
@@ -45,8 +46,20 @@ def test_evaluate_tasks_aggregates_summary() -> None:
     ]
 
     outputs = {
-        "a": {"intent": "analysis", "halt_reason": "", "final": "done", "tool_results": []},
-        "b": {"intent": "analysis", "halt_reason": "", "final": "done", "tool_results": [{}]},
+        "a": {
+            "intent": "analysis",
+            "halt_reason": "",
+            "final": "done",
+            "tool_results": [],
+            "verification": {"acceptance_ok": True},
+        },
+        "b": {
+            "intent": "analysis",
+            "halt_reason": "",
+            "final": "done",
+            "tool_results": [{}],
+            "verification": {"acceptance_ok": False},
+        },
     }
 
     report = module.evaluate_tasks(
@@ -81,6 +94,7 @@ def test_main_json_output_uses_scored_report(tmp_path: Path, capsys: object) -> 
         "halt_reason": "",
         "final": "done",
         "tool_results": [],
+        "verification": {"acceptance_ok": True},
     }
     try:
         rc = module.main(["--tasks-dir", str(tmp_path), "--format", "json"])
@@ -92,3 +106,25 @@ def test_main_json_output_uses_scored_report(tmp_path: Path, capsys: object) -> 
     payload = json.loads(captured.out)
     assert payload["summary"]["passed_tasks"] == 1
     assert payload["results"][0]["score"] == 1.0
+
+
+def test_score_task_tracks_acceptance_status() -> None:
+    module = _load_eval_run_module()
+    task = module.EvalTask(
+        id="canary",
+        request="summarize repo",
+        expected_intent="analysis",
+        expected_acceptance_ok=False,
+    )
+    result = module.score_task(
+        task,
+        {
+            "intent": "analysis",
+            "halt_reason": "",
+            "final": "done",
+            "tool_results": [],
+            "verification": {"acceptance_ok": False},
+        },
+    )
+    assert result["checks"]["acceptance_ok_match"] is True
+    assert result["acceptance_ok"] is False

@@ -95,6 +95,8 @@ def test_render_trace_dashboard_combines_sections() -> None:
     payload: dict[str, Any] = {
         "request": "Find bug",
         "intent": "debug",
+        "verification": {"ok": False, "acceptance_ok": False},
+        "halt_reason": "plan_max_iterations_exhausted",
         "events": [{"ts_ms": 1, "kind": "ingest", "data": {}}],
         "tool_results": [{"tool": "search_files", "ok": True}],
         "final": "Done",
@@ -104,6 +106,9 @@ def test_render_trace_dashboard_combines_sections() -> None:
     assert "Timeline" in result
     assert "Tool Results" in result
     assert "Final Output" in result
+    assert "Verification" in result
+    assert "acceptance: failed" in result
+    assert "halt_reason: plan_max_iterations_exhausted" in result
     assert "Done" in result
 
 
@@ -112,7 +117,12 @@ def test_render_trace_dashboard_html_combines_sections() -> None:
         "run_id": "run-123",
         "request": "Find bug",
         "intent": "debug",
-        "verification": {"ok": True},
+        "verification": {"ok": True, "acceptance_ok": False},
+        "halt_reason": "plan_max_iterations_exhausted",
+        "telemetry": {
+            "diagnostics": [{"tool": "exec", "summary": "x"}],
+            "context_budget": {"working_set": {"token_estimate": 512}},
+        },
         "checkpoint": {"thread_id": "thread-a", "latest_checkpoint_id": "cp-1"},
         "events": [{"ts_ms": 1, "kind": "node", "data": {"name": "ingest", "phase": "end"}}],
         "tool_results": [{"tool": "search_files", "ok": True}],
@@ -127,6 +137,10 @@ def test_render_trace_dashboard_html_combines_sections() -> None:
     assert "Final Output" in result
     assert "flowchart LR" in result
     assert "verification" in result
+    assert "acceptance" in result
+    assert "plan_max_iterations_exhausted" in result
+    assert "working_set_tokens" in result
+    assert "diagnostics" in result
     assert "thread-a" in result
     assert "cp-1" in result
     assert "Done" in result
@@ -144,6 +158,9 @@ def test_render_trace_site_index_html_lists_runs() -> None:
                 "events_count": 3,
                 "tool_results_count": 1,
                 "verification_ok": True,
+                "acceptance_ok": False,
+                "halt_reason": "plan_max_iterations_exhausted",
+                "working_set_tokens": 256,
                 "checkpoint_id": "cp-1",
             }
         ]
@@ -154,4 +171,7 @@ def test_render_trace_site_index_html_lists_runs() -> None:
     assert "traces/run-abc.json" in result
     assert "Analyze logs" in result
     assert "verify=ok" in result
+    assert "accept=fail" in result
+    assert "plan_max_iterations_exhausted" in result
+    assert "working_set=256" in result
     assert "cp-1" in result

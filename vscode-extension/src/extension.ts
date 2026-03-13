@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { spawn, type ChildProcess } from 'child_process';
 import * as http from 'http';
 import * as https from 'https';
@@ -27,6 +28,7 @@ interface ViewModel {
   workspaceRoot: string;
   runnerStatus: string;
   requestStatus: string;
+  stopLabel: string;
   latestTracePath: string;
   finalOutput: string;
   logs: string;
@@ -36,6 +38,8 @@ interface RemoteRunDetails {
   run_id?: unknown;
   status?: unknown;
   exit_code?: unknown;
+  cancel_requested?: unknown;
+  cancellable?: unknown;
   trace_path?: unknown;
   trace_ready?: unknown;
   trace?: unknown;
@@ -54,8 +58,9 @@ class LgOrchExtension {
   private runnerStatus = 'stopped';
   private requestStatus = 'idle';
   private requestRunning = false;
+  private activeRemoteRunId: string | null = null;
 
-  public constructor(private readonly context: vscode.ExtensionContext) {}
+  public constructor(private readonly context: vscode.ExtensionContext) { }
 
   public register(): void {
     this.context.subscriptions.push(
@@ -200,6 +205,14 @@ class LgOrchExtension {
   private async stopRunner(logWhenMissing = true): Promise<void> {
     await this.openPanel();
 
+    if (this.requestRunning && this.activeRemoteRunId) {
+      const remoteApiBaseUrl = this.getRemoteApiBaseUrl();
+      if (remoteApiBaseUrl) {
+        await this.cancelRemoteRun(remoteApiBaseUrl, this.activeRemoteRunId);
+        return;
+      }
+    }
+
     const child = this.runnerProcess;
     if (!child) {
       if (logWhenMissing) {
@@ -237,6 +250,7 @@ class LgOrchExtension {
 
     this.requestRunning = true;
     this.requestStatus = 'starting';
+    this.activeRemoteRunId = null;
     this.latestTracePath = null;
     this.latestFinalOutput = '';
     this.appendLog(`[run] request: ${request}`);
@@ -254,6 +268,7 @@ class LgOrchExtension {
       this.appendLog(`[run] failed: ${asErrorMessage(error)}`);
     } finally {
       this.requestRunning = false;
+      this.activeRemoteRunId = null;
       this.refresh();
     }
   }
@@ -302,24 +317,41 @@ class LgOrchExtension {
 
   private async runRemoteRequest(request: string, remoteApiBaseUrl: string): Promise<void> {
     const pollIntervalMs = this.getRemotePollIntervalMs();
+    const remoteApiBearerToken = this.getRemoteApiBearerToken();
     this.appendLog(`[remote] using API: ${remoteApiBaseUrl}`);
-    await this.requestJson('GET', `${remoteApiBaseUrl}/healthz`);
+    await this.requestJson('GET', `${remoteApiBaseUrl}/healthz`, undefined, remoteApiBearerToken);
     this.appendLog('[remote] healthz ok');
 
-    const created = await this.requestJson<RemoteRunDetails>('POST', `${remoteApiBaseUrl}/v1/runs`, {
-      request,
-      view: 'classic',
-    });
+    const created = await this.requestJson<RemoteRunDetails>(
+      'POST',
+      `${remoteApiBaseUrl}/v1/runs`,
+      {
+        request,
+        view: 'classic',
+      },
+      remoteApiBearerToken,
+    );
     const runId = this.readRemoteRunId(created);
+    this.activeRemoteRunId = runId;
     this.appendLog(`[remote] run started: ${runId}`);
     this.applyRemoteRunDetails(created);
 
     let logCount = 0;
     while (true) {
-      const detail = await this.requestJson<RemoteRunDetails>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`);
+      const detail = await this.requestJson<RemoteRunDetails>(
+        'GET',
+        `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`,
+        undefined,
+        remoteApiBearerToken,
+      );
       this.applyRemoteRunDetails(detail);
 
-      const logs = await this.requestJson<RemoteRunLogs>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`);
+      const logs = await this.requestJson<RemoteRunLogs>(
+        'GET',
+        `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`,
+        undefined,
+        remoteApiBearerToken,
+      );
       logCount = this.appendRemoteLogs(logs, logCount);
 
       if (!isRemoteRunInProgress(this.requestStatus)) {
@@ -329,16 +361,40 @@ class LgOrchExtension {
       await delay(pollIntervalMs);
     }
 
-    const finalDetail = await this.requestJson<RemoteRunDetails>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`);
+    const finalDetail = await this.requestJson<RemoteRunDetails>(
+      'GET',
+      `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}`,
+      undefined,
+      remoteApiBearerToken,
+    );
     this.applyRemoteRunDetails(finalDetail);
     this.appendRemoteLogs(
-      await this.requestJson<RemoteRunLogs>('GET', `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`),
+      await this.requestJson<RemoteRunLogs>(
+        'GET',
+        `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/logs`,
+        undefined,
+        remoteApiBearerToken,
+      ),
       logCount,
     );
 
     if (typeof finalDetail.exit_code === 'number') {
       this.appendLog(`[remote] completed exit_code=${finalDetail.exit_code}`);
     }
+  }
+
+  private async cancelRemoteRun(remoteApiBaseUrl: string, runId: string): Promise<void> {
+    const remoteApiBearerToken = this.getRemoteApiBearerToken();
+    this.requestStatus = 'cancelling';
+    this.refresh();
+    this.appendLog(`[remote] cancel requested: ${runId}`);
+    const detail = await this.requestJson<RemoteRunDetails>(
+      'POST',
+      `${remoteApiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+      remoteApiBearerToken,
+    );
+    this.applyRemoteRunDetails(detail);
   }
 
   private async runCommand(label: string, command: string, args: readonly string[], cwd: string): Promise<number> {
@@ -394,6 +450,11 @@ class LgOrchExtension {
     return parsed.toString().replace(/\/+$/, '');
   }
 
+  private getRemoteApiBearerToken(): string | null {
+    const raw = vscode.workspace.getConfiguration('lula').get<string>('remoteApiBearerToken', '').trim();
+    return raw || null;
+  }
+
   private getRemotePollIntervalMs(): number {
     const configured = vscode.workspace
       .getConfiguration('lula')
@@ -406,6 +467,14 @@ class LgOrchExtension {
 
   private applyRemoteRunDetails(detail: RemoteRunDetails): void {
     this.requestStatus = typeof detail.status === 'string' && detail.status.trim() ? detail.status : 'running';
+
+    if (typeof detail.run_id === 'string' && detail.run_id.trim()) {
+      this.activeRemoteRunId = detail.run_id.trim();
+    }
+
+    if (detail.cancellable === false || this.requestStatus === 'cancelled' || !isRemoteRunInProgress(this.requestStatus)) {
+      this.activeRemoteRunId = null;
+    }
 
     if (typeof detail.trace_path === 'string' && detail.trace_path.trim()) {
       this.latestTracePath = detail.trace_path;
@@ -438,7 +507,7 @@ class LgOrchExtension {
     throw new Error('remote API response missing run_id');
   }
 
-  private async requestJson<T>(method: 'GET' | 'POST', requestUrl: string, body?: unknown): Promise<T> {
+  private async requestJson<T>(method: 'GET' | 'POST', requestUrl: string, body?: unknown, bearerToken?: string | null): Promise<T> {
     const url = new URL(requestUrl);
     const client = url.protocol === 'https:' ? https : url.protocol === 'http:' ? http : null;
     if (!client) {
@@ -446,6 +515,17 @@ class LgOrchExtension {
     }
 
     const payload = body === undefined ? undefined : JSON.stringify(body);
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'X-Request-ID': randomUUID(),
+    };
+    if (bearerToken && bearerToken.trim()) {
+      headers.Authorization = `Bearer ${bearerToken.trim()}`;
+    }
+    if (payload !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(payload).toString();
+    }
 
     return await new Promise<T>((resolve, reject) => {
       const request = client.request(
@@ -454,14 +534,7 @@ class LgOrchExtension {
           port: url.port,
           path: `${url.pathname}${url.search}`,
           method,
-          headers:
-            payload === undefined
-              ? { Accept: 'application/json' }
-              : {
-                  Accept: 'application/json',
-                  'Content-Type': 'application/json',
-                  'Content-Length': Buffer.byteLength(payload).toString(),
-                },
+          headers,
         },
         (response) => {
           const chunks: Buffer[] = [];
@@ -672,6 +745,7 @@ class LgOrchExtension {
       workspaceRoot: this.getWorkspaceRoot() ?? '(no workspace)',
       runnerStatus: this.runnerStatus,
       requestStatus: this.requestStatus,
+      stopLabel: this.requestRunning && this.activeRemoteRunId ? 'Cancel Remote Run' : 'Stop Runner',
       latestTracePath: this.latestTracePath ?? '(none)',
       finalOutput: this.latestFinalOutput || '(empty)',
       logs: this.logLines.length > 0 ? this.logLines.join('\n') : '(no logs yet)',
@@ -806,6 +880,7 @@ class LgOrchExtension {
         document.getElementById('workspace').textContent = 'Workspace: ' + state.workspaceRoot;
         document.getElementById('runner').textContent = 'Runner: ' + state.runnerStatus;
         document.getElementById('requestStatus').textContent = 'Request: ' + state.requestStatus;
+        document.getElementById('stop').textContent = state.stopLabel;
         document.getElementById('tracePath').textContent = 'Latest trace: ' + state.latestTracePath;
         document.getElementById('finalOutput').textContent = state.finalOutput;
         logs.textContent = state.logs;

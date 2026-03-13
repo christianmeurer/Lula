@@ -21,6 +21,8 @@ def decide_model_route(
     interactive_context_limit: int = 1800,
     deep_planning_context_limit: int = 3200,
     recovery_retry_threshold: int = 1,
+    compression_pressure: int = 0,
+    fact_count: int = 0,
 ) -> ModelRoutingDecision:
     normalized_task = task_class.strip()
     normalized_lane = lane.strip() if isinstance(lane, str) else ""
@@ -28,6 +30,8 @@ def decide_model_route(
     normalized_primary_model = primary_model.strip() or "deterministic"
     normalized_local_provider = local_provider.strip() or "local"
     fallback_set = {entry.strip() for entry in fallback_task_classes if entry.strip()}
+    normalized_compression_pressure = max(compression_pressure, 0)
+    normalized_fact_count = max(fact_count, 0)
 
     if normalized_primary_provider == normalized_local_provider:
         return ModelRoutingDecision(
@@ -41,11 +45,31 @@ def decide_model_route(
             cache_affinity=cache_affinity,
             prefix_segment=prefix_segment,
             context_tokens=max(context_tokens, 0),
+            compression_pressure=normalized_compression_pressure,
+            fact_count=normalized_fact_count,
             retry_count=max(retry_count, 0),
             latency_sensitive=latency_sensitive,
         )
 
-    if normalized_task in fallback_set:
+    if normalized_lane == "recovery":
+        return ModelRoutingDecision(
+            task_class=normalized_task,
+            lane="recovery",
+            provider_used="remote",
+            provider=normalized_primary_provider,
+            model=normalized_primary_model,
+            reason="recovery_capability_path",
+            fallback_applied=False,
+            cache_affinity=cache_affinity,
+            prefix_segment=prefix_segment,
+            context_tokens=max(context_tokens, 0),
+            compression_pressure=normalized_compression_pressure,
+            fact_count=normalized_fact_count,
+            retry_count=max(retry_count, 0),
+            latency_sensitive=latency_sensitive,
+        )
+
+    if normalized_task in fallback_set and normalized_compression_pressure <= 0 and normalized_fact_count <= 0:
         return ModelRoutingDecision(
             task_class=normalized_task,
             lane=normalized_lane or "interactive",
@@ -57,6 +81,8 @@ def decide_model_route(
             cache_affinity=cache_affinity,
             prefix_segment=prefix_segment,
             context_tokens=max(context_tokens, 0),
+            compression_pressure=normalized_compression_pressure,
+            fact_count=normalized_fact_count,
             retry_count=max(retry_count, 0),
             latency_sensitive=latency_sensitive,
         )
@@ -65,6 +91,8 @@ def decide_model_route(
         normalized_lane == "interactive"
         and latency_sensitive
         and context_tokens <= max(interactive_context_limit, 1)
+        and normalized_compression_pressure <= 0
+        and normalized_fact_count <= 0
     ):
         return ModelRoutingDecision(
             task_class=normalized_task,
@@ -77,6 +105,8 @@ def decide_model_route(
             cache_affinity=cache_affinity,
             prefix_segment=prefix_segment,
             context_tokens=max(context_tokens, 0),
+            compression_pressure=normalized_compression_pressure,
+            fact_count=normalized_fact_count,
             retry_count=max(retry_count, 0),
             latency_sensitive=latency_sensitive,
         )
@@ -84,6 +114,8 @@ def decide_model_route(
     if (
         normalized_lane == "deep_planning"
         or context_tokens >= max(deep_planning_context_limit, 1)
+        or normalized_compression_pressure > 0
+        or normalized_fact_count >= 3
     ):
         return ModelRoutingDecision(
             task_class=normalized_task,
@@ -91,27 +123,17 @@ def decide_model_route(
             provider_used="remote",
             provider=normalized_primary_provider,
             model=normalized_primary_model,
-            reason="high_context_capability_path",
+            reason=(
+                "compression_pressure_capability_path"
+                if normalized_compression_pressure > 0 or normalized_fact_count >= 3
+                else "high_context_capability_path"
+            ),
             fallback_applied=False,
             cache_affinity=cache_affinity,
             prefix_segment=prefix_segment,
             context_tokens=max(context_tokens, 0),
-            retry_count=max(retry_count, 0),
-            latency_sensitive=latency_sensitive,
-        )
-
-    if normalized_lane == "recovery" and retry_count >= max(recovery_retry_threshold, 0):
-        return ModelRoutingDecision(
-            task_class=normalized_task,
-            lane="recovery",
-            provider_used="remote",
-            provider=normalized_primary_provider,
-            model=normalized_primary_model,
-            reason="recovery_capability_path",
-            fallback_applied=False,
-            cache_affinity=cache_affinity,
-            prefix_segment=prefix_segment,
-            context_tokens=max(context_tokens, 0),
+            compression_pressure=normalized_compression_pressure,
+            fact_count=normalized_fact_count,
             retry_count=max(retry_count, 0),
             latency_sensitive=latency_sensitive,
         )
@@ -127,6 +149,8 @@ def decide_model_route(
         cache_affinity=cache_affinity,
         prefix_segment=prefix_segment,
         context_tokens=max(context_tokens, 0),
+        compression_pressure=normalized_compression_pressure,
+        fact_count=normalized_fact_count,
         retry_count=max(retry_count, 0),
         latency_sensitive=latency_sensitive,
     )
@@ -188,6 +212,22 @@ def record_model_route(
     elif isinstance(context_tokens_raw, int):
         context_tokens = context_tokens_raw
 
+    compression_pressure_raw = route.get("compression_pressure", repo_context.get("planner_context", {}))
+    compression_pressure = 0
+    if isinstance(compression_pressure_raw, dict):
+        value = compression_pressure_raw.get("compression_pressure", 0)
+        compression_pressure = int(value) if isinstance(value, int) else 0
+    elif isinstance(compression_pressure_raw, int):
+        compression_pressure = compression_pressure_raw
+
+    fact_count_raw = route.get("fact_count", repo_context.get("planner_context", {}))
+    fact_count = 0
+    if isinstance(fact_count_raw, dict):
+        value = fact_count_raw.get("fact_count", 0)
+        fact_count = int(value) if isinstance(value, int) else 0
+    elif isinstance(fact_count_raw, int):
+        fact_count = fact_count_raw
+
     latency_sensitive_raw = route.get("latency_sensitive", lane != "deep_planning")
     latency_sensitive = bool(latency_sensitive_raw)
 
@@ -208,6 +248,8 @@ def record_model_route(
             routing.get("deep_planning_context_limit", 3200) or 3200
         ),
         recovery_retry_threshold=int(routing.get("recovery_retry_threshold", 1) or 1),
+        compression_pressure=compression_pressure,
+        fact_count=fact_count,
     )
 
     telemetry_raw = state.get("telemetry", {})
@@ -246,6 +288,18 @@ def record_inference_telemetry(
         if isinstance(retry_count_raw, int) and not isinstance(retry_count_raw, bool)
         else 0
     )
+    compression_pressure_raw = latest.get("compression_pressure", route.get("compression_pressure", 0))
+    compression_pressure = (
+        int(compression_pressure_raw)
+        if isinstance(compression_pressure_raw, int) and not isinstance(compression_pressure_raw, bool)
+        else 0
+    )
+    fact_count_raw = latest.get("fact_count", route.get("fact_count", 0))
+    fact_count = (
+        int(fact_count_raw)
+        if isinstance(fact_count_raw, int) and not isinstance(fact_count_raw, bool)
+        else 0
+    )
 
     capture_metadata = bool(state.get("_trace_capture_model_metadata", True))
     entry: dict[str, Any] = {
@@ -262,6 +316,8 @@ def record_inference_telemetry(
         "cache_affinity": str(route.get("cache_affinity", "")),
         "prefix_segment": str(route.get("prefix_segment", "stable_prefix")),
         "context_tokens": context_tokens,
+        "compression_pressure": compression_pressure,
+        "fact_count": fact_count,
         "retry_count": retry_count,
         "latency_sensitive": bool(
             latest.get("latency_sensitive", route.get("latency_sensitive", True))

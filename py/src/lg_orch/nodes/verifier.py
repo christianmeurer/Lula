@@ -7,7 +7,7 @@ from typing import Any
 from lg_orch.logging import get_logger
 from lg_orch.memory import ensure_history_policy, prune_post_verification_history
 from lg_orch.model_routing import record_model_route, tool_routing_metadata
-from lg_orch.state import RetryTarget, VerificationCheck, VerifierReport
+from lg_orch.state import RecoveryAction, RecoveryPacket, VerificationCheck, VerifierReport
 from lg_orch.tools import RunnerClient
 from lg_orch.trace import append_event
 
@@ -203,6 +203,183 @@ def _classify_retry(
     )
 
 
+def _recovery_action_payload(recovery: dict[str, Any]) -> dict[str, Any]:
+    return RecoveryAction(
+        failure_class=str(recovery.get("failure_class", "")).strip(),
+        failure_fingerprint=str(recovery.get("failure_fingerprint", "")).strip(),
+        rationale=str(recovery.get("rationale", "")).strip(),
+        retry_target=str(recovery.get("retry_target", "planner")).strip() or "planner",
+        context_scope=str(recovery.get("context_scope", "working_set")).strip() or "working_set",
+        plan_action=str(recovery.get("plan_action", "keep")).strip() or "keep",
+    ).model_dump()
+
+
+def _recovery_packet_payload(
+    recovery: dict[str, Any],
+    *,
+    current_loop: int,
+    loop_summary: str,
+    last_check: str,
+    discard_reason: str,
+) -> dict[str, Any]:
+    return RecoveryPacket(
+        **_recovery_action_payload(recovery),
+        loop=max(int(current_loop), 0),
+        origin="verifier",
+        summary=loop_summary,
+        last_check=last_check,
+        discard_reason=discard_reason,
+    ).model_dump()
+
+
+def _loop_summary_entry(report: dict[str, Any], *, current_loop: int) -> dict[str, Any]:
+    recovery_packet_raw = report.get("recovery_packet", {})
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    return {
+        "loop": current_loop,
+        "failure_class": report.get("failure_class", ""),
+        "failure_fingerprint": report.get("failure_fingerprint", ""),
+        "retry_target": report.get("retry_target"),
+        "plan_action": report.get("plan_action", "keep"),
+        "context_scope": recovery_packet.get("context_scope", ""),
+        "summary": report.get("loop_summary", ""),
+        "last_check": recovery_packet.get("last_check", ""),
+        "discard_reason": recovery_packet.get("discard_reason", ""),
+        "recovery": report.get("recovery"),
+        "recovery_packet": recovery_packet or None,
+    }
+
+
+def _updated_recovery_facts(state: dict[str, Any], *, report: dict[str, Any], current_loop: int) -> list[dict[str, Any]]:
+    facts_raw = state.get("facts", [])
+    facts = [dict(entry) for entry in facts_raw if isinstance(entry, dict)] if isinstance(facts_raw, list) else []
+    recovery_packet_raw = report.get("recovery_packet", {})
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    if not recovery_packet:
+        return facts
+
+    plan_action = str(report.get("plan_action", "keep")).strip() or "keep"
+    salience = 6
+    if plan_action == "discard_reset":
+        salience = 10
+    elif str(report.get("retry_target", "")).strip() == "router":
+        salience = 8
+
+    next_fact = {
+        "kind": "recovery_fact",
+        "loop": current_loop,
+        "failure_class": str(report.get("failure_class", "")).strip(),
+        "failure_fingerprint": str(report.get("failure_fingerprint", "")).strip(),
+        "summary": str(report.get("loop_summary", "")).strip(),
+        "last_check": str(recovery_packet.get("last_check", "")).strip(),
+        "context_scope": str(recovery_packet.get("context_scope", "")).strip(),
+        "retry_target": report.get("retry_target"),
+        "plan_action": plan_action,
+        "salience": salience,
+    }
+
+    fingerprint = str(next_fact.get("failure_fingerprint", "")).strip()
+    updated = [entry for entry in facts if str(entry.get("failure_fingerprint", "")).strip() != fingerprint]
+    updated.append(next_fact)
+    updated.sort(
+        key=lambda entry: (
+            int(entry.get("salience", 0) or 0),
+            int(entry.get("loop", 0) or 0),
+        ),
+        reverse=True,
+    )
+    return updated[:12]
+
+
+def _evaluate_acceptance_checks(
+    state: dict[str, Any], *, tool_results: list[dict[str, Any]], checks: list[VerificationCheck]
+) -> list[dict[str, Any]]:
+    plan_raw = state.get("plan", {})
+    plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
+    criteria_raw = plan.get("acceptance_criteria", [])
+    criteria = [str(entry).strip() for entry in criteria_raw if isinstance(entry, str) and entry.strip()]
+    if not criteria:
+        return []
+
+    repo_context_raw = state.get("repo_context", {})
+    repo_context = dict(repo_context_raw) if isinstance(repo_context_raw, dict) else {}
+    top_level = repo_context.get("top_level", [])
+    has_repo_context = bool(repo_context.get("repo_map")) or bool(
+        isinstance(top_level, list) and top_level
+    ) or bool(repo_context.get("structural_ast_map")) or bool(repo_context.get("semantic_hits"))
+    plan_steps_raw = plan.get("steps", [])
+    has_plan_steps = bool(isinstance(plan_steps_raw, list) and plan_steps_raw)
+    successful_tool_results = any(bool(result.get("ok", False)) for result in tool_results)
+    verification_passed = len(checks) == 0
+    acceptance_checks: list[dict[str, Any]] = []
+    for criterion in criteria:
+        lower = criterion.lower()
+        ok = verification_passed
+        detail = "verification_passed" if verification_passed else "verification_failed"
+        if "context" in lower:
+            ok = has_repo_context
+            detail = "repo_context_available" if ok else "repo_context_missing"
+        elif "bounded" in lower or "next step" in lower:
+            ok = has_plan_steps
+            detail = "bounded_plan_available" if ok else "bounded_plan_missing"
+        elif "request" in lower or "answered" in lower or "executed" in lower:
+            ok = verification_passed and (successful_tool_results or has_plan_steps)
+            detail = "request_path_available" if ok else "request_path_incomplete"
+        acceptance_checks.append({"criterion": criterion, "ok": ok, "detail": detail})
+    return acceptance_checks
+
+
+def _acceptance_failure(acceptance_checks: list[dict[str, Any]]) -> tuple[dict[str, Any], str, str]:
+    unmet = [entry for entry in acceptance_checks if isinstance(entry, dict) and not bool(entry.get("ok", False))]
+    if not unmet:
+        return {}, "", ""
+
+    summary = str(unmet[0].get("criterion", "acceptance criteria unmet")).strip() or "acceptance criteria unmet"
+    fingerprint_seed = "|".join(str(entry.get("criterion", "")).strip() for entry in unmet)
+    fingerprint = sha256(fingerprint_seed.encode("utf-8", errors="replace")).hexdigest()[:16]
+    recovery = {
+        "failure_class": "acceptance_criteria_unmet",
+        "failure_fingerprint": fingerprint,
+        "rationale": "verification passed but acceptance criteria are not yet satisfied",
+        "retry_target": "planner",
+        "context_scope": "working_set",
+        "plan_action": "amend",
+    }
+    return recovery, "acceptance_criteria_unmet", summary
+
+
+def _diagnostics_telemetry_entries(
+    tool_results: list[dict[str, Any]],
+    *,
+    current_loop: int,
+    report: dict[str, Any],
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    report_failure_class = str(report.get("failure_class", "")).strip()
+    for result in tool_results:
+        if bool(result.get("ok", False)):
+            continue
+        diagnostics = _extract_diagnostics(result)
+        fingerprint = _failure_fingerprint(result, diagnostics)
+        artifacts_raw = result.get("artifacts", {})
+        artifacts = dict(artifacts_raw) if isinstance(artifacts_raw, dict) else {}
+        summary = _diagnostic_summary(diagnostics[0]) if diagnostics else ""
+        if not summary:
+            summary = _first_nonempty_line(str(result.get("stderr", "")))
+        entries.append(
+            {
+                "loop": current_loop,
+                "tool": str(result.get("tool", "")).strip(),
+                "failure_class": report_failure_class,
+                "failure_fingerprint": fingerprint,
+                "error": str(artifacts.get("error", "")).strip(),
+                "summary": summary,
+                "diagnostic_count": len(diagnostics),
+            }
+        )
+    return entries
+
+
 def _build_checks(tool_results: list[dict[str, Any]]) -> list[VerificationCheck]:
     checks: list[VerificationCheck] = []
     for idx, result in enumerate(tool_results):
@@ -300,7 +477,9 @@ def _run_verification_calls(state: dict[str, Any], tool_results: list[dict[str, 
 
     api_key = state.get("_runner_api_key")
     api_key_s = str(api_key).strip() if api_key is not None else None
-    client = RunnerClient(base_url=runner_base_url, api_key=api_key_s)
+    request_id = state.get("_request_id")
+    request_id_s = str(request_id).strip() if request_id is not None else None
+    client = RunnerClient(base_url=runner_base_url, api_key=api_key_s, request_id=request_id_s)
     try:
         batch_results = client.batch_execute_tools(calls=calls)
     finally:
@@ -355,28 +534,69 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
     current_loop = int(current_loop_state.get("current_loop", 0) or 0)
 
     try:
+        acceptance_checks = _evaluate_acceptance_checks(state, tool_results=tool_results, checks=checks)
+        acceptance_ok = all(bool(entry.get("ok", False)) for entry in acceptance_checks)
         if has_failures:
             recovery, discard_reason = _classify_retry(tool_results, current_loop=current_loop)
-            loop_summary = f"{recovery['failure_class']}: {checks[0].summary if checks else discard_reason}"
+            recovery_action = _recovery_action_payload(recovery)
+            last_check = checks[0].summary if checks else discard_reason
+            loop_summary = f"{recovery_action['failure_class']}: {last_check}"
+            recovery_packet = _recovery_packet_payload(
+                recovery_action,
+                current_loop=current_loop,
+                loop_summary=loop_summary,
+                last_check=last_check,
+                discard_reason=discard_reason,
+            )
             report = VerifierReport(
                 ok=False,
                 checks=checks,
-                retry_target=recovery["retry_target"],
-                plan_action=recovery["plan_action"],
-                failure_class=recovery["failure_class"],
-                failure_fingerprint=recovery["failure_fingerprint"],
-                recovery=recovery,
+                acceptance_ok=False,
+                acceptance_checks=acceptance_checks,
+                retry_target=recovery_action["retry_target"],
+                plan_action=recovery_action["plan_action"],
+                failure_class=recovery_action["failure_class"],
+                failure_fingerprint=recovery_action["failure_fingerprint"],
+                recovery=recovery_action,
+                recovery_packet=recovery_packet,
+                loop_summary=loop_summary,
+            ).model_dump()
+        elif not acceptance_ok:
+            recovery, discard_reason, last_check = _acceptance_failure(acceptance_checks)
+            recovery_action = _recovery_action_payload(recovery)
+            loop_summary = f"{recovery_action['failure_class']}: {last_check}"
+            recovery_packet = _recovery_packet_payload(
+                recovery_action,
+                current_loop=current_loop,
+                loop_summary=loop_summary,
+                last_check=last_check,
+                discard_reason=discard_reason,
+            )
+            report = VerifierReport(
+                ok=False,
+                checks=[],
+                acceptance_ok=False,
+                acceptance_checks=acceptance_checks,
+                retry_target=recovery_action["retry_target"],
+                plan_action=recovery_action["plan_action"],
+                failure_class=recovery_action["failure_class"],
+                failure_fingerprint=recovery_action["failure_fingerprint"],
+                recovery=recovery_action,
+                recovery_packet=recovery_packet,
                 loop_summary=loop_summary,
             ).model_dump()
         else:
             report = VerifierReport(
                 ok=True,
                 checks=[],
+                acceptance_ok=True,
+                acceptance_checks=acceptance_checks,
                 retry_target=None,
                 plan_action="keep",
                 failure_class="",
                 failure_fingerprint="",
                 recovery=None,
+                recovery_packet=None,
                 loop_summary="verification_passed",
             ).model_dump()
     except Exception as exc:
@@ -384,28 +604,34 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
         report = {
             "ok": False,
             "checks": [],
+            "acceptance_ok": False,
+            "acceptance_checks": [],
             "retry_target": "planner",
             "plan_action": "keep",
             "failure_class": "verifier_failure",
             "failure_fingerprint": "verifier_failure",
             "recovery": None,
+            "recovery_packet": None,
             "loop_summary": "verifier failed to classify results",
         }
 
     ok = bool(report.get("ok", False))
     loop_summaries_raw = state.get("loop_summaries", [])
     loop_summaries = list(loop_summaries_raw) if isinstance(loop_summaries_raw, list) else []
+    recovery_packet_raw = report.get("recovery_packet", {})
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else None
     if not ok:
-        loop_summaries.append(
-            {
-                "loop": current_loop,
-                "failure_class": report.get("failure_class", ""),
-                "failure_fingerprint": report.get("failure_fingerprint", ""),
-                "summary": report.get("loop_summary", ""),
-                "recovery": report.get("recovery"),
-            }
-        )
+        loop_summaries.append(_loop_summary_entry(report, current_loop=current_loop))
         loop_summaries = loop_summaries[-5:]
+    facts = _updated_recovery_facts(state, report=report, current_loop=current_loop)
+    telemetry_raw = state.get("telemetry", {})
+    telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
+    diagnostics_raw = telemetry.get("diagnostics", [])
+    diagnostics_telemetry = list(diagnostics_raw) if isinstance(diagnostics_raw, list) else []
+    diagnostics_telemetry.extend(
+        _diagnostics_telemetry_entries(tool_results, current_loop=current_loop, report=report)
+    )
+    telemetry["diagnostics"] = diagnostics_telemetry[-20:]
 
     out: dict[str, Any] = {
         **state,
@@ -413,9 +639,13 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
         "verification": report,
         "budgets": budgets,
         "retry_target": report.get("retry_target"),
+        "facts": facts,
+        "recovery_packet": recovery_packet,
         "loop_summaries": loop_summaries,
+        "telemetry": telemetry,
     }
     if ok:
+        out["recovery_packet"] = None
         out["context_reset_requested"] = False
         out["plan_discarded"] = False
         out["plan_discard_reason"] = ""

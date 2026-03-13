@@ -2,32 +2,64 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/schemas/planner_output.schema.json",
   "type": "object",
-  "required": ["steps", "verification", "rollback"],
+  "required": [
+    "steps",
+    "verification",
+    "rollback"
+  ],
   "additionalProperties": false,
   "properties": {
     "steps": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "description", "tools", "expected_outcome", "files_touched"],
+        "required": [
+          "id",
+          "description",
+          "tools",
+          "expected_outcome",
+          "files_touched"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "description": { "type": "string", "minLength": 1 },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
           "tools": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["tool", "input"],
+              "required": [
+                "tool",
+                "input"
+              ],
               "additionalProperties": false,
               "properties": {
-                "tool": { "type": "string", "minLength": 1 },
-                "input": { "type": "object" }
+                "tool": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "input": {
+                  "type": "object"
+                }
               }
             }
           },
-          "expected_outcome": { "type": "string", "minLength": 1 },
-          "files_touched": { "type": "array", "items": { "type": "string" } }
+          "expected_outcome": {
+            "type": "string",
+            "minLength": 1
+          },
+          "files_touched": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -35,22 +67,42 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["tool", "input"],
+        "required": [
+          "tool",
+          "input"
+        ],
         "additionalProperties": false,
         "properties": {
-          "tool": { "type": "string", "minLength": 1 },
-          "input": { "type": "object" }
+          "tool": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "type": "object"
+          }
         }
       }
     },
-    "rollback": { "type": "string", "minLength": 1 },
+    "rollback": {
+      "type": "string",
+      "minLength": 1
+    },
     "acceptance_criteria": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
-    "max_iterations": { "type": "integer", "minimum": 1 },
+    "max_iterations": {
+      "type": "integer",
+      "minimum": 1
+    },
     "recovery": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "required": [
         "failure_class",
         "failure_fingerprint",
@@ -61,23 +113,111 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "failure_class": { "type": "string" },
-        "failure_fingerprint": { "type": "string" },
-        "rationale": { "type": "string" },
+        "failure_class": {
+          "type": "string"
+        },
+        "failure_fingerprint": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
         "retry_target": {
           "type": "string",
-          "enum": ["planner", "context_builder", "router"]
+          "enum": [
+            "planner",
+            "context_builder",
+            "router"
+          ]
         },
         "context_scope": {
           "type": "string",
-          "enum": ["stable_prefix", "working_set", "full_reset"]
+          "enum": [
+            "stable_prefix",
+            "working_set",
+            "full_reset"
+          ]
         },
         "plan_action": {
           "type": "string",
-          "enum": ["keep", "amend", "discard_reset"]
+          "enum": [
+            "keep",
+            "amend",
+            "discard_reset"
+          ]
+        }
+      }
+    },
+    "recovery_packet": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "failure_class",
+        "failure_fingerprint",
+        "rationale",
+        "retry_target",
+        "context_scope",
+        "plan_action",
+        "loop",
+        "origin",
+        "summary",
+        "last_check",
+        "discard_reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "failure_class": {
+          "type": "string"
+        },
+        "failure_fingerprint": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "retry_target": {
+          "type": "string",
+          "enum": [
+            "planner",
+            "context_builder",
+            "router"
+          ]
+        },
+        "context_scope": {
+          "type": "string",
+          "enum": [
+            "stable_prefix",
+            "working_set",
+            "full_reset"
+          ]
+        },
+        "plan_action": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "amend",
+            "discard_reset"
+          ]
+        },
+        "loop": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "origin": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "last_check": {
+          "type": "string"
+        },
+        "discard_reason": {
+          "type": "string"
         }
       }
     }
   }
 }
-

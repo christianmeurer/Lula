@@ -86,3 +86,14 @@ def test_policy_gate_sets_halt_reason_when_budget_exhausted() -> None:
     assert out["halt_reason"] == "max_loops_exhausted"
     assert out["verification"]["ok"] is False
     assert out["verification"]["checks"][0]["name"] == "loop_budget"
+
+
+def test_policy_gate_halts_when_plan_iterations_exhausted() -> None:
+    out = policy_gate(
+        _base_state(
+            budgets={"current_loop": 1, "max_loops": 3},
+            plan={"max_iterations": 1},
+        )
+    )
+    assert out["halt_reason"] == "plan_max_iterations_exhausted"
+    assert out["verification"]["failure_class"] == "plan_max_iterations_exhausted"

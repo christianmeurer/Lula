@@ -16,6 +16,7 @@ from lg_orch.config import (
     ModelRouting,
     Models,
     Policy,
+    RemoteAPIConfig,
     Runner,
     Trace,
     load_config,
@@ -70,6 +71,13 @@ MODE = "test"
 [trace]
 enabled = true
 output_dir = "out/traces"
+
+[remote_api]
+auth_mode = "bearer"
+bearer_token = "remote-token"
+allow_unauthenticated_healthz = true
+trust_forwarded_headers = true
+access_log_enabled = true
 
 [checkpoint]
 enabled = true
@@ -140,6 +148,18 @@ def test_load_config_parses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
         cfg = load_config(repo_root=root)
         assert cfg.trace.enabled is True
         assert cfg.trace.output_dir == "out/traces"
+
+
+def test_load_config_parses_remote_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.auth_mode == "bearer"
+        assert cfg.remote_api.bearer_token == "remote-token"
+        assert cfg.remote_api.allow_unauthenticated_healthz is True
+        assert cfg.remote_api.trust_forwarded_headers is True
+        assert cfg.remote_api.access_log_enabled is True
 
 
 def test_load_config_parses_checkpoint(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -230,6 +250,8 @@ enabled = false
         assert cfg.checkpoint.thread_prefix == "lg-orch"
         assert cfg.models.routing.local_provider == "local"
         assert "summarization" in cfg.models.routing.fallback_task_classes
+        assert cfg.remote_api.auth_mode == "off"
+        assert cfg.remote_api.bearer_token is None
         assert cfg.mcp.enabled is False
         assert cfg.mcp.servers == {}
 
@@ -274,6 +296,7 @@ def test_appconfig_frozen() -> None:
             },
         ),
         trace=Trace(enabled=False, output_dir="out"),
+        remote_api=RemoteAPIConfig(auth_mode="off", bearer_token=None),
         checkpoint=Checkpoint(
             enabled=True,
             db_path="artifacts/checkpoints/langgraph.sqlite",

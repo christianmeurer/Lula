@@ -43,6 +43,8 @@ def policy_gate(state: dict[str, Any]) -> dict[str, Any]:
     raw_max_tool_calls = state.get("_budget_max_tool_calls_per_loop", 0)
     raw_max_patch_bytes = state.get("_budget_max_patch_bytes", 0)
     raw_context_budget = state.get("_budget_context", {})
+    plan_raw = state.get("plan", {})
+    plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
     try:
         configured_max_loops = int(raw_max_loops)
     except (TypeError, ValueError):
@@ -55,13 +57,21 @@ def policy_gate(state: dict[str, Any]) -> dict[str, Any]:
         configured_max_patch_bytes = int(raw_max_patch_bytes)
     except (TypeError, ValueError):
         configured_max_patch_bytes = 0
+    plan_max_iterations_raw = plan.get("max_iterations")
+    try:
+        plan_max_iterations = int(plan_max_iterations_raw)
+    except (TypeError, ValueError):
+        plan_max_iterations = 0
     loop_decision = enforce_loop_budget(
         budgets=budgets,
         configured_max_loops=configured_max_loops,
+        plan_max_iterations=plan_max_iterations if plan_max_iterations >= 1 else None,
     )
     budgets["max_loops"] = loop_decision.max_loops
     budgets["current_loop"] = loop_decision.current_loop
     budgets["loop"] = {"remaining": max(loop_decision.max_loops - loop_decision.current_loop, 0)}
+    if plan_max_iterations >= 1:
+        budgets["plan_max_iterations"] = plan_max_iterations
     budgets["tool_calls_limit"] = max(configured_max_tool_calls, 0)
     budgets["tool_calls_used"] = 0
     budgets["patch_bytes_limit"] = max(configured_max_patch_bytes, 0)
@@ -86,12 +96,15 @@ def policy_gate(state: dict[str, Any]) -> dict[str, Any]:
                     "summary": "Loop budget exhausted",
                 }
             ],
+            "acceptance_ok": False,
+            "acceptance_checks": [],
             "retry_target": "planner",
             "plan_action": "keep",
-            "failure_class": "loop_budget_exhausted",
-            "failure_fingerprint": "loop_budget_exhausted",
+            "failure_class": loop_decision.halt_reason,
+            "failure_fingerprint": loop_decision.halt_reason,
             "recovery": None,
-            "loop_summary": "loop budget exhausted",
+            "recovery_packet": None,
+            "loop_summary": loop_decision.halt_reason,
         }
 
     return append_event(out, kind="node", data={"name": "policy_gate", "phase": "end"})

@@ -26,6 +26,7 @@ class EvalTask:
     expected_intent: str
     expected_halt_reason: str = ""
     require_final: bool = True
+    expected_acceptance_ok: bool = True
 
 
 def load_tasks(tasks_dir: Path) -> list[EvalTask]:
@@ -39,6 +40,7 @@ def load_tasks(tasks_dir: Path) -> list[EvalTask]:
                 expected_intent=str(data["expected_intent"]),
                 expected_halt_reason=str(data.get("expected_halt_reason", "")),
                 require_final=bool(data.get("require_final", True)),
+                expected_acceptance_ok=bool(data.get("expected_acceptance_ok", True)),
             )
         )
     return tasks
@@ -72,11 +74,15 @@ def score_task(task: EvalTask, output: dict[str, Any]) -> dict[str, Any]:
     final_present = bool(str(output.get("final", "")).strip())
     tool_results_raw = output.get("tool_results", [])
     tool_results = tool_results_raw if isinstance(tool_results_raw, list) else []
+    verification_raw = output.get("verification", {})
+    verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
+    acceptance_ok = bool(verification.get("acceptance_ok", False))
 
     checks = {
         "intent_match": actual_intent == task.expected_intent,
         "halt_reason_match": halt_reason == task.expected_halt_reason,
         "final_present": final_present if task.require_final else True,
+        "acceptance_ok_match": acceptance_ok == task.expected_acceptance_ok,
     }
     passed_checks = sum(1 for ok in checks.values() if ok)
     max_checks = len(checks)
@@ -90,6 +96,7 @@ def score_task(task: EvalTask, output: dict[str, Any]) -> dict[str, Any]:
         "expected_halt_reason": task.expected_halt_reason,
         "actual_halt_reason": halt_reason,
         "final_present": final_present,
+        "acceptance_ok": acceptance_ok,
         "tool_results_count": len(tool_results),
         "checks": checks,
         "score": score,
@@ -158,6 +165,7 @@ def _render_text_report(report: dict[str, Any]) -> str:
                 f"score={float(result.get('score', 0.0)):.2f} "
                 f"intent={str(result.get('actual_intent', '')) or '(missing)'} "
                 f"halt={halt_reason} "
+                f"acceptance_ok={bool(result.get('acceptance_ok', False))} "
                 f"tools={int(result.get('tool_results_count', 0))}"
             )
         )

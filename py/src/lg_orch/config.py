@@ -48,6 +48,24 @@ def _get_int(tbl: dict[str, object], key: str, *, default: int) -> int:
     return _require_int(tbl, key)
 
 
+def _get_bool(tbl: dict[str, object], key: str, *, default: bool) -> bool:
+    if key not in tbl:
+        return default
+    return _require_bool(tbl, key)
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"missing/invalid env {name}")
+
+
 def _optional_str_tuple(tbl: dict[str, object], key: str) -> tuple[str, ...]:
     raw = tbl.get(key, [])
     if raw is None:
@@ -111,6 +129,15 @@ class Trace:
 
 
 @dataclass(frozen=True)
+class RemoteAPIConfig:
+    auth_mode: str = "off"
+    bearer_token: str | None = None
+    allow_unauthenticated_healthz: bool = True
+    trust_forwarded_headers: bool = False
+    access_log_enabled: bool = True
+
+
+@dataclass(frozen=True)
 class Checkpoint:
     enabled: bool
     db_path: str
@@ -159,6 +186,7 @@ class AppConfig:
     runner: Runner
     mcp: MCPConfig
     trace: Trace
+    remote_api: RemoteAPIConfig
     checkpoint: Checkpoint
 
 
@@ -315,6 +343,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
     runner_raw = raw.get("runner")
     mcp_raw = raw.get("mcp", {})
     trace_raw = raw.get("trace", {})
+    remote_api_raw = raw.get("remote_api", {})
     checkpoint_raw = raw.get("checkpoint", {})
     if not isinstance(models_raw, dict):
         raise ConfigError("missing/invalid models")
@@ -328,6 +357,8 @@ def load_config(*, repo_root: Path) -> AppConfig:
         raise ConfigError("missing/invalid mcp")
     if not isinstance(trace_raw, dict):
         raise ConfigError("missing/invalid trace")
+    if not isinstance(remote_api_raw, dict):
+        raise ConfigError("missing/invalid remote_api")
     if not isinstance(checkpoint_raw, dict):
         raise ConfigError("missing/invalid checkpoint")
 
@@ -453,6 +484,46 @@ def load_config(*, repo_root: Path) -> AppConfig:
         capture_model_metadata=bool(trace_raw.get("capture_model_metadata", True)),
     )
 
+    auth_mode_raw = remote_api_raw.get("auth_mode", os.environ.get("LG_REMOTE_API_AUTH_MODE", "off"))
+    if not isinstance(auth_mode_raw, str):
+        raise ConfigError("missing/invalid remote_api.auth_mode")
+    auth_mode = auth_mode_raw.strip().lower() or "off"
+    if auth_mode not in {"off", "bearer"}:
+        raise ConfigError("remote_api.auth_mode must be one of: off, bearer")
+
+    bearer_token_raw = remote_api_raw.get("bearer_token")
+    bearer_token: str | None
+    if bearer_token_raw is None:
+        bearer_token = os.environ.get("LG_REMOTE_API_BEARER_TOKEN")
+    elif isinstance(bearer_token_raw, str):
+        bearer_token = bearer_token_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid remote_api.bearer_token")
+    if bearer_token is not None:
+        bearer_token = bearer_token.strip() or None
+    if auth_mode == "bearer" and bearer_token is None:
+        raise ConfigError("remote_api.bearer_token is required when remote_api.auth_mode=bearer")
+
+    remote_api = RemoteAPIConfig(
+        auth_mode=auth_mode,
+        bearer_token=bearer_token,
+        allow_unauthenticated_healthz=_get_bool(
+            remote_api_raw,
+            "allow_unauthenticated_healthz",
+            default=_env_bool("LG_REMOTE_API_ALLOW_UNAUTHENTICATED_HEALTHZ", default=True),
+        ),
+        trust_forwarded_headers=_get_bool(
+            remote_api_raw,
+            "trust_forwarded_headers",
+            default=_env_bool("LG_REMOTE_API_TRUST_FORWARDED_HEADERS", default=False),
+        ),
+        access_log_enabled=_get_bool(
+            remote_api_raw,
+            "access_log_enabled",
+            default=_env_bool("LG_REMOTE_API_ACCESS_LOG_ENABLED", default=True),
+        ),
+    )
+
     checkpoint_enabled = checkpoint_raw.get("enabled", True)
     if not isinstance(checkpoint_enabled, bool):
         raise ConfigError("missing/invalid checkpoint.enabled")
@@ -487,5 +558,6 @@ def load_config(*, repo_root: Path) -> AppConfig:
         runner=runner,
         mcp=mcp,
         trace=trace,
+        remote_api=remote_api,
         checkpoint=checkpoint,
     )

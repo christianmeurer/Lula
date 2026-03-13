@@ -156,6 +156,12 @@ def _trace_run_summary(
     tool_results_raw = payload.get("tool_results", [])
     verification_raw = payload.get("verification", {})
     verification = verification_raw if isinstance(verification_raw, dict) else {}
+    planner_context_raw = payload.get("telemetry", {})
+    telemetry = planner_context_raw if isinstance(planner_context_raw, dict) else {}
+    context_budget_raw = telemetry.get("context_budget", {})
+    context_budget = context_budget_raw if isinstance(context_budget_raw, dict) else {}
+    working_set_raw = context_budget.get("working_set", {})
+    working_set = working_set_raw if isinstance(working_set_raw, dict) else {}
     checkpoint_raw = payload.get("checkpoint", {})
     checkpoint = checkpoint_raw if isinstance(checkpoint_raw, dict) else {}
     events = events_raw if isinstance(events_raw, list) else []
@@ -169,6 +175,9 @@ def _trace_run_summary(
         "events_count": len(events),
         "tool_results_count": len(tool_results),
         "verification_ok": verification.get("ok"),
+        "acceptance_ok": verification.get("acceptance_ok"),
+        "halt_reason": str(payload.get("halt_reason", "")).strip(),
+        "working_set_tokens": working_set.get("token_estimate", 0),
         "checkpoint_thread_id": checkpoint.get("thread_id", ""),
         "checkpoint_id": checkpoint.get("latest_checkpoint_id") or checkpoint.get("resume_checkpoint_id") or "",
     }
@@ -425,6 +434,11 @@ def cli(argv: list[str] | None = None) -> int:
     trace_enabled = bool(args.trace) or cfg.trace.enabled
     trace_out_dir_raw = getattr(args, "trace_out_dir", None)
     trace_out_dir = str(trace_out_dir_raw).strip() if trace_out_dir_raw is not None else ""
+    import os
+
+    request_id = str(os.environ.get("LG_REQUEST_ID", "")).strip()
+    remote_api_auth_subject = str(os.environ.get("LG_REMOTE_API_AUTH_SUBJECT", "")).strip()
+    remote_api_client_ip = str(os.environ.get("LG_REMOTE_API_CLIENT_IP", "")).strip()
 
     checkpointer = None
     checkpoint_runtime: dict[str, str | bool] = {
@@ -545,6 +559,13 @@ def cli(argv: list[str] | None = None) -> int:
         "_trace_out_dir": trace_out_dir or cfg.trace.output_dir,
         "_trace_capture_model_metadata": cfg.trace.capture_model_metadata,
     }
+    if request_id:
+        state["_request_id"] = request_id
+    if remote_api_auth_subject or remote_api_client_ip:
+        state["_remote_api_context"] = {
+            "auth_subject": remote_api_auth_subject,
+            "client_ip": remote_api_client_ip,
+        }
 
     out: dict[str, Any] = {}
     view = str(getattr(args, "view", "classic"))

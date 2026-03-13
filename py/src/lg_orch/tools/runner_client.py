@@ -12,6 +12,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 class RunnerClient:
     base_url: str
     api_key: str | None = None
+    request_id: str | None = None
     _client: httpx.Client | None = None
 
     def __post_init__(self) -> None:
@@ -19,6 +20,8 @@ class RunnerClient:
             headers: dict[str, str] = {}
             if self.api_key:
                 headers["authorization"] = f"Bearer {self.api_key}"
+            if self.request_id and self.request_id.strip():
+                headers["x-request-id"] = self.request_id.strip()
             object.__setattr__(
                 self,
                 "_client",

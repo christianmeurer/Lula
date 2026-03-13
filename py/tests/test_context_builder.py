@@ -195,3 +195,43 @@ def test_context_builder_records_model_routing_telemetry() -> None:
         assert len(routes) >= 1
         assert routes[-1]["node"] == "context_builder"
         assert routes[-1]["task_class"] == "summarization"
+
+
+@patch("lg_orch.nodes.context_builder.MCPClient")
+def test_context_builder_records_mcp_recovery_hints(mock_mcp_cls: MagicMock) -> None:
+    with tempfile.TemporaryDirectory() as td:
+        mock_mcp = MagicMock()
+        mock_mcp.summarize_tools.return_value = {
+            "server_count": 1,
+            "tool_count": 2,
+            "servers": [
+                {
+                    "server_name": "mock",
+                    "tool_count": 2,
+                    "tools": [
+                        {"name": "echo", "description": "Echoes text back to the caller."},
+                        {"name": "search", "description": "Searches diagnostic traces."},
+                    ],
+                }
+            ],
+            "summary": "mock: echo, search",
+        }
+        mock_mcp_cls.return_value = mock_mcp
+
+        out = context_builder(
+            _base_state(
+                repo_root=td,
+                _mcp_enabled=True,
+                _mcp_servers={"mock": {"command": "python", "args": ["server.py"]}},
+                _runner_base_url="http://127.0.0.1:8088",
+                recovery_packet={
+                    "failure_class": "verification_failed",
+                    "last_check": "search diagnostic traces",
+                },
+                request="search diagnostic traces",
+            )
+        )
+        repo_context = out["repo_context"]
+        assert "mcp_recovery_hints" in repo_context
+        assert "candidate_tools:" in repo_context["mcp_recovery_hints"]
+        assert repo_context["mcp_relevant_tools"][0]["name"] in {"echo", "search"}

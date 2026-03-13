@@ -44,6 +44,11 @@
           "default": "",
           "description": "Base URL for the hosted Lula remote API. When set, Run Request uses the remote API instead of local uv/cargo execution."
         },
+        "lula.remoteApiBearerToken": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token for the hosted Lula remote API when remote API auth is enabled. Prefer user settings over workspace settings."
+        },
         "lula.remotePollIntervalMs": {
           "type": "number",
           "default": 1000,

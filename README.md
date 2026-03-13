@@ -157,7 +157,7 @@ Notes:
 - Uses runner API key `dev-insecure` to match dev config.
 - If `MODEL_ACCESS_KEY` is missing, planner remote mode falls back to deterministic local planning.
 
-## Azure personal container hosting
+## Azure personal hosting
 
 [`Dockerfile`](Dockerfile) and [`scripts/start_remote_stack.sh`](scripts/start_remote_stack.sh) package the repo into a single personal-use container. The runner stays on `127.0.0.1:8088` inside the container and the public entrypoint is `uv run lg-orch serve-api` on port `8001` or `PORT` / `WEBSITES_PORT`.
 
@@ -167,20 +167,26 @@ Notes:
    set AZ_RESOURCE_GROUP=rg-lula-personal
    set AZ_ACR_NAME=acrlulapersonal
    set AZ_CONTAINERAPP_NAME=lula-personal
+   set LG_REMOTE_API_AUTH_MODE=bearer
+   set LG_REMOTE_API_BEARER_TOKEN=choose-a-remote-api-token
    set LG_RUNNER_API_KEY=choose-a-runner-key
    set MODEL_ACCESS_KEY=your_model_key
    ```
 
-2. Build and deploy with [`scripts/azure_deploy_personal.cmd`](scripts/azure_deploy_personal.cmd):
+2. Build and deploy with [`scripts/azure_deploy_personal.cmd`](scripts/azure_deploy_personal.cmd). Hardened default is Azure Container Apps:
 
    ```bat
+   set AZ_DEPLOY_TARGET=containerapp
    scripts\azure_deploy_personal.cmd
    ```
 
-3. Point the VS Code extension setting `lula.remoteApiBaseUrl` at the deployed HTTPS URL.
+3. Point the VS Code extension settings `lula.remoteApiBaseUrl` and `lula.remoteApiBearerToken` at the deployed endpoint and token. In VM mode the helper exposes HTTP directly unless you place it behind a TLS terminator or reverse proxy.
 
 Notes:
-- The helper script targets Azure Container Apps for a simple personal deployment path.
+- Hardened default is Azure Container Apps with edge TLS in front of it.
+- VM mode remains useful for lab use, with `Standard_D2s_v5` Spot as the recommended cost-efficient default.
+- Public VM exposure is not production-ready by itself; add TLS and access control in front of the remote API.
+- Set `AZ_DEPLOY_TARGET=containerapp` to keep using Azure Container Apps.
 - The same image also fits Azure App Service custom containers if `WEBSITES_PORT=8001` is configured.
 - Keep secrets in environment variables or Azure configuration, not in repo files.
 
