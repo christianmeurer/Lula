@@ -136,6 +136,7 @@ class RemoteAPIConfig:
     trust_forwarded_headers: bool = False
     access_log_enabled: bool = True
     run_store_path: str | None = None
+    rate_limit_rps: int = 0
 
 
 @dataclass(frozen=True)
@@ -558,6 +559,24 @@ def load_config(*, repo_root: Path) -> AppConfig:
     else:
         raise ConfigError("missing/invalid remote_api.run_store_path")
 
+    rate_limit_rps_raw = remote_api_raw.get("rate_limit_rps")
+    rate_limit_rps: int
+    if rate_limit_rps_raw is None:
+        env_rlr = os.environ.get("LG_REMOTE_API_RATE_LIMIT_RPS")
+        if env_rlr is not None:
+            try:
+                rate_limit_rps = int(env_rlr.strip())
+            except ValueError as exc:
+                raise ConfigError("missing/invalid LG_REMOTE_API_RATE_LIMIT_RPS") from exc
+        else:
+            rate_limit_rps = 0
+    else:
+        if isinstance(rate_limit_rps_raw, bool) or not isinstance(rate_limit_rps_raw, int):
+            raise ConfigError("missing/invalid remote_api.rate_limit_rps")
+        rate_limit_rps = rate_limit_rps_raw
+    if rate_limit_rps != 0 and rate_limit_rps < 1:
+        raise ConfigError("remote_api.rate_limit_rps must be 0 (disabled) or >= 1")
+
     remote_api = RemoteAPIConfig(
         auth_mode=auth_mode,
         bearer_token=bearer_token,
@@ -577,6 +596,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
             default=_env_bool("LG_REMOTE_API_ACCESS_LOG_ENABLED", default=True),
         ),
         run_store_path=run_store_path,
+        rate_limit_rps=rate_limit_rps,
     )
 
     checkpoint_enabled = checkpoint_raw.get("enabled", True)

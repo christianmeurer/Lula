@@ -54,3 +54,4 @@ allow_unauthenticated_healthz = true
 trust_forwarded_headers = false
 access_log_enabled = true
 run_store_path = "artifacts/remote-api/runs.sqlite"
+rate_limit_rps = 60

@@ -338,3 +338,60 @@ def test_run_store_persists_on_create_and_finish(
     assert "persist1" in run_ids
 
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# _RateLimiter tests
+# ---------------------------------------------------------------------------
+
+
+def test_rate_limiter_allows_one_and_blocks_second() -> None:
+    from lg_orch.remote_api import _RateLimiter
+
+    rl = _RateLimiter(capacity=1, rate=100.0)
+    assert rl.acquire() is True
+    assert rl.acquire() is False
+
+
+def test_rate_limiter_refills_over_time() -> None:
+    import time as _time
+
+    from lg_orch.remote_api import _RateLimiter
+
+    rl = _RateLimiter(capacity=1, rate=100.0)
+    assert rl.acquire() is True
+    assert rl.acquire() is False
+    _time.sleep(0.02)  # 100 tokens/s → 2 tokens in 20ms
+    assert rl.acquire() is True
+
+
+def test_api_http_response_returns_429_when_rate_limited(tmp_path: Path) -> None:
+    from lg_orch.remote_api import _RateLimiter
+
+    rl = _RateLimiter(capacity=1, rate=0.001)
+    # drain the single token
+    assert rl.acquire() is True
+
+    service = RemoteAPIService(repo_root=tmp_path, rate_limiter=rl)
+
+    status, _, body = _api_http_response(
+        service,
+        method="GET",
+        request_path="/healthz",
+        request_body=None,
+    )
+    assert status == 429
+    payload = json.loads(body.decode("utf-8"))
+    assert payload["error"] == "rate_limit_exceeded"
+
+
+def test_api_http_response_passes_when_rate_limiter_not_set(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path, rate_limiter=None)
+
+    status, _, _ = _api_http_response(
+        service,
+        method="GET",
+        request_path="/healthz",
+        request_body=None,
+    )
+    assert status == 200

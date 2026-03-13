@@ -136,6 +136,33 @@ def _authorize_request(
     return "bearer", None
 
 
+# ---------------------------------------------------------------------------
+# Rate limiter
+# ---------------------------------------------------------------------------
+
+
+class _RateLimiter:
+    """Token-bucket rate limiter (stdlib only, thread-safe)."""
+
+    def __init__(self, *, capacity: int, rate: float) -> None:
+        self._capacity = float(capacity)
+        self._rate = float(rate)
+        self._tokens = float(capacity)
+        self._last = time.monotonic()
+        self._lock = threading.Lock()
+
+    def acquire(self) -> bool:
+        with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last
+            self._last = now
+            self._tokens = min(self._capacity, self._tokens + elapsed * self._rate)
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+                return True
+            return False
+
+
 @dataclass(slots=True)
 class RunRecord:
     run_id: str
@@ -157,12 +184,19 @@ class RunRecord:
 
 
 class RemoteAPIService:
-    def __init__(self, *, repo_root: Path, run_store: RunStore | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        repo_root: Path,
+        run_store: RunStore | None = None,
+        rate_limiter: _RateLimiter | None = None,
+    ) -> None:
         self._repo_root = repo_root.resolve()
         self._lock = threading.Lock()
         self._runs: dict[str, RunRecord] = {}
         self._log = get_logger()
         self._run_store = run_store
+        self._rate_limiter = rate_limiter
 
     def create_run(
         self,
@@ -485,6 +519,9 @@ def _api_http_response(
     if auth_error is not None:
         return auth_error
 
+    if service._rate_limiter is not None and not service._rate_limiter.acquire():
+        return _json_response(429, {"error": "rate_limit_exceeded"})
+
     if route == "/healthz":
         if method != "GET":
             return _json_response(405, {"error": "method_not_allowed"})
@@ -561,7 +598,11 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
     run_store: RunStore | None = None
     if remote_api_cfg.run_store_path:
         run_store = RunStore(db_path=Path(remote_api_cfg.run_store_path))
-    service = RemoteAPIService(repo_root=repo_root, run_store=run_store)
+    rate_limiter: _RateLimiter | None = None
+    if remote_api_cfg.rate_limit_rps > 0:
+        rps = remote_api_cfg.rate_limit_rps
+        rate_limiter = _RateLimiter(capacity=max(rps * 2, 10), rate=float(rps))
+    service = RemoteAPIService(repo_root=repo_root, run_store=run_store, rate_limiter=rate_limiter)
 
     class RemoteAPIRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
