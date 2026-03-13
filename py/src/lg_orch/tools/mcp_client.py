@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any
 
 from lg_orch.logging import get_logger
 from lg_orch.tools.runner_client import RunnerClient
+
+
+def _compute_tools_hash(tools: list[dict[str, Any]]) -> str:
+    """SHA-256 of the sorted, canonicalized tools list JSON."""
+    canonical = json.dumps(tools, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _to_timeout(value: object, *, default: int = 20) -> int:
@@ -114,18 +122,48 @@ class MCPClient:
             if not isinstance(tools, list):
                 continue
 
+            # Zero-trust: verify schema hash if pinned
+            server_cfg_raw = self.server_configs.get(server_name, {})
+            expected_hash = (
+                str(server_cfg_raw.get("schema_hash", "")).strip().lower()
+                if isinstance(server_cfg_raw, dict)
+                else ""
+            )
+            if expected_hash:
+                actual_hash = _compute_tools_hash(tools)
+                if actual_hash != expected_hash:
+                    log.error(
+                        "mcp_schema_hash_mismatch",
+                        server=server_name,
+                        expected=expected_hash,
+                        actual=actual_hash,
+                    )
+                    out.append({
+                        "server_name": server_name,
+                        "_schema_hash_mismatch": True,
+                        "_expected_hash": expected_hash,
+                        "_actual_hash": actual_hash,
+                    })
+                    continue
+
+            actual_hash = _compute_tools_hash(tools)
             for tool in tools:
                 if not isinstance(tool, dict):
                     continue
-                out.append({**tool, "server_name": server_name})
+                out.append({**tool, "server_name": server_name, "_schema_hash": actual_hash})
 
         log.info("mcp_discover_tools", servers=list(self.server_configs.keys()), count=len(out))
         return out
 
     def summarize_tools(self, tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         discovered = tools if tools is not None else self.discover_tools()
+        valid_tools = [t for t in discovered if not bool(t.get("_schema_hash_mismatch", False))]
+        mismatch_servers = [
+            str(t.get("server_name", "")) for t in discovered
+            if bool(t.get("_schema_hash_mismatch", False))
+        ]
         grouped: dict[str, list[dict[str, Any]]] = {}
-        for tool in discovered:
+        for tool in valid_tools:
             if not isinstance(tool, dict):
                 continue
             server_name = str(tool.get("server_name", "")).strip() or "unknown"
@@ -163,6 +201,7 @@ class MCPClient:
             "tool_count": sum(server["tool_count"] for server in servers),
             "servers": servers,
             "summary": "\n".join(lines),
+            "mismatch_servers": mismatch_servers,
         }
 
     def execute_tool(

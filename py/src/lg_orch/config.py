@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import os
+import re as _re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+_SHA256_RE = _re.compile(r'^[0-9a-f]{64}$')
+
+
+def _is_valid_sha256_hex(value: str) -> bool:
+    return bool(_SHA256_RE.fullmatch(value))
 
 
 class ConfigError(ValueError):
@@ -113,6 +120,7 @@ class MCPServerConfig:
     cwd: str | None
     env: dict[str, str]
     timeout_s: int
+    schema_hash: str | None = None  # SHA-256 of sorted tools/list JSON; None = unpinned
 
 
 @dataclass(frozen=True)
@@ -513,12 +521,27 @@ def load_config(*, repo_root: Path) -> AppConfig:
         if timeout_s_raw < 1:
             raise ConfigError(f"mcp.servers.{server_name}.timeout_s must be >= 1")
 
+        schema_hash_raw = server_data.get("schema_hash")
+        schema_hash: str | None
+        if schema_hash_raw is None:
+            schema_hash = None
+        elif isinstance(schema_hash_raw, str):
+            value = schema_hash_raw.strip().lower()
+            if value and not _is_valid_sha256_hex(value):
+                raise ConfigError(
+                    f"mcp.servers.{server_name}.schema_hash must be a 64-char lowercase hex SHA-256 or absent"
+                )
+            schema_hash = value or None
+        else:
+            raise ConfigError(f"missing/invalid mcp.servers.{server_name}.schema_hash")
+
         servers[server_name.strip()] = MCPServerConfig(
             command=command_raw.strip(),
             args=tuple(args),
             cwd=cwd,
             env=env,
             timeout_s=timeout_s_raw,
+            schema_hash=schema_hash,
         )
 
     mcp = MCPConfig(enabled=mcp_enabled_raw, servers=servers)

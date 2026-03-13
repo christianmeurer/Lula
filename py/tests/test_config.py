@@ -442,3 +442,46 @@ def test_load_config_openai_compatible_falls_back_to_model_access_key(
         root = _write_config(td)
         cfg = load_config(repo_root=root)
         assert cfg.models.openai_compatible.api_key == "fallback-key"
+
+
+# ---------------------------------------------------------------------------
+# schema_hash parsing
+# ---------------------------------------------------------------------------
+
+_VALID_HASH = "a" * 64  # 64 lowercase hex chars
+
+
+def test_mcp_server_config_schema_hash_absent_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td)
+        cfg = load_config(repo_root=root)
+        assert cfg.mcp.servers["mock"].schema_hash is None
+
+
+def test_mcp_server_config_schema_hash_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    toml = _VALID_TOML + f'\nschema_hash = "{_VALID_HASH}"\n'
+    # Insert schema_hash under [mcp.servers.mock]
+    toml_with_hash = _VALID_TOML.replace(
+        "[mcp.servers.mock.env]",
+        f'schema_hash = "{_VALID_HASH}"\n\n[mcp.servers.mock.env]',
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=toml_with_hash)
+        cfg = load_config(repo_root=root)
+        assert cfg.mcp.servers["mock"].schema_hash == _VALID_HASH
+
+
+def test_mcp_server_config_schema_hash_invalid_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lg_orch.config import ConfigError
+
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    toml_bad_hash = _VALID_TOML.replace(
+        "[mcp.servers.mock.env]",
+        'schema_hash = "not-a-valid-hash"\n\n[mcp.servers.mock.env]',
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=toml_bad_hash)
+        with pytest.raises(ConfigError, match="schema_hash"):
+            load_config(repo_root=root)

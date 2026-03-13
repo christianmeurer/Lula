@@ -251,6 +251,13 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
             repo_context["mcp_capabilities"] = mcp_summary
         if mcp_catalog:
             repo_context["mcp_catalog"] = mcp_catalog
+        mismatch_servers = mcp_summary.get("mismatch_servers", [])
+        if mismatch_servers:
+            log.warning(
+                "mcp_schema_hash_mismatch_servers_excluded",
+                servers=mismatch_servers,
+            )
+            repo_context["mcp_hash_mismatches"] = mismatch_servers
         mcp_recovery_hints, mcp_relevant_tools = _mcp_recovery_hints(state, mcp_summary)
         if mcp_recovery_hints:
             repo_context["mcp_recovery_hints"] = mcp_recovery_hints
