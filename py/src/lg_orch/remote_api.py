@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from lg_orch.config import load_config
 from lg_orch.logging import get_logger
+from lg_orch.run_store import RunStore
 
 _JSON_CONTENT_TYPE = "application/json; charset=utf-8"
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -156,11 +157,12 @@ class RunRecord:
 
 
 class RemoteAPIService:
-    def __init__(self, *, repo_root: Path) -> None:
+    def __init__(self, *, repo_root: Path, run_store: RunStore | None = None) -> None:
         self._repo_root = repo_root.resolve()
         self._lock = threading.Lock()
         self._runs: dict[str, RunRecord] = {}
         self._log = get_logger()
+        self._run_store = run_store
 
     def create_run(
         self,
@@ -251,6 +253,11 @@ class RemoteAPIService:
                 client_ip=client_ip,
             )
 
+        if self._run_store is not None:
+            with self._lock:
+                _record = self._runs.get(run_id)
+                if _record is not None:
+                    self._run_store.upsert(self._summary_payload_locked(_record))
         _start_daemon_thread(
             target=lambda: self._capture_process_output(run_id),
             name=f"lg-orch-run-{run_id}",
@@ -271,8 +278,17 @@ class RemoteAPIService:
 
     def list_runs(self) -> list[dict[str, Any]]:
         with self._lock:
-            records = list(self._runs.values())
-            return [self._summary_payload_locked(record) for record in reversed(records)]
+            in_memory = {r.run_id: self._summary_payload_locked(r) for r in self._runs.values()}
+        if self._run_store is not None:
+            persisted = {r["run_id"]: r for r in self._run_store.list_runs()}
+            # merge: in-memory wins for running/cancelling; persisted fills completed gaps
+            merged: dict[str, dict[str, Any]] = {}
+            for run_id, p in persisted.items():
+                merged[run_id] = p
+            for run_id, m in in_memory.items():
+                merged[run_id] = m
+            return sorted(merged.values(), key=lambda x: x.get("created_at", ""), reverse=True)
+        return sorted(in_memory.values(), key=lambda x: x.get("created_at", ""), reverse=True)
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         normalized_run_id = _normalized_run_id(run_id)
@@ -389,6 +405,9 @@ class RemoteAPIService:
                 record.status = "cancelled"
             else:
                 record.status = "succeeded" if exit_code == 0 else "failed"
+            payload = self._summary_payload_locked(record)
+        if self._run_store is not None:
+            self._run_store.upsert(payload)
 
     def _refresh_record_locked(self, record: RunRecord) -> None:
         if record.finished_at is not None:
@@ -402,6 +421,8 @@ class RemoteAPIService:
             record.status = "cancelled"
         else:
             record.status = "succeeded" if exit_code == 0 else "failed"
+        if self._run_store is not None:
+            self._run_store.upsert(self._summary_payload_locked(record))
 
     def _summary_payload_locked(self, record: RunRecord) -> dict[str, Any]:
         self._refresh_record_locked(record)
@@ -537,7 +558,10 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
         return 2
 
     remote_api_cfg = cfg.remote_api
-    service = RemoteAPIService(repo_root=repo_root)
+    run_store: RunStore | None = None
+    if remote_api_cfg.run_store_path:
+        run_store = RunStore(db_path=Path(remote_api_cfg.run_store_path))
+    service = RemoteAPIService(repo_root=repo_root, run_store=run_store)
 
     class RemoteAPIRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802

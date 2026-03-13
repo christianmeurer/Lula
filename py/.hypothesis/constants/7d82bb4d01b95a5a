@@ -1,0 +1,4 @@
+# file: C:\Users\chris\Projects\LG-Orchestration-Platform\eval\run.py
+# hypothesis_version: 6.151.4
+
+[0.0, '(none)', '*.json', '--format', '--tasks-dir', 'FAIL', 'PASS', '__main__', '_budget_max_loops', '_config_policy', '_repo_root', '_runner_base_url', '_runner_enabled', 'acceptance_ok', 'acceptance_ok_match', 'actual_halt_reason', 'actual_intent', 'allowed_write_paths', 'average_score', 'average_tool_results', 'checks', 'deny', 'eval-run', 'expected_halt_reason', 'expected_intent', 'failed_tasks', 'final', 'final_present', 'halt_reason', 'halt_reason_match', 'id', 'intent', 'intent_accuracy', 'intent_match', 'json', 'network_default', 'no tasks', 'pass_rate', 'passed', 'passed_tasks', 'py', 'request', 'require_final', 'results', 'score', 'src', 'summary', 'tasks', 'text', 'tool_results', 'tool_results_count', 'total_tasks', 'utf-8', 'verification']

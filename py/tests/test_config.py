@@ -15,6 +15,7 @@ from lg_orch.config import (
     ModelEndpoint,
     ModelRouting,
     Models,
+    OpenAICompatibleServerless,
     Policy,
     RemoteAPIConfig,
     Runner,
@@ -277,6 +278,11 @@ def test_appconfig_frozen() -> None:
                 api_key=None,
                 timeout_s=60,
             ),
+            openai_compatible=OpenAICompatibleServerless(
+                base_url="https://api.openai.com/v1",
+                api_key=None,
+                timeout_s=60,
+            ),
         ),
         budgets=Budgets(
             max_loops=1, max_tool_calls_per_loop=1, max_patch_bytes=1, tool_timeout_s=1
@@ -337,3 +343,102 @@ def test_load_config_digitalocean_timeout_must_be_positive(monkeypatch: pytest.M
         root = _write_config(td, content=bad_toml)
         with pytest.raises(ValueError):
             load_config(repo_root=root)
+
+
+def test_load_config_run_store_path_none_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.delenv("LG_REMOTE_API_RUN_STORE_PATH", raising=False)
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.run_store_path is None
+
+
+def test_load_config_run_store_path_from_toml(monkeypatch: pytest.MonkeyPatch) -> None:
+    toml = _VALID_TOML.replace(
+        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
+        "access_log_enabled = true",
+        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
+        "access_log_enabled = true\nrun_store_path = \"artifacts/runs.sqlite\"",
+    )
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=toml)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.run_store_path == "artifacts/runs.sqlite"
+
+
+def test_load_config_run_store_path_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.setenv("LG_REMOTE_API_RUN_STORE_PATH", "artifacts/env-runs.sqlite")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.run_store_path == "artifacts/env-runs.sqlite"
+
+
+def test_load_config_run_store_path_empty_string_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    toml = _VALID_TOML.replace(
+        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
+        "access_log_enabled = true",
+        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
+        "access_log_enabled = true\nrun_store_path = \"\"",
+    )
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.delenv("LG_REMOTE_API_RUN_STORE_PATH", raising=False)
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=toml)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.run_store_path is None
+
+
+def test_load_config_openai_compatible_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+    monkeypatch.delenv("MODEL_ACCESS_KEY", raising=False)
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td)
+        cfg = load_config(repo_root=root)
+        assert cfg.models.openai_compatible.base_url == "https://api.openai.com/v1"
+        assert cfg.models.openai_compatible.api_key is None
+        assert cfg.models.openai_compatible.timeout_s == 60
+
+
+def test_load_config_openai_compatible_from_toml(monkeypatch: pytest.MonkeyPatch) -> None:
+    extra = (
+        "\n[models.openai_compatible]\n"
+        "base_url = \"https://my-endpoint.example.com/v1\"\n"
+        "timeout_s = 30\n"
+    )
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=_VALID_TOML + extra)
+        cfg = load_config(repo_root=root)
+        assert cfg.models.openai_compatible.base_url == "https://my-endpoint.example.com/v1"
+        assert cfg.models.openai_compatible.timeout_s == 30
+
+
+def test_load_config_openai_compatible_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", "oc-key-xyz")
+    monkeypatch.delenv("MODEL_ACCESS_KEY", raising=False)
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td)
+        cfg = load_config(repo_root=root)
+        assert cfg.models.openai_compatible.api_key == "oc-key-xyz"
+
+
+def test_load_config_openai_compatible_falls_back_to_model_access_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+    monkeypatch.setenv("MODEL_ACCESS_KEY", "fallback-key")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td)
+        cfg = load_config(repo_root=root)
+        assert cfg.models.openai_compatible.api_key == "fallback-key"

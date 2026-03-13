@@ -300,3 +300,41 @@ def test_api_http_response_cancel_returns_not_found_for_missing_run(tmp_path: Pa
     )
     assert status == 404
     assert json.loads(body.decode("utf-8"))["error"] == "not_found"
+
+
+def test_run_store_persists_on_create_and_finish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lg_orch.run_store import RunStore
+
+    db_path = tmp_path / "runs.sqlite"
+    store = RunStore(db_path=db_path)
+    service = RemoteAPIService(repo_root=tmp_path, run_store=store)
+
+    monkeypatch.setattr(
+        remote_api,
+        "_spawn_run_subprocess",
+        lambda *, argv, cwd, env=None: DummyProcess(output="line1\n", returncode=0),
+    )
+    monkeypatch.setattr(remote_api, "_start_daemon_thread", lambda *, target, name: target())
+
+    status, _, body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/v1/runs",
+        request_body=json.dumps({"request": "test persist", "run_id": "persist1"}).encode("utf-8"),
+    )
+    assert status == 201
+
+    # record should be in the store after create + finish (daemon ran synchronously)
+    row = store.get_run("persist1")
+    assert row is not None
+    assert row["run_id"] == "persist1"
+    assert row["status"] in {"succeeded", "failed", "running"}
+
+    # list_runs should include the persisted record
+    all_runs = service.list_runs()
+    run_ids = [r["run_id"] for r in all_runs]
+    assert "persist1" in run_ids
+
+    store.close()

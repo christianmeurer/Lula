@@ -158,16 +158,29 @@ def _planner_model_output(
 
     runtime_raw = state.get("_model_provider_runtime", {})
     runtime = runtime_raw if isinstance(runtime_raw, dict) else {}
-    do_raw = runtime.get("digitalocean", {})
-    do_cfg = do_raw if isinstance(do_raw, dict) else {}
-    api_key = str(do_cfg.get("api_key", "")).strip()
-    if not api_key:
-        return None, None
-    base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
-    if not base_url:
-        return None, None
-    timeout_raw = do_cfg.get("timeout_s", 60)
-    timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+
+    if provider == "openai_compatible":
+        oc_raw = runtime.get("openai_compatible", {})
+        oc_cfg = oc_raw if isinstance(oc_raw, dict) else {}
+        api_key = str(oc_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None, None
+        base_url = str(oc_cfg.get("base_url", "https://api.openai.com/v1")).strip().rstrip("/")
+        if not base_url:
+            return None, None
+        timeout_raw = oc_cfg.get("timeout_s", 60)
+        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+    else:
+        do_raw = runtime.get("digitalocean", {})
+        do_cfg = do_raw if isinstance(do_raw, dict) else {}
+        api_key = str(do_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None, None
+        base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
+        if not base_url:
+            return None, None
+        timeout_raw = do_cfg.get("timeout_s", 60)
+        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
 
     repo_root = Path(str(state.get("_repo_root", "."))).resolve()
     planner_prompt_path = repo_root / "prompts" / "planner.md"

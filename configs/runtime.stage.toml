@@ -16,6 +16,10 @@ fallback_task_classes = ["summarization", "lint_reflection", "context_condensati
 base_url = "https://inference.do-ai.run/v1"
 timeout_s = 60
 
+[models.openai_compatible]
+base_url = "https://api.openai.com/v1"
+timeout_s = 60
+
 [budgets]
 max_loops = 3
 max_tool_calls_per_loop = 12
@@ -43,3 +47,10 @@ enabled = true
 db_path = "artifacts/checkpoints/langgraph.sqlite"
 namespace = "main"
 thread_prefix = "lg-orch"
+
+[remote_api]
+auth_mode = "bearer"
+allow_unauthenticated_healthz = true
+trust_forwarded_headers = false
+access_log_enabled = true
+run_store_path = "artifacts/remote-api/runs.sqlite"

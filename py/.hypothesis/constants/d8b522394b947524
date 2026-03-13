@@ -1,0 +1,4 @@
+# file: C:\Users\chris\Projects\LG-Orchestration-Platform\py\src\lg_orch\model_routing.py
+# hypothesis_version: 6.151.4
+
+[1800, 3200, '_models', 'budgets', 'cache_affinity', 'cache_metadata', 'compression_pressure', 'context_scope', 'context_tokens', 'current_loop', 'deep_planning', 'deterministic', 'fact_count', 'fallback_applied', 'headers', 'inference', 'interactive', 'lane', 'latency_ms', 'latency_sensitive', 'local', 'local_provider', 'model', 'model_routing', 'node', 'planner_context', 'prefix_segment', 'provider', 'provider_used', 'rationale', 'reason', 'recovery', 'remote', 'repo_context', 'retry_count', 'route', 'stable_prefix', 'stage', 'task_class', 'telemetry', 'token_estimate', 'usage', 'workspace']

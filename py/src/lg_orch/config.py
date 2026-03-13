@@ -135,6 +135,7 @@ class RemoteAPIConfig:
     allow_unauthenticated_healthz: bool = True
     trust_forwarded_headers: bool = False
     access_log_enabled: bool = True
+    run_store_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -168,10 +169,18 @@ class Models:
     planner: ModelEndpoint
     routing: ModelRouting
     digitalocean: "DigitalOceanServerless"
+    openai_compatible: "OpenAICompatibleServerless"
 
 
 @dataclass(frozen=True)
 class DigitalOceanServerless:
+    base_url: str
+    api_key: str | None
+    timeout_s: int
+
+
+@dataclass(frozen=True)
+class OpenAICompatibleServerless:
     base_url: str
     api_key: str | None
     timeout_s: int
@@ -326,6 +335,40 @@ def _parse_digitalocean_serverless(models_raw: dict[str, object]) -> DigitalOcea
     return DigitalOceanServerless(base_url=base_url, api_key=api_key, timeout_s=timeout_raw)
 
 
+def _parse_openai_compatible_serverless(models_raw: dict[str, object]) -> OpenAICompatibleServerless:
+    section = models_raw.get("openai_compatible")
+    section_dict = section if isinstance(section, dict) else {}
+
+    base_url_raw = section_dict.get("base_url", "https://api.openai.com/v1")
+    if not isinstance(base_url_raw, str) or not base_url_raw.strip():
+        raise ConfigError("missing/invalid models.openai_compatible.base_url")
+    base_url = base_url_raw.strip().rstrip("/")
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        raise ConfigError("models.openai_compatible.base_url must start with http:// or https://")
+
+    api_key_raw = section_dict.get("api_key")
+    api_key: str | None
+    if api_key_raw is None:
+        api_key = (
+            os.environ.get("OPENAI_COMPATIBLE_API_KEY")
+            or os.environ.get("MODEL_ACCESS_KEY")
+        )
+    elif isinstance(api_key_raw, str):
+        api_key = api_key_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid models.openai_compatible.api_key")
+    if api_key is not None:
+        api_key = api_key.strip() or None
+
+    timeout_raw = section_dict.get("timeout_s", 60)
+    if isinstance(timeout_raw, bool) or not isinstance(timeout_raw, int):
+        raise ConfigError("missing/invalid models.openai_compatible.timeout_s")
+    if timeout_raw < 1:
+        raise ConfigError("models.openai_compatible.timeout_s must be >= 1")
+
+    return OpenAICompatibleServerless(base_url=base_url, api_key=api_key, timeout_s=timeout_raw)
+
+
 def load_config(*, repo_root: Path) -> AppConfig:
     profile = os.environ.get("LG_PROFILE", "dev").strip() or "dev"
     cfg_path = repo_root / "configs" / f"runtime.{profile}.toml"
@@ -391,6 +434,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
         planner=_parse_model_endpoint(models_raw, "planner"),
         routing=_parse_model_routing(models_raw),
         digitalocean=_parse_digitalocean_serverless(models_raw),
+        openai_compatible=_parse_openai_compatible_serverless(models_raw),
     )
 
     policy = Policy(
@@ -504,6 +548,16 @@ def load_config(*, repo_root: Path) -> AppConfig:
     if auth_mode == "bearer" and bearer_token is None:
         raise ConfigError("remote_api.bearer_token is required when remote_api.auth_mode=bearer")
 
+    run_store_path_raw = remote_api_raw.get("run_store_path")
+    run_store_path: str | None
+    if run_store_path_raw is None:
+        env_rsp = os.environ.get("LG_REMOTE_API_RUN_STORE_PATH")
+        run_store_path = env_rsp.strip() or None if isinstance(env_rsp, str) else None
+    elif isinstance(run_store_path_raw, str):
+        run_store_path = run_store_path_raw.strip() or None
+    else:
+        raise ConfigError("missing/invalid remote_api.run_store_path")
+
     remote_api = RemoteAPIConfig(
         auth_mode=auth_mode,
         bearer_token=bearer_token,
@@ -522,6 +576,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
             "access_log_enabled",
             default=_env_bool("LG_REMOTE_API_ACCESS_LOG_ENABLED", default=True),
         ),
+        run_store_path=run_store_path,
     )
 
     checkpoint_enabled = checkpoint_raw.get("enabled", True)
