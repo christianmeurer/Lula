@@ -335,9 +335,18 @@ class RemoteAPIService:
             return None
         with self._lock:
             record = self._runs.get(normalized_run_id)
-            if record is None:
-                return None
-            payload = self._summary_payload_locked(record)
+            if record is not None:
+                payload = self._summary_payload_locked(record)
+            else:
+                payload = None
+        
+        if payload is None and self._run_store is not None:
+            persisted = self._run_store.get_run(normalized_run_id)
+            if persisted is not None:
+                payload = dict(persisted)
+        
+        if payload is None:
+            return None
 
         trace_payload = self._load_trace(Path(payload["trace_path"]))
         payload["trace_ready"] = trace_payload is not None

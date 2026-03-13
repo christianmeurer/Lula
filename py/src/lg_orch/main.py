@@ -707,6 +707,46 @@ def cli(argv: list[str] | None = None) -> int:
                 state=out,
             )
             log.info("trace_written", path=str(trace_path))
+
+            store_path = out.get("_run_store_path")
+            if store_path:
+                from datetime import UTC, datetime
+
+                from lg_orch.run_store import RunStore
+                
+                run_store = RunStore(db_path=repo_root / store_path)
+                status = "failed" if out.get("recovery_packet", {}).get("failure_class") else "succeeded"
+                if "final" not in out:
+                    status = "failed"
+                
+                now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+                remote_api_context = out.get("_remote_api_context", {})
+                if not isinstance(remote_api_context, dict):
+                    remote_api_context = {}
+                
+                record = {
+                    "run_id": str(out.get("_run_id", "")),
+                    "request": str(out.get("request", "")),
+                    "status": status,
+                    "created_at": now,
+                    "started_at": now,
+                    "finished_at": now,
+                    "exit_code": 0 if status == "succeeded" else 1,
+                    "trace_out_dir": str(out.get("_trace_out_dir", "artifacts/runs")),
+                    "trace_path": str(trace_path),
+                    "request_id": str(out.get("_request_id", "")),
+                    "auth_subject": str(remote_api_context.get("auth_subject", "")),
+                    "client_ip": str(remote_api_context.get("client_ip", "")),
+                }
+                run_store.upsert(record)
+                
+                facts_raw = out.get("facts", [])
+                facts = facts_raw if isinstance(facts_raw, list) else []
+                if facts:
+                    run_store.upsert_recovery_facts(str(out.get("_run_id", "")), facts)
+                    
+                run_store.close()
+
         except OSError as exc:
             log.warning("trace_write_failed", error=str(exc))
     return 0
