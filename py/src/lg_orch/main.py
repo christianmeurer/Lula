@@ -28,7 +28,6 @@ from lg_orch.visualize import (
     render_trace_site_index_html,
 )
 
-
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -59,6 +58,14 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--thread-id", default=None)
     run_p.add_argument("--checkpoint-id", default=None)
     run_p.add_argument("--view", choices=["classic", "console"], default="console")
+
+    run_multi_p = sub.add_parser("run-multi")
+    run_multi_p.add_argument("request")
+    run_multi_p.add_argument("--repos", nargs="+", required=True, help="List of repository paths")
+    run_multi_p.add_argument("--profile", default=None)
+    run_multi_p.add_argument("--runner-base-url", default=None)
+    run_multi_p.add_argument("--trace", action="store_true")
+    run_multi_p.add_argument("--run-id", default=None)
 
     sub.add_parser("export-graph")
     trace_view_p = sub.add_parser("trace-view")
@@ -258,7 +265,7 @@ def _serve_trace_http(trace_dir: Path, *, host: str, port: int) -> int:
     mermaid_graph = export_mermaid()
 
     class TraceRequestHandler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             status, content_type, body = _trace_http_response(
                 trace_dir,
                 request_path=self.path,
@@ -413,6 +420,40 @@ def cli(argv: list[str] | None = None) -> int:
         from lg_orch.remote_api import serve_remote_api
 
         return serve_remote_api(repo_root=repo_root, host=str(args.host), port=port)
+
+    if args.cmd == "run-multi":
+        from lg_orch.meta_graph import build_meta_graph
+
+        app = build_meta_graph()
+        state = {
+            "request": str(args.request),
+            "repositories": [str(Path(r).expanduser().resolve()) for r in args.repos],
+        }
+
+        print("\n--- Starting Lula Platform Meta-Agent ---")
+        out: dict[str, Any] = {}
+        for event in app.stream(state, stream_mode="updates"):
+            for node_name, node_state in event.items():
+                print(f"\n[Node: {node_name}]")
+                if node_name == "meta_planner":
+                    plan = node_state.get("meta_plan", {})
+                    tasks = getattr(plan, "sub_tasks", []) if hasattr(plan, "sub_tasks") else plan.get("sub_tasks", [])
+                    print(f"Generated Meta-Plan with {len(tasks)} sub-tasks.")
+                elif node_name == "task_dispatcher":
+                    active = node_state.get("active_tasks", [])
+                    print(f"Dispatched tasks: {active}")
+                elif node_name == "sub_agent_executor":
+                    results = node_state.get("task_results", {})
+                    completed = node_state.get("completed_tasks", [])
+                    failed = node_state.get("failed_tasks", [])
+                    print(f"Execution step complete. Completed: {len(completed)}, Failed: {len(failed)}")
+                elif node_name == "meta_evaluator":
+                    print(f"Final Report: {node_state.get('final_report')}")
+                out.update(node_state)
+
+        print("\n--- Final Output ---")
+        print(out.get("final_report", ""))
+        return 0
 
     provided_run_id = _validated_run_id(getattr(args, "run_id", None))
     if getattr(args, "run_id", None) and provided_run_id is None:
