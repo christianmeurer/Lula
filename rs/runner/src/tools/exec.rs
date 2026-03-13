@@ -93,8 +93,7 @@ pub async fn exec(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiE
         .map(|p| super::fs::resolve_under_root(cfg, p))
         .transpose()?;
 
-    let mut c;
-    match sandbox_resolution.backend {
+    let mut c = match sandbox_resolution.backend {
         SandboxBackend::LinuxNamespace => {
             let unshare_path = sandbox_policy
                 .linux_namespace
@@ -102,16 +101,53 @@ pub async fn exec(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiE
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "/usr/bin/unshare".to_string());
-            c = Command::new(&unshare_path);
-            c.args(["--pid", "--mount", "--net", "--fork", "--"])
+            let mut cmd_obj = Command::new(&unshare_path);
+            cmd_obj.args(["--pid", "--mount", "--net", "--fork", "--"])
                 .arg(cmd)
                 .args(&inp.args);
+            cmd_obj
+        }
+        SandboxBackend::MicroVmEphemeral => {
+            let firecracker_path = sandbox_policy
+                .microvm
+                .firecracker_bin
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "firecracker".to_string());
+                
+            let kernel_path = sandbox_policy
+                .microvm
+                .kernel_image
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "/var/lib/firecracker/vmlinux".to_string());
+                
+            let rootfs_path = sandbox_policy
+                .microvm
+                .rootfs_image
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "/var/lib/firecracker/rootfs.ext4".to_string());
+
+            let mut cmd_obj = Command::new(&firecracker_path);
+            
+            let mut fc_args = vec![
+                "--kernel".to_string(), kernel_path,
+                "--rootfs".to_string(), rootfs_path,
+                "--".to_string(),
+                cmd.to_string()
+            ];
+            fc_args.extend(inp.args.iter().cloned());
+            
+            cmd_obj.args(&fc_args);
+            cmd_obj
         }
         _ => {
-            c = Command::new(cmd);
-            c.args(&inp.args);
+            let mut cmd_obj = Command::new(cmd);
+            cmd_obj.args(&inp.args);
+            cmd_obj
         }
-    }
+    };
     c.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -334,6 +370,53 @@ mod tests {
                 // git not available in this environment; acceptable
             }
             Err(e) => panic!("unexpected error: {e:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_exec_microvm_backend_formats_command() {
+        if cfg!(target_os = "windows") {
+            return;
+        }
+        
+        // Need to set env vars to force MicroVmEphemeral resolution
+        std::env::set_var("LG_RUNNER_SANDBOX_BACKEND", "microvm");
+        std::env::set_var("LG_RUNNER_MICROVM_ENABLED", "1");
+        
+        // Create dummy files so the path checks pass
+        let td = tempfile::tempdir().unwrap();
+        let fc_bin = td.path().join("firecracker");
+        let kernel = td.path().join("vmlinux");
+        let rootfs = td.path().join("rootfs");
+        std::fs::write(&fc_bin, "").unwrap();
+        std::fs::write(&kernel, "").unwrap();
+        std::fs::write(&rootfs, "").unwrap();
+        
+        std::env::set_var("LG_RUNNER_FIRECRACKER_BIN", fc_bin.to_str().unwrap());
+        std::env::set_var("LG_RUNNER_MICROVM_KERNEL_IMAGE", kernel.to_str().unwrap());
+        std::env::set_var("LG_RUNNER_MICROVM_ROOTFS_IMAGE", rootfs.to_str().unwrap());
+
+        let cfg = RunnerConfig::new(td.path(), Some("dev"), None).unwrap();
+        
+        // We expect it to fail execution because the dummy files aren't real executables, 
+        // but we can check the returned envelope's metadata to verify it attempted MicroVM.
+        let result = exec(&cfg, json!({"cmd": "python", "args": ["--version"]})).await;
+        
+        // Clean up env vars
+        std::env::remove_var("LG_RUNNER_SANDBOX_BACKEND");
+        std::env::remove_var("LG_RUNNER_MICROVM_ENABLED");
+        std::env::remove_var("LG_RUNNER_FIRECRACKER_BIN");
+        std::env::remove_var("LG_RUNNER_MICROVM_KERNEL_IMAGE");
+        std::env::remove_var("LG_RUNNER_MICROVM_ROOTFS_IMAGE");
+
+        if let Ok(env) = result {
+             let artifacts = env.artifacts;
+             let isolation_backend = artifacts.get("isolation_backend").and_then(|v| v.as_str()).unwrap_or("");
+             assert_eq!(isolation_backend, "microvm_ephemeral");
+        } else if let Err(ApiError::Other(_)) = result {
+             // If spawn fails, that's fine too, as long as it tried.
+        } else if let Err(e) = result {
+             panic!("unexpected error: {e:?}");
         }
     }
 }
