@@ -1,0 +1,10 @@
+{
+  "id": "loop-budget-001",
+  "request": "Summarize the repository.",
+  "expected_intent": "analysis",
+  "expected_halt_reason": "max_loops_exhausted",
+  "expected_acceptance_ok": false,
+  "require_final": false,
+  "budget_max_loops": 1,
+  "description": "With max_loops=1 and a single forced retry, the graph should halt with max_loops_exhausted."
+}

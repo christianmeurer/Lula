@@ -1,0 +1,9 @@
+{
+  "id": "recovery-packet-001",
+  "request": "Fix the compilation error in rs/runner/src/main.rs",
+  "expected_intent": "code_change",
+  "expected_recovery_packet_present": true,
+  "expected_acceptance_ok": false,
+  "require_final": false,
+  "description": "A code_change with no runner produces a failed verification, which should populate recovery_packet."
+}

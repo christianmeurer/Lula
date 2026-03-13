@@ -29,7 +29,8 @@ def test_score_task_passes_with_matching_output() -> None:
             "halt_reason": "",
             "final": "done",
             "tool_results": [],
-            "verification": {"acceptance_ok": True},
+            "verification": {"acceptance_ok": True, "ok": True},
+            "route": {"lane": "fast"},
         },
     )
 
@@ -51,7 +52,8 @@ def test_evaluate_tasks_aggregates_summary() -> None:
             "halt_reason": "",
             "final": "done",
             "tool_results": [],
-            "verification": {"acceptance_ok": True},
+            "verification": {"acceptance_ok": True, "ok": True},
+            "route": {"lane": "fast"},
         },
         "b": {
             "intent": "analysis",
@@ -59,6 +61,7 @@ def test_evaluate_tasks_aggregates_summary() -> None:
             "final": "done",
             "tool_results": [{}],
             "verification": {"acceptance_ok": False},
+            "route": {"lane": "deep"},
         },
     }
 
@@ -94,7 +97,8 @@ def test_main_json_output_uses_scored_report(tmp_path: Path, capsys: object) -> 
         "halt_reason": "",
         "final": "done",
         "tool_results": [],
-        "verification": {"acceptance_ok": True},
+        "verification": {"acceptance_ok": True, "ok": True},
+        "route": {"lane": "fast"},
     }
     try:
         rc = module.main(["--tasks-dir", str(tmp_path), "--format", "json"])
@@ -128,3 +132,164 @@ def test_score_task_tracks_acceptance_status() -> None:
     )
     assert result["checks"]["acceptance_ok_match"] is True
     assert result["acceptance_ok"] is False
+
+
+# --- Wave 5 new tests ---
+
+
+def test_load_tasks_parses_new_fields(tmp_path: Path) -> None:
+    module = _load_eval_run_module()
+    task_path = tmp_path / "test-task.json"
+    task_path.write_text(
+        json.dumps(
+            {
+                "id": "test-001",
+                "request": "Do something.",
+                "expected_intent": "analysis",
+                "budget_max_loops": 3,
+                "expected_recovery_packet_present": True,
+                "description": "A test task description.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    tasks = module.load_tasks(tmp_path)
+    assert len(tasks) == 1
+    t = tasks[0]
+    assert t.budget_max_loops == 3
+    assert t.expected_recovery_packet_present is True
+    assert t.description == "A test task description."
+
+
+def test_load_tasks_new_fields_defaults(tmp_path: Path) -> None:
+    module = _load_eval_run_module()
+    task_path = tmp_path / "minimal.json"
+    task_path.write_text(
+        json.dumps(
+            {
+                "id": "minimal-001",
+                "request": "Summarize.",
+                "expected_intent": "analysis",
+            }
+        ),
+        encoding="utf-8",
+    )
+    tasks = module.load_tasks(tmp_path)
+    assert tasks[0].budget_max_loops == 1
+    assert tasks[0].expected_recovery_packet_present is False
+    assert tasks[0].description == ""
+
+
+def test_score_recovery_packet_present_and_expected() -> None:
+    module = _load_eval_run_module()
+    task = module.EvalTask(
+        id="rp",
+        request="fix it",
+        expected_intent="code_change",
+        expected_recovery_packet_present=True,
+    )
+    output = {"recovery_packet": {"error": "compile failed", "hint": "check line 5"}}
+    assert module._score_recovery_packet(task, output) is True
+
+
+def test_score_recovery_packet_absent_and_not_expected() -> None:
+    module = _load_eval_run_module()
+    task = module.EvalTask(
+        id="rp",
+        request="summarize",
+        expected_intent="analysis",
+        expected_recovery_packet_present=False,
+    )
+    assert module._score_recovery_packet(task, {}) is True
+
+
+def test_score_recovery_packet_present_but_not_expected() -> None:
+    module = _load_eval_run_module()
+    task = module.EvalTask(
+        id="rp",
+        request="summarize",
+        expected_intent="analysis",
+        expected_recovery_packet_present=False,
+    )
+    output = {"recovery_packet": {"error": "unexpected"}}
+    assert module._score_recovery_packet(task, output) is False
+
+
+def test_score_recovery_packet_absent_but_expected() -> None:
+    module = _load_eval_run_module()
+    task = module.EvalTask(
+        id="rp",
+        request="fix it",
+        expected_intent="code_change",
+        expected_recovery_packet_present=True,
+    )
+    assert module._score_recovery_packet(task, {}) is False
+
+
+def test_score_loop_summary_quality_verification_ok() -> None:
+    module = _load_eval_run_module()
+    output = {"verification": {"ok": True}}
+    assert module._score_loop_summary_quality(output) is True
+
+
+def test_score_loop_summary_quality_nonempty_summaries() -> None:
+    module = _load_eval_run_module()
+    output = {"loop_summaries": ["attempt 1 failed: timeout"]}
+    assert module._score_loop_summary_quality(output) is True
+
+
+def test_score_loop_summary_quality_neither() -> None:
+    module = _load_eval_run_module()
+    output: dict = {}
+    assert module._score_loop_summary_quality(output) is False
+
+
+def test_score_task_has_seven_checks() -> None:
+    module = _load_eval_run_module()
+    task = module.EvalTask(
+        id="t",
+        request="r",
+        expected_intent="analysis",
+        expected_acceptance_ok=False,
+        require_final=False,
+    )
+    result = module.score_task(
+        task,
+        {
+            "intent": "analysis",
+            "halt_reason": "",
+            "final": "",
+            "tool_results": [],
+            "verification": {"acceptance_ok": False},
+        },
+    )
+    assert len(result["checks"]) == 7
+
+
+def test_evaluate_tasks_summary_has_recovery_keys() -> None:
+    module = _load_eval_run_module()
+    task = module.EvalTask(
+        id="x",
+        request="do",
+        expected_intent="analysis",
+        expected_acceptance_ok=False,
+        require_final=False,
+        expected_recovery_packet_present=False,
+    )
+    output = {
+        "intent": "analysis",
+        "halt_reason": "",
+        "final": "",
+        "tool_results": [],
+        "verification": {"acceptance_ok": False},
+        "loop_summaries": ["attempt 1"],
+    }
+    report = module.evaluate_tasks(
+        [task],
+        repo_root=Path("."),
+        evaluator=lambda _t: output,
+    )
+    assert "recovery_packet_accuracy" in report["summary"]
+    assert "loop_summary_quality" in report["summary"]
+    assert report["summary"]["loop_summary_quality"] == 1.0
+    assert report["summary"]["recovery_packet_accuracy"] == 1.0

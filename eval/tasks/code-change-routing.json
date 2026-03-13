@@ -1,0 +1,8 @@
+{
+  "id": "code-change-routing-001",
+  "request": "Implement a new helper function in the utils module.",
+  "expected_intent": "code_change",
+  "expected_acceptance_ok": false,
+  "require_final": false,
+  "description": "A code_change request should be routed to deep_planning lane. No runner means no tool results, so acceptance_ok will be false — that is expected."
+}
