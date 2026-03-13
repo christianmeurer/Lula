@@ -192,6 +192,7 @@ class RemoteAPIService:
         run_store: RunStore | None = None,
         rate_limiter: _RateLimiter | None = None,
         procedure_cache: ProcedureCache | None = None,
+        namespace: str = "",
     ) -> None:
         self._repo_root = repo_root.resolve()
         self._lock = threading.Lock()
@@ -200,6 +201,7 @@ class RemoteAPIService:
         self._run_store = run_store
         self._rate_limiter = rate_limiter
         self._procedure_cache = procedure_cache
+        self._namespace = namespace.strip()
 
     def create_run(
         self,
@@ -634,9 +636,10 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
         return 2
 
     remote_api_cfg = cfg.remote_api
+    _namespace = remote_api_cfg.default_namespace
     run_store: RunStore | None = None
     if remote_api_cfg.run_store_path:
-        run_store = RunStore(db_path=Path(remote_api_cfg.run_store_path))
+        run_store = RunStore(db_path=Path(remote_api_cfg.run_store_path), namespace=_namespace)
     rate_limiter: _RateLimiter | None = None
     if remote_api_cfg.rate_limit_rps > 0:
         rps = remote_api_cfg.rate_limit_rps
@@ -649,6 +652,7 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
         run_store=run_store,
         rate_limiter=rate_limiter,
         procedure_cache=procedure_cache,
+        namespace=_namespace,
     )
 
     class RemoteAPIRequestHandler(BaseHTTPRequestHandler):

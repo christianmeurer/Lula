@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _SHA256_RE = _re.compile(r'^[0-9a-f]{64}$')
+_NAMESPACE_RE = _re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 
 
 def _is_valid_sha256_hex(value: str) -> bool:
@@ -146,6 +147,7 @@ class RemoteAPIConfig:
     run_store_path: str | None = None
     rate_limit_rps: int = 0
     procedure_cache_path: str | None = None
+    default_namespace: str = ""
 
 
 @dataclass(frozen=True)
@@ -611,6 +613,20 @@ def load_config(*, repo_root: Path) -> AppConfig:
     else:
         raise ConfigError("missing/invalid remote_api.procedure_cache_path")
 
+    default_namespace_raw = remote_api_raw.get("default_namespace")
+    default_namespace: str
+    if default_namespace_raw is None:
+        env_dn = os.environ.get("LG_REMOTE_API_DEFAULT_NAMESPACE")
+        default_namespace = env_dn.strip() if isinstance(env_dn, str) else ""
+    elif isinstance(default_namespace_raw, str):
+        default_namespace = default_namespace_raw.strip()
+    else:
+        raise ConfigError("missing/invalid remote_api.default_namespace")
+    if default_namespace and not _NAMESPACE_RE.fullmatch(default_namespace):
+        raise ConfigError(
+            "remote_api.default_namespace must match [A-Za-z0-9_-]{1,64} or be empty"
+        )
+
     remote_api = RemoteAPIConfig(
         auth_mode=auth_mode,
         bearer_token=bearer_token,
@@ -632,6 +648,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
         run_store_path=run_store_path,
         rate_limit_rps=rate_limit_rps,
         procedure_cache_path=procedure_cache_path,
+        default_namespace=default_namespace,
     )
 
     checkpoint_enabled = checkpoint_raw.get("enabled", True)

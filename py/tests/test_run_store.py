@@ -200,3 +200,50 @@ def test_get_episodic_context_returns_empty_when_no_match(tmp_path: Path) -> Non
         assert result == []
     finally:
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# Namespace isolation
+# ---------------------------------------------------------------------------
+
+
+def test_namespace_isolation(tmp_path: Path) -> None:
+    db = tmp_path / "runs.sqlite"
+    store_a = RunStore(db_path=db, namespace="a")
+    store_b = RunStore(db_path=db, namespace="b")
+    try:
+        store_a.upsert(_make_record("ns-run-1"))
+        assert len(store_a.list_runs()) == 1
+        assert store_a.list_runs()[0]["run_id"] == "ns-run-1"
+        assert store_b.list_runs() == []
+    finally:
+        store_a.close()
+        store_b.close()
+
+
+def test_recovery_facts_namespace_isolation(tmp_path: Path) -> None:
+    db = tmp_path / "runs.sqlite"
+    store_a = RunStore(db_path=db, namespace="ns-a")
+    store_b = RunStore(db_path=db, namespace="ns-b")
+    try:
+        store_a.upsert_recovery_facts("run-X", [_make_fact("fp-ns-a")])
+        rows_a = store_a.get_recent_recovery_facts()
+        rows_b = store_b.get_recent_recovery_facts()
+        assert len(rows_a) == 1
+        assert rows_a[0]["fingerprint"] == "fp-ns-a"
+        assert rows_b == []
+    finally:
+        store_a.close()
+        store_b.close()
+
+
+def test_migration_adds_column_idempotent(tmp_path: Path) -> None:
+    db = tmp_path / "runs.sqlite"
+    store1 = RunStore(db_path=db)
+    store1.upsert(_make_record("idem-1"))
+    store1.close()
+    # Opening the same db again should not raise
+    store2 = RunStore(db_path=db)
+    rows = store2.list_runs()
+    assert any(r["run_id"] == "idem-1" for r in rows)
+    store2.close()

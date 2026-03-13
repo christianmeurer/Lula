@@ -395,3 +395,58 @@ def test_api_http_response_passes_when_rate_limiter_not_set(tmp_path: Path) -> N
         request_body=None,
     )
     assert status == 200
+
+
+# ---------------------------------------------------------------------------
+# Namespace isolation
+# ---------------------------------------------------------------------------
+
+
+def test_remote_api_service_namespace_isolation(tmp_path: Path) -> None:
+    from lg_orch.run_store import RunStore
+
+    db = tmp_path / "runs.sqlite"
+    store_a = RunStore(db_path=db, namespace="alpha")
+    store_b = RunStore(db_path=db, namespace="beta")
+
+    record_a = {
+        "run_id": "run-alpha-1",
+        "request": "task alpha",
+        "status": "running",
+        "created_at": "2026-01-01T00:00:00Z",
+        "started_at": "2026-01-01T00:00:00Z",
+        "finished_at": None,
+        "exit_code": None,
+        "trace_out_dir": "artifacts/runs",
+        "trace_path": "artifacts/runs/run-alpha-1.json",
+        "request_id": "",
+        "auth_subject": "",
+        "client_ip": "",
+    }
+    record_b = {
+        "run_id": "run-beta-1",
+        "request": "task beta",
+        "status": "running",
+        "created_at": "2026-01-01T00:00:00Z",
+        "started_at": "2026-01-01T00:00:00Z",
+        "finished_at": None,
+        "exit_code": None,
+        "trace_out_dir": "artifacts/runs",
+        "trace_path": "artifacts/runs/run-beta-1.json",
+        "request_id": "",
+        "auth_subject": "",
+        "client_ip": "",
+    }
+    store_a.upsert(record_a)
+    store_b.upsert(record_b)
+
+    runs_a = store_a.list_runs()
+    runs_b = store_b.list_runs()
+
+    assert len(runs_a) == 1
+    assert runs_a[0]["run_id"] == "run-alpha-1"
+    assert len(runs_b) == 1
+    assert runs_b[0]["run_id"] == "run-beta-1"
+
+    store_a.close()
+    store_b.close()

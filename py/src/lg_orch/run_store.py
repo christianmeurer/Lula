@@ -19,6 +19,7 @@ _COLUMNS = (
     "request_id",
     "auth_subject",
     "client_ip",
+    "namespace",
 )
 
 _CREATE_TABLE = """\
@@ -34,7 +35,8 @@ CREATE TABLE IF NOT EXISTS runs (
     trace_path   TEXT NOT NULL,
     request_id   TEXT NOT NULL DEFAULT '',
     auth_subject TEXT NOT NULL DEFAULT '',
-    client_ip    TEXT NOT NULL DEFAULT ''
+    client_ip    TEXT NOT NULL DEFAULT '',
+    namespace    TEXT NOT NULL DEFAULT ''
 )
 """
 
@@ -51,9 +53,17 @@ CREATE TABLE IF NOT EXISTS recovery_facts (
     plan_action    TEXT NOT NULL DEFAULT 'keep',
     salience       INTEGER NOT NULL DEFAULT 0,
     created_at     TEXT NOT NULL,
+    namespace      TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (fingerprint, run_id)
 )
 """
+
+_CREATE_INDEX_RUNS_NAMESPACE = (
+    "CREATE INDEX IF NOT EXISTS idx_runs_namespace ON runs(namespace)"
+)
+_CREATE_INDEX_RECOVERY_FACTS_NAMESPACE = (
+    "CREATE INDEX IF NOT EXISTS idx_recovery_facts_namespace ON recovery_facts(namespace)"
+)
 
 _RECOVERY_FACT_COLUMNS = (
     "fingerprint",
@@ -67,42 +77,61 @@ _RECOVERY_FACT_COLUMNS = (
     "plan_action",
     "salience",
     "created_at",
+    "namespace",
 )
 
 
 class RunStore:
-    def __init__(self, *, db_path: Path) -> None:
+    def __init__(self, *, db_path: Path, namespace: str = "") -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
+        self._namespace = namespace.strip()
         with self._lock:
             self._conn.execute(_CREATE_TABLE)
             self._conn.execute(_CREATE_RECOVERY_FACTS_TABLE)
+            self._conn.execute(_CREATE_INDEX_RUNS_NAMESPACE)
+            self._conn.execute(_CREATE_INDEX_RECOVERY_FACTS_NAMESPACE)
             self._conn.commit()
+        self._migrate()
+
+    def _migrate(self) -> None:
+        for table in ("runs", "recovery_facts"):
+            try:
+                self._conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN namespace TEXT NOT NULL DEFAULT ''"
+                )
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
 
     def upsert(self, record: dict[str, Any]) -> None:
-        filtered = {k: record[k] for k in _COLUMNS if k in record}
-        if not filtered:
+        data = {k: record[k] for k in _COLUMNS if k in record}
+        # Always inject namespace
+        data["namespace"] = self._namespace
+        if not data:
             return
-        cols = ", ".join(filtered.keys())
-        placeholders = ", ".join("?" for _ in filtered)
+        cols = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
         sql = f"INSERT OR REPLACE INTO runs ({cols}) VALUES ({placeholders})"
         with self._lock:
-            self._conn.execute(sql, list(filtered.values()))
+            self._conn.execute(sql, list(data.values()))
             self._conn.commit()
 
     def list_runs(self) -> list[dict[str, Any]]:
         with self._lock:
             cursor = self._conn.execute(
-                "SELECT * FROM runs ORDER BY created_at DESC"
+                "SELECT * FROM runs WHERE namespace = ? ORDER BY created_at DESC",
+                (self._namespace,),
             )
             return [dict(row) for row in cursor.fetchall()]
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         with self._lock:
             cursor = self._conn.execute(
-                "SELECT * FROM runs WHERE run_id = ?", (run_id,)
+                "SELECT * FROM runs WHERE run_id = ? AND namespace = ?",
+                (run_id, self._namespace),
             )
             row = cursor.fetchone()
             return dict(row) if row is not None else None
@@ -138,14 +167,15 @@ class RunStore:
                 str(fact.get("plan_action", "keep")).strip() or "keep",
                 salience,
                 now,
+                self._namespace,
             ))
         if not rows:
             return
         sql = (
             "INSERT OR REPLACE INTO recovery_facts "
             "(fingerprint, run_id, loop, failure_class, summary, last_check, "
-            "context_scope, retry_target, plan_action, salience, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "context_scope, retry_target, plan_action, salience, created_at, namespace) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         with self._lock:
             self._conn.executemany(sql, rows)
@@ -168,23 +198,24 @@ class RunStore:
         with self._lock:
             if fingerprint:
                 cursor = self._conn.execute(
-                    "SELECT * FROM recovery_facts WHERE fingerprint = ? "
+                    "SELECT * FROM recovery_facts WHERE fingerprint = ? AND namespace = ? "
                     "ORDER BY salience DESC, loop DESC LIMIT ?",
-                    (fingerprint, limit),
+                    (fingerprint, self._namespace, limit),
                 )
                 rows = [dict(row) for row in cursor.fetchall()]
                 if rows:
                     return rows
             if failure_class:
                 cursor = self._conn.execute(
-                    "SELECT * FROM recovery_facts WHERE failure_class = ? "
+                    "SELECT * FROM recovery_facts WHERE failure_class = ? AND namespace = ? "
                     "ORDER BY salience DESC, loop DESC LIMIT ?",
-                    (failure_class, limit),
+                    (failure_class, self._namespace, limit),
                 )
                 return [dict(row) for row in cursor.fetchall()]
             cursor = self._conn.execute(
-                "SELECT * FROM recovery_facts ORDER BY salience DESC, loop DESC LIMIT ?",
-                (limit,),
+                "SELECT * FROM recovery_facts WHERE namespace = ? "
+                "ORDER BY salience DESC, loop DESC LIMIT ?",
+                (self._namespace, limit),
             )
             return [dict(row) for row in cursor.fetchall()]
 

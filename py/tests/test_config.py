@@ -507,3 +507,43 @@ def test_mcp_server_config_schema_hash_invalid_raises(monkeypatch: pytest.Monkey
         root = _write_config(td, content=toml_bad_hash)
         with pytest.raises(ConfigError, match="schema_hash"):
             load_config(repo_root=root)
+
+
+# ---------------------------------------------------------------------------
+# default_namespace tests
+# ---------------------------------------------------------------------------
+
+
+def test_default_namespace_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    toml = _VALID_TOML.replace(
+        "[checkpoint]",
+        'default_namespace = "tenant-1"\n\n[checkpoint]',
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=toml)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.default_namespace == "tenant-1"
+
+
+def test_default_namespace_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    monkeypatch.setenv("LG_REMOTE_API_DEFAULT_NAMESPACE", "env-ns")
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=_VALID_TOML)
+        cfg = load_config(repo_root=root)
+        assert cfg.remote_api.default_namespace == "env-ns"
+
+
+def test_default_namespace_invalid_chars_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lg_orch.config import ConfigError
+
+    monkeypatch.setenv("LG_PROFILE", "dev")
+    toml = _VALID_TOML.replace(
+        "[checkpoint]",
+        'default_namespace = "invalid namespace!"\n\n[checkpoint]',
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = _write_config(td, content=toml)
+        with pytest.raises(ConfigError, match="default_namespace"):
+            load_config(repo_root=root)
