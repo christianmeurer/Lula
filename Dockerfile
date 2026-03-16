@@ -1,11 +1,12 @@
 # Stage 1: Rust build
-FROM rust:1.85-bookworm AS rust-builder
+FROM rust:1.88-bookworm AS rust-builder
 
-WORKDIR /app/rs
+WORKDIR /app
 
-COPY rs/ .
+COPY rs/ ./rs/
+COPY Cargo.lock* ./
 
-RUN cargo build --manifest-path ./Cargo.toml --release -p lg-runner
+RUN cargo build --manifest-path ./rs/Cargo.toml --release -p lg-runner
 
 # Stage 2: Python + uv setup
 FROM python:3.12-slim-bookworm AS python-builder
@@ -19,6 +20,7 @@ RUN apt-get update \
 
 ENV PATH=/root/.local/bin:${PATH}
 
+COPY LICENSE ./
 COPY py/ ./py/
 COPY configs/ ./configs/
 COPY prompts/ ./prompts/
