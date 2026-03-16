@@ -3,46 +3,164 @@ from __future__ import annotations
 from typing import Any
 
 from lg_orch.logging import get_logger
+from lg_orch.tools import InferenceClient
 from lg_orch.trace import append_event
+
+_SYSTEM_PROMPT = (
+    "You are a reporter for a repo-aware coding assistant. "
+    "Given the user's request and the tool results gathered, produce a direct, "
+    "complete, human-readable answer. Be specific: include file names, line numbers, "
+    "function names, and code snippets where relevant. If the request was a code "
+    "change, confirm what was changed and whether tests passed."
+)
+
+_MAX_STDOUT_PER_RESULT = 500
+_MAX_STDERR_PER_RESULT = 200
+_MAX_SUMMARY_CHARS = 2000
+
+
+def _summarize_tool_results(tool_results: list[Any]) -> str:
+    parts: list[str] = []
+    for tr in tool_results:
+        if not isinstance(tr, dict):
+            continue
+        tool = str(tr.get("tool", "unknown"))
+        stdout = str(tr.get("stdout", ""))[:_MAX_STDOUT_PER_RESULT]
+        stderr = str(tr.get("stderr", ""))[:_MAX_STDERR_PER_RESULT]
+        ok = tr.get("ok", True)
+        chunk = f"[{tool}] ok={ok}"
+        if stdout:
+            chunk += f"\nstdout: {stdout}"
+        if stderr:
+            chunk += f"\nstderr: {stderr}"
+        parts.append(chunk)
+    summary = "\n\n".join(parts)
+    return summary[:_MAX_SUMMARY_CHARS]
+
+
+def _structured_summary(state: dict[str, Any]) -> str:
+    repo_context = state.get("repo_context", {})
+    tool_results = state.get("tool_results", [])
+    verification_raw = state.get("verification", {})
+    verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
+    lines: list[str] = []
+    lines.append(f"intent: {state.get('intent')}")
+    lines.append(f"repo_root: {repo_context.get('repo_root')}")
+    lines.append(f"top_level: {repo_context.get('top_level')}")
+    if tool_results:
+        lines.append(f"tool_calls: {len(tool_results)}")
+    if "ok" in verification:
+        lines.append(f"verification_ok: {verification.get('ok')}")
+    if "acceptance_ok" in verification:
+        lines.append(f"acceptance_ok: {verification.get('acceptance_ok')}")
+    acceptance_checks_raw = verification.get("acceptance_checks", [])
+    acceptance_checks = (
+        [entry for entry in acceptance_checks_raw if isinstance(entry, dict)]
+        if isinstance(acceptance_checks_raw, list)
+        else []
+    )
+    unmet = [
+        str(entry.get("criterion", "")).strip()
+        for entry in acceptance_checks
+        if bool(entry.get("ok", False)) is False and str(entry.get("criterion", "")).strip()
+    ]
+    if unmet:
+        lines.append(f"acceptance_unmet: {unmet}")
+    halt_reason = str(state.get("halt_reason", "")).strip()
+    if halt_reason:
+        lines.append(f"halt_reason: {halt_reason}")
+    return "\n".join(lines)
+
+
+def _get_inference_config(
+    state: dict[str, Any],
+) -> tuple[str, str, str, int] | None:
+    """Return (provider, model, api_key, base_url, timeout_s) or None if not configured."""
+    models_raw = state.get("_models", {})
+    models = models_raw if isinstance(models_raw, dict) else {}
+    slot_raw = models.get("planner", {})
+    slot = slot_raw if isinstance(slot_raw, dict) else {}
+    provider = str(slot.get("provider", "local")).strip().lower()
+    if provider in {"", "local"}:
+        return None
+    model = str(slot.get("model", "")).strip()
+    if not model:
+        return None
+
+    runtime_raw = state.get("_model_provider_runtime", {})
+    runtime = runtime_raw if isinstance(runtime_raw, dict) else {}
+
+    if provider == "openai_compatible":
+        oc_raw = runtime.get("openai_compatible", {})
+        oc_cfg = oc_raw if isinstance(oc_raw, dict) else {}
+        api_key = str(oc_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None
+        base_url = str(oc_cfg.get("base_url", "https://api.openai.com/v1")).strip().rstrip("/")
+        timeout_raw = oc_cfg.get("timeout_s", 60)
+    else:
+        do_raw = runtime.get("digitalocean", {})
+        do_cfg = do_raw if isinstance(do_raw, dict) else {}
+        api_key = str(do_cfg.get("api_key", "")).strip()
+        if not api_key:
+            return None
+        base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
+        timeout_raw = do_cfg.get("timeout_s", 60)
+
+    if not base_url or not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return None
+    timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+    return (model, api_key, base_url, timeout_s)
+
+
+def _llm_synthesis(state: dict[str, Any]) -> str | None:
+    cfg = _get_inference_config(state)
+    if cfg is None:
+        return None
+    model, api_key, base_url, timeout_s = cfg
+
+    request = str(state.get("request", "")).strip()
+    tool_results_raw = state.get("tool_results", [])
+    tool_results = tool_results_raw if isinstance(tool_results_raw, list) else []
+    summarized = _summarize_tool_results(tool_results)
+
+    user_prompt = (
+        f"Request: {request}\n\n"
+        f"Tool results:\n{summarized}\n\n"
+        "Produce the final answer."
+    )
+
+    client = InferenceClient(base_url=base_url, api_key=api_key, timeout_s=timeout_s)
+    try:
+        response = client.chat_completion(
+            model=model,
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.3,
+            max_tokens=800,
+        )
+    finally:
+        client.close()
+
+    return response if isinstance(response, str) else response.text
 
 
 def reporter(state: dict[str, Any]) -> dict[str, Any]:
     log = get_logger()
     state = append_event(state, kind="node", data={"name": "reporter", "phase": "start"})
     try:
-        repo_context = state.get("repo_context", {})
-        tool_results = state.get("tool_results", [])
-        verification_raw = state.get("verification", {})
-        verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
-        lines: list[str] = []
-        lines.append(f"intent: {state.get('intent')}")
-        lines.append(f"repo_root: {repo_context.get('repo_root')}")
-        lines.append(f"top_level: {repo_context.get('top_level')}")
-        if tool_results:
-            lines.append(f"tool_calls: {len(tool_results)}")
-        if "ok" in verification:
-            lines.append(f"verification_ok: {verification.get('ok')}")
-        if "acceptance_ok" in verification:
-            lines.append(f"acceptance_ok: {verification.get('acceptance_ok')}")
-        acceptance_checks_raw = verification.get("acceptance_checks", [])
-        acceptance_checks = (
-            [entry for entry in acceptance_checks_raw if isinstance(entry, dict)]
-            if isinstance(acceptance_checks_raw, list)
-            else []
-        )
-        unmet = [
-            str(entry.get("criterion", "")).strip()
-            for entry in acceptance_checks
-            if bool(entry.get("ok", False)) is False and str(entry.get("criterion", "")).strip()
-        ]
-        if unmet:
-            lines.append(f"acceptance_unmet: {unmet}")
-        halt_reason = str(state.get("halt_reason", "")).strip()
-        if halt_reason:
-            lines.append(f"halt_reason: {halt_reason}")
-        final = "\n".join(lines)
+        final: str | None = None
+        try:
+            final = _llm_synthesis(state)
+        except Exception as llm_exc:
+            log.warning("reporter_llm_failed", error=str(llm_exc))
+            final = None
+
+        if not final:
+            final = _structured_summary(state)
     except Exception as exc:
         log.error("reporter_failed", error=str(exc))
         final = f"error: reporter failed: {exc}"
+
     out = {**state, "final": final}
     return append_event(out, kind="node", data={"name": "reporter", "phase": "end"})
