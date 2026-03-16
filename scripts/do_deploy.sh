@@ -126,17 +126,9 @@ docker push "${FULL_IMAGE}"
 deploy_app_platform() {
   echo "[deploy] target: App Platform"
 
-  # Patch the spec with the current registry/image-tag so the update is exact
-  # We use sed to substitute the tag in-place on a temp copy
   PATCHED_SPEC="$(mktemp --suffix=.yaml)"
   # shellcheck disable=SC2064
   trap "rm -f '${PATCHED_SPEC}'" EXIT
-
-  sed \
-    -e "s|registry: .*|registry: ${DO_REGISTRY}|" \
-    -e "s|repository: .*|repository: ${DO_APP_NAME}|" \
-    -e "s|tag: .*|tag: ${IMAGE_TAG}|" \
-    "${APP_SPEC}" > "${PATCHED_SPEC}"
 
   # Find existing app by name
   APP_ID=""
@@ -148,7 +140,14 @@ deploy_app_platform() {
   done < <(doctl apps list --format Name,ID --no-header 2>/dev/null || true)
 
   if [[ -z "${APP_ID}" ]]; then
+    # New app — use the static spec, no secrets to preserve
     echo "[deploy] creating new App Platform app '${DO_APP_NAME}'..."
+    sed \
+      -e "s|registry: .*|registry: ${DO_REGISTRY}|" \
+      -e "s|repository: .*|repository: ${DO_APP_NAME}|" \
+      -e "s|tag: .*|tag: ${IMAGE_TAG}|" \
+      "${APP_SPEC}" > "${PATCHED_SPEC}"
+
     CREATE_OUTPUT="$(doctl apps create --spec "${PATCHED_SPEC}" --format ID --no-header 2>/dev/null || true)"
     APP_ID="${CREATE_OUTPUT//[[:space:]]/}"
 
@@ -169,7 +168,16 @@ deploy_app_platform() {
       done
     fi
   else
+    # Existing app — fetch the live spec so EV[...] secret refs are preserved,
+    # then patch only image tag and non-secret env vars.
     echo "[deploy] updating existing app '${DO_APP_NAME}' (${APP_ID})..."
+    doctl apps spec get "${APP_ID}" > "${PATCHED_SPEC}"
+    # Patch image tag in the live spec
+    sed -i \
+      -e "s|registry: .*|registry: ${DO_REGISTRY}|" \
+      -e "s|repository: .*|repository: ${DO_APP_NAME}|" \
+      -e "s|tag: .*|tag: ${IMAGE_TAG}|" \
+      "${PATCHED_SPEC}"
     doctl apps update "${APP_ID}" --spec "${PATCHED_SPEC}"
   fi
 
