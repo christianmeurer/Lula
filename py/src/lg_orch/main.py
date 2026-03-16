@@ -720,7 +720,7 @@ def cli(argv: list[str] | None = None) -> int:
                 from lg_orch.run_store import RunStore
                 
                 run_store = RunStore(db_path=repo_root / store_path)
-                status = "failed" if out.get("recovery_packet", {}).get("failure_class") else "succeeded"
+                status = "failed" if (out.get("recovery_packet") or {}).get("failure_class") else "succeeded"
                 if "final" not in out:
                     status = "failed"
                 
