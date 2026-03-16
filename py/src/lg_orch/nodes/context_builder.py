@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from lg_orch.logging import get_logger
-from lg_orch.memory import build_context_layers, ensure_history_policy, prune_pre_verification_history
+from lg_orch.memory import (
+    build_context_layers,
+    ensure_history_policy,
+    get_compression_summary,
+    prune_pre_verification_history,
+    record_compression_provenance,
+)
 from lg_orch.model_routing import record_model_route
 from lg_orch.tools import MCPClient, RunnerClient
 from lg_orch.trace import append_event
@@ -44,15 +50,48 @@ def _runner_client_from_state(state: dict[str, Any]) -> RunnerClient | None:
 def _runner_context_snapshot(
     state: dict[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
+    import json as _json
+
     client = _runner_client_from_state(state)
     if client is None:
         return {}, [], ""
     query = _semantic_query_from_request(str(state.get("request", "")))
     try:
-        ast_map = client.get_ast_index_summary(max_files=200)
-        semantic_hits = client.search_codebase(query=query, limit=8)
+        batch_results = client.batch_execute_tools(calls=[
+            {"tool": "ast_index_summary", "input": {"max_files": 200}},
+            {"tool": "search_codebase", "input": {"query": query, "limit": 8}},
+        ])
     finally:
         client.close()
+
+    # Parse ast_index_summary result (index 0)
+    ast_map: dict[str, Any] = {}
+    if len(batch_results) > 0:
+        env0 = batch_results[0]
+        if bool(env0.get("ok", False)) is True:
+            stdout0 = env0.get("stdout", "")
+            if isinstance(stdout0, str) and stdout0.strip():
+                try:
+                    parsed0 = _json.loads(stdout0)
+                    if isinstance(parsed0, dict):
+                        ast_map = parsed0
+                except _json.JSONDecodeError:
+                    pass
+
+    # Parse search_codebase result (index 1)
+    semantic_hits: list[dict[str, Any]] = []
+    if len(batch_results) > 1:
+        env1 = batch_results[1]
+        if bool(env1.get("ok", False)) is True:
+            stdout1 = env1.get("stdout", "")
+            if isinstance(stdout1, str) and stdout1.strip():
+                try:
+                    parsed1 = _json.loads(stdout1)
+                    if isinstance(parsed1, list):
+                        semantic_hits = [row for row in parsed1 if isinstance(row, dict)]
+                except _json.JSONDecodeError:
+                    pass
+
     return ast_map, semantic_hits, query
 
 
@@ -300,8 +339,18 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
     repo_context["working_set"] = layers["working_set"]
     repo_context["planner_context"] = layers["planner_context"]
     repo_context["compression"] = layers["compression"]
-
-    provenance_raw = state.get("provenance", [])
+   
+    budgets_raw = state.get("budgets", {})
+    budgets = dict(budgets_raw) if isinstance(budgets_raw, dict) else {}
+    current_loop = int(budgets.get("current_loop", 0) or 0)
+   
+    out = record_compression_provenance(
+        state,
+        compression_result=layers,
+        current_loop=current_loop,
+    )
+   
+    provenance_raw = out.get("provenance", [])
     provenance = list(provenance_raw) if isinstance(provenance_raw, list) else []
     provenance.append(
         {
@@ -311,15 +360,16 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
             "compression": layers["compression"],
         }
     )
-
-    telemetry_raw = state.get("telemetry", {})
+   
+    telemetry_raw = out.get("telemetry", {})
     telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
     telemetry["context_budget"] = {
         "stable_prefix": repo_context["stable_prefix"],
         "working_set": repo_context["working_set"],
     }
-
-    out = {**state, "repo_context": repo_context, "provenance": provenance, "telemetry": telemetry}
+    telemetry["compression_summary"] = get_compression_summary(out)
+   
+    out = {**out, "repo_context": repo_context, "provenance": provenance[-20:], "telemetry": telemetry}
     out = append_event(
         out,
         kind="node",

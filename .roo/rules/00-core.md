@@ -1,3 +1,7 @@
-- Be terse.
+- Be concise but complete.
+- Search semantically before reading a new code area.
+- Use docs first when the task asks about roadmap, maturity, or parity.
 - Read only needed files.
+- Avoid duplicate reads unless the file changed or more lines are needed.
+- Re-read files flagged as recently modified before editing.
 - Prefer the smallest correct change.

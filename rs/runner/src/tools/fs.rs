@@ -14,6 +14,21 @@ use crate::envelope::{ToolEnvelope, UndoMetadata};
 use crate::errors::ApiError;
 use crate::snapshots::{undo_to_snapshot, SnapshotError};
 
+fn normalize_path(base: &std::path::Path, rel: &str) -> std::path::PathBuf {
+    use std::path::Component;
+    let mut result = base.to_path_buf();
+    for component in std::path::Path::new(rel).components() {
+        match component {
+            Component::ParentDir => { result.pop(); }
+            Component::Normal(c) => result.push(c),
+            Component::RootDir => result = std::path::PathBuf::from("/"),
+            Component::Prefix(p) => result = std::path::PathBuf::from(p.as_os_str()),
+            Component::CurDir => {}
+        }
+    }
+    result
+}
+
 pub(super) fn resolve_under_root(cfg: &RunnerConfig, rel: &str) -> Result<PathBuf, ApiError> {
     let rel = rel.trim();
     if rel.is_empty() {
@@ -24,20 +39,8 @@ pub(super) fn resolve_under_root(cfg: &RunnerConfig, rel: &str) -> Result<PathBu
     }
 
     let candidate = cfg.root_dir.join(rel);
-    let norm = candidate.components().fold(PathBuf::new(), |mut acc, c| {
-        acc.push(c);
-        acc
-    });
 
-    let full = if norm.is_absolute() {
-        norm
-    } else {
-        cfg.root_dir.join(norm)
-    };
-
-    let full = full
-        .canonicalize()
-        .unwrap_or_else(|_| cfg.root_dir.join(rel));
+    let full = candidate.canonicalize().unwrap_or_else(|_| normalize_path(&cfg.root_dir, rel));
 
     if !full.starts_with(&cfg.root_dir) {
         return Err(ApiError::Forbidden("path escapes root".to_string()));
@@ -115,46 +118,52 @@ pub async fn search_files(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelo
         None => None,
     };
 
-    let mut out: Vec<Value> = Vec::new();
+    let root_dir = cfg.root_dir.clone();
+    let can_read_set = cfg.allow_read.clone();
+    let out: Vec<Value> = tokio::task::spawn_blocking(move || {
+        let mut results: Vec<Value> = Vec::new();
+        for entry in walkdir::WalkDir::new(&full)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
+            let p = entry.path().to_path_buf();
+            if p.is_file() {
+                let rel = p.strip_prefix(&root_dir).unwrap_or(&p).to_path_buf();
+                let rel_s = rel.to_string_lossy().replace('\\', "/");
 
-    for entry in walkdir::WalkDir::new(full)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
-        let p = entry.path();
-        if p.is_file() {
-            let rel = p.strip_prefix(&cfg.root_dir).unwrap_or(p);
-            let rel_s = rel.to_string_lossy().to_string();
-
-            if !cfg.can_read(&rel_s) {
-                continue;
-            }
-
-            if let Some(ref matcher) = glob {
-                if !matcher.is_match(&rel_s) {
+                if !can_read_set.is_match(&rel_s) {
                     continue;
                 }
-            }
 
-            if let Ok(content) = std::fs::read_to_string(p) {
-                let mut matches_in_file = Vec::new();
-                for (line_idx, line) in content.lines().enumerate() {
-                    if re.is_match(line) {
-                        matches_in_file.push(json!({
-                            "line_number": line_idx + 1,
-                            "content": line
+                if let Some(ref matcher) = glob {
+                    if !matcher.is_match(&rel_s) {
+                        continue;
+                    }
+                }
+
+                if let Ok(content) = std::fs::read_to_string(&p) {
+                    let mut matches_in_file = Vec::new();
+                    for (line_idx, line) in content.lines().enumerate() {
+                        if re.is_match(line) {
+                            matches_in_file.push(json!({
+                                "line_number": line_idx + 1,
+                                "content": line
+                            }));
+                        }
+                    }
+                    if !matches_in_file.is_empty() {
+                        results.push(json!({
+                            "file": rel_s,
+                            "matches": matches_in_file
                         }));
                     }
                 }
-                if !matches_in_file.is_empty() {
-                    out.push(json!({
-                        "file": rel_s,
-                        "matches": matches_in_file
-                    }));
-                }
             }
         }
-    }
+        results
+    })
+    .await
+    .map_err(|e| ApiError::Other(anyhow::anyhow!("search_files join error: {e}")))?;
 
     Ok(ToolEnvelope::ok(
         "search_files",
@@ -300,19 +309,28 @@ pub async fn list_files(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope
 
     let mut out: Vec<String> = Vec::new();
     if inp.recursive {
-        for entry in walkdir::WalkDir::new(full)
-            .into_iter()
-            .filter_map(Result::ok)
-        {
-            let p = entry.path();
-            if p.is_file() {
-                let rel = p.strip_prefix(&cfg.root_dir).unwrap_or(p);
-                let rel_s = rel.to_string_lossy().to_string();
-                if cfg.can_read(&rel_s) {
-                    out.push(rel_s);
+        let root_dir = cfg.root_dir.clone();
+        let can_read_set = cfg.allow_read.clone();
+        let mut entries: Vec<String> = tokio::task::spawn_blocking(move || {
+            let mut results: Vec<String> = Vec::new();
+            for entry in walkdir::WalkDir::new(&full)
+                .into_iter()
+                .filter_map(Result::ok)
+            {
+                let p = entry.path().to_path_buf();
+                if p.is_file() {
+                    let rel = p.strip_prefix(&root_dir).unwrap_or(&p).to_path_buf();
+                    let rel_s = rel.to_string_lossy().replace('\\', "/");
+                    if can_read_set.is_match(&rel_s) {
+                        results.push(rel_s);
+                    }
                 }
             }
-        }
+            results
+        })
+        .await
+        .map_err(|e| ApiError::Other(anyhow::anyhow!("list_files join error: {e}")))?;
+        out.append(&mut entries);
     } else {
         let mut rd = fs::read_dir(full)
             .await
@@ -378,8 +396,33 @@ pub async fn apply_patch(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelop
     let approval = require_approval(inp.approval, "apply_patch", "approval:apply_patch")?;
     let snapshot = snapshot_for_operation(cfg, "apply_patch").await?;
 
-    let mut diffs: Vec<Value> = Vec::new();
-    for ch in inp.changes {
+    // Collect temp paths so they can be cleaned up if an error occurs mid-batch.
+    let mut tmp_files: Vec<std::path::PathBuf> = Vec::new();
+
+    let result = apply_patch_inner(cfg, inp.changes, &mut tmp_files, &mut Vec::new()).await;
+
+    // Always attempt cleanup of any leftover temp files (rename removes them on
+    // success, so this only fires on error paths).
+    for p in &tmp_files {
+        let _ = std::fs::remove_file(p);
+    }
+
+    let diffs = result?;
+
+    Ok(
+        ToolEnvelope::ok("apply_patch", "ok", json!({"changes": diffs}), 0)
+            .with_approval(approval)
+            .with_snapshot(snapshot),
+    )
+}
+
+async fn apply_patch_inner(
+    cfg: &RunnerConfig,
+    changes: Vec<FileChange>,
+    tmp_files: &mut Vec<std::path::PathBuf>,
+    diffs: &mut Vec<Value>,
+) -> Result<Vec<Value>, ApiError> {
+    for ch in changes {
         if !cfg.can_write(&ch.path) {
             return Err(ApiError::Forbidden("write denied".to_string()));
         }
@@ -397,9 +440,16 @@ pub async fn apply_patch(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelop
                         .await
                         .map_err(|e| ApiError::Other(e.into()))?;
                 }
-                fs::write(&full, ch.content.as_bytes())
+                let tmp_path = full.with_extension("tmp_lula_add");
+                tmp_files.push(tmp_path.clone());
+                fs::write(&tmp_path, ch.content.as_bytes())
                     .await
                     .map_err(|e| ApiError::Other(e.into()))?;
+                tokio::fs::rename(&tmp_path, &full)
+                    .await
+                    .map_err(|e| ApiError::Other(e.into()))?;
+                // Rename consumed the temp file; remove it from the cleanup list.
+                tmp_files.retain(|p| p != &tmp_path);
                 diffs.push(json!({"path": full_rel_s, "op": "add", "bytes": ch.content.len()}));
             }
             ChangeOp::Update => {
@@ -407,9 +457,15 @@ pub async fn apply_patch(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelop
                     return Err(ApiError::BadRequest(format!("missing: {}", ch.path)));
                 }
                 let old = fs::read_to_string(&full).await.unwrap_or_default();
-                fs::write(&full, ch.content.as_bytes())
+                let tmp_path = full.with_extension("tmp_lula_update");
+                tmp_files.push(tmp_path.clone());
+                fs::write(&tmp_path, ch.content.as_bytes())
                     .await
                     .map_err(|e| ApiError::Other(e.into()))?;
+                tokio::fs::rename(&tmp_path, &full)
+                    .await
+                    .map_err(|e| ApiError::Other(e.into()))?;
+                tmp_files.retain(|p| p != &tmp_path);
                 diffs.push(json!({"path": full_rel_s, "op": "update", "old_bytes": old.len(), "new_bytes": ch.content.len()}));
             }
             ChangeOp::Delete => {
@@ -422,12 +478,7 @@ pub async fn apply_patch(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelop
             }
         }
     }
-
-    Ok(
-        ToolEnvelope::ok("apply_patch", "ok", json!({"changes": diffs}), 0)
-            .with_approval(approval)
-            .with_snapshot(snapshot),
-    )
+    Ok(diffs.clone())
 }
 
 pub async fn undo(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiError> {
@@ -540,6 +591,19 @@ mod tests {
         let (_td, cfg) = test_cfg();
         let result = resolve_under_root(&cfg, "file\0.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_dot_dot_traversal_blocked() {
+        let td = tempfile::tempdir().unwrap();
+        let cfg = RunnerConfig::new(td.path(), Some("dev"), None).unwrap();
+        // Neither the path nor the target exists; the fallback normalize_path must
+        // still detect the escape and return Forbidden.
+        let result = resolve_under_root(&cfg, "../../etc/passwd");
+        assert!(
+            matches!(result, Err(ApiError::Forbidden(_))),
+            "expected Forbidden for .. traversal, got: {result:?}"
+        );
     }
 
     #[test]
@@ -805,6 +869,25 @@ mod tests {
         });
         let result = apply_patch(&cfg, input).await;
         assert!(matches!(result, Err(ApiError::ApprovalRequired(_))));
+    }
+
+    #[tokio::test]
+    async fn test_apply_patch_atomic_write_uses_rename() {
+        let (td, cfg) = test_cfg();
+        init_git_repo(td.path());
+        let new_file = td.path().join("py/atomic_new.txt");
+        let tmp_file = td.path().join("py/atomic_new.tmp_lula_add");
+        let input = json!({
+            "changes": [{"path": "py/atomic_new.txt", "op": "add", "content": "atomic content"}],
+            "approval": {"challenge_id": "approval:apply_patch", "token": "approve:approval:apply_patch"}
+        });
+        let result = apply_patch(&cfg, input).await;
+        assert!(result.is_ok());
+        // Final file must exist with correct content.
+        assert!(new_file.exists());
+        assert_eq!(stdfs::read_to_string(&new_file).unwrap(), "atomic content");
+        // Temp file must have been cleaned up by the rename.
+        assert!(!tmp_file.exists(), "temp file should not remain after successful rename");
     }
 
     #[tokio::test]

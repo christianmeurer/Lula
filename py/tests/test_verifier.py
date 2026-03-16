@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from lg_orch.nodes.verifier import _classify_retry, _is_test_failure_post_change, verifier
+from lg_orch.nodes.verifier import (
+    _classify_retry,
+    _is_test_failure_post_change,
+    _requires_formal_verification,
+    _run_formal_verification,
+    verifier,
+)
 
 
 def _base_state(**overrides: Any) -> dict[str, Any]:
@@ -335,3 +341,67 @@ def test_classify_retry_budget_exceeded_takes_priority() -> None:
     recovery, label = _classify_retry(tool_results, current_loop=0)
     assert label == "tool_call_budget_exceeded"
     assert recovery["failure_class"] == "budget_exceeded"
+
+def test_requires_formal_verification() -> None:
+    state = {
+        "_vericoding_enabled": True,
+        "_vericoding_extensions": [".rs"]
+    }
+    tool_results = [
+        {
+            "tool": "apply_patch",
+            "ok": True,
+            "input": {
+                "changes": [
+                    {"path": "src/main.rs"}
+                ]
+            }
+        }
+    ]
+    files = _requires_formal_verification(state, tool_results)
+    assert files == ["src/main.rs"]
+
+def test_requires_formal_verification_disabled() -> None:
+    state = {
+        "_vericoding_enabled": False,
+        "_vericoding_extensions": [".rs"]
+    }
+    tool_results = [
+        {
+            "tool": "apply_patch",
+            "ok": True,
+            "input": {
+                "changes": [
+                    {"path": "src/main.rs"}
+                ]
+            }
+        }
+    ]
+    files = _requires_formal_verification(state, tool_results)
+    assert files == []
+
+def test_classify_retry_formal_verification_failed() -> None:
+    tool_results = [
+        {
+            "tool": "formal_verification",
+            "ok": False,
+            "artifacts": {"error": "formal_verification_failed"}
+        }
+    ]
+    recovery, label = _classify_retry(tool_results, current_loop=0)
+    assert label == "formal_verification_failed"
+    assert recovery["failure_class"] == "formal_verification_failed"
+    assert recovery["plan_action"] == "amend"
+    assert recovery["retry_target"] == "planner"
+
+
+def test_formal_verification_skipped_for_invalid_url() -> None:
+    state: dict[str, Any] = {
+        "_runner_base_url": "ftp://bad",
+        "_vericoding_enabled": True,
+    }
+    route_metadata: dict[str, Any] = {}
+    result = _run_formal_verification(state, ["src/main.rs"], route_metadata)
+    assert result is not None
+    assert result["ok"] is False
+    assert result["artifacts"]["error"] == "invalid_base_url"

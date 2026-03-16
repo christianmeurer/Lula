@@ -1,11 +1,11 @@
 [models.router]
-provider = "local"
-model = "deterministic"
+provider = "openai_compatible"
+model = "gpt-4o"
 temperature = 0.0
 
 [models.planner]
-provider = "local"
-model = "deterministic"
+provider = "openai_compatible"
+model = "gpt-4o"
 temperature = 0.0
 
 [models.routing]
@@ -66,3 +66,7 @@ run_store_path = "artifacts/remote-api/runs.sqlite"
 rate_limit_rps = 0
 procedure_cache_path = "artifacts/remote-api/procedures.sqlite"
 default_namespace = ""
+  
+[vericoding]  
+enabled = true  
+extensions = [".rs"] 

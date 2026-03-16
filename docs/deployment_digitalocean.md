@@ -1,0 +1,334 @@
+# DigitalOcean Deployment — LG-Orchestration-Platform
+
+This document describes how to build, push, and run the platform on DigitalOcean using either **App Platform** (recommended) or a **Droplet** (lower cost, manual TLS).
+
+---
+
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| `doctl` ≥ 1.100 | `doctl auth init` must succeed |
+| Docker ≥ 24 | Must be able to build `linux/amd64` images |
+| Bash | Required by `do_deploy.sh`; Windows users invoke via WSL or Git Bash |
+| `DO_REGISTRY` env var | DOCR registry name you own or will create |
+| Secret env vars | See [Environment variables](#environment-variables) below |
+
+Authenticate once:
+
+```sh
+doctl auth init
+```
+
+---
+
+## Two deployment targets
+
+| Target | `DO_DEPLOY_TARGET` | HTTPS | Cost |
+|---|---|---|---|
+| App Platform (recommended) | `app` (default) | Automatic (`*.ondigitalocean.app`) | ~$5/mo (Basic) |
+| Droplet | `droplet` | Manual reverse proxy required | ~$6/mo (1 vCPU / 2 GB) or ~$12/mo (2 vCPU / 4 GB) |
+
+Both targets share the same DOCR push step.
+
+---
+
+## DigitalOcean Container Registry (DOCR)
+
+### Create the registry (once)
+
+```sh
+doctl registry create lula-orch --region nyc3
+```
+
+The registry URL is `registry.digitalocean.com/<registry-name>`. The deploy script handles login, build, and push automatically. Do **not** run `doctl registry garbage-collection` while a deployment is in progress — it may delete layers in use.
+
+### Authenticate Docker to DOCR
+
+```sh
+doctl registry login
+```
+
+The deploy script calls this automatically. To log in manually:
+
+```sh
+doctl registry docker-config | docker login registry.digitalocean.com --username <token> --password-stdin
+```
+
+---
+
+## App Platform spec (`infra/do/app.yaml`)
+
+The spec file at [`infra/do/app.yaml`](../infra/do/app.yaml) defines the App Platform service. Key fields:
+
+| Field | Value | Notes |
+|---|---|---|
+| `region` | `nyc3` | Overridable in the spec |
+| `instance_size_slug` | `apps-s-1vcpu-1gb` | Basic — adequate for personal use |
+| `http_port` | `8001` | Matches `PORT` env var |
+| `health_check.http_path` | `/healthz` | Remote API exposes this |
+| Secret env vars | `LG_REMOTE_API_BEARER_TOKEN`, `LG_RUNNER_API_KEY`, `DIGITAL_OCEAN_MODEL_ACCESS_KEY`, `MODEL_ACCESS_KEY` | Must be set via console or `doctl apps update` after creation |
+
+### Create the app (first deploy)
+
+```sh
+doctl apps create --spec infra/do/app.yaml
+```
+
+### Update an existing app
+
+```sh
+doctl apps update <APP_ID> --spec infra/do/app.yaml
+```
+
+The deploy script handles create-or-update detection automatically.
+
+### Setting secret environment variables
+
+Secret vars are **not** stored in `app.yaml` (which is committed to source control). Set them after creation:
+
+```sh
+doctl apps update <APP_ID> --spec infra/do/app.yaml
+# Then in the DO console: App → Settings → Environment Variables → edit secrets
+```
+
+Or use the `do_deploy.sh` `--set-secrets` pattern described in [Updating / rolling deploys](#updating--rolling-deploys).
+
+---
+
+## Droplet target
+
+### First deploy
+
+The deploy script creates a `s-1vcpu-2gb` Ubuntu 22.04 Droplet, opens the API port, and injects a cloud-init user-data script that:
+
+1. Installs `docker.io`
+2. Authenticates to DOCR with `doctl registry docker-config`
+3. Pulls the image
+4. Starts the container with `--restart unless-stopped`
+5. Health-polls `http://127.0.0.1:$PORT/healthz` for up to 120 seconds
+
+### Subsequent deploys
+
+The script SSHes into the existing Droplet and runs:
+
+```sh
+docker pull <image>
+docker rm -f <app-name>
+docker run -d --restart unless-stopped ...
+```
+
+### TLS on a Droplet
+
+App Platform provides TLS automatically. For a Droplet you must add a reverse proxy:
+
+```sh
+# Minimal nginx + certbot example (run once on the Droplet)
+sudo apt-get install -y nginx certbot python3-certbot-nginx
+sudo certbot --nginx -d <your-domain>
+```
+
+Then proxy `443 → 127.0.0.1:8001`. Until TLS is configured, set `LG_REMOTE_API_TRUST_FORWARDED_HEADERS=false` and restrict access by IP if possible.
+
+---
+
+## Environment variables
+
+| Variable | Required | Target | Description |
+|---|---|---|---|
+| `DO_REGISTRY` | **Yes** | both | DOCR registry name (e.g. `lula-orch`) |
+| `DO_APP_NAME` | No (default `lula-orch`) | both | App name and image repository |
+| `DO_REGION` | No (default `nyc3`) | both | DigitalOcean region slug |
+| `DO_DEPLOY_TARGET` | No (default `app`) | — | `app` or `droplet` |
+| `DO_DROPLET_SSH_KEY` | Droplet only | droplet | SSH key fingerprint or ID for Droplet access |
+| `LG_PROFILE` | No (default `prod`) | both | Config profile; selects `configs/runtime.<profile>.toml` |
+| `PORT` | No (default `8001`) | both | Port the remote API listens on (public) |
+| `LG_REMOTE_API_AUTH_MODE` | No (default `bearer` if token present, else `off`) | both | `bearer` or `off` |
+| `LG_REMOTE_API_BEARER_TOKEN` | Yes if `AUTH_MODE=bearer` | both | Bearer token for API auth — treat as secret |
+| `LG_REMOTE_API_TRUST_FORWARDED_HEADERS` | No (default `true` for App Platform, `false` for Droplet) | both | Trust `X-Forwarded-For` and `X-Forwarded-Proto` |
+| `LG_RUNNER_API_KEY` | No | both | API key between Python orchestrator and Rust runner (internal) |
+| `MODEL_ACCESS_KEY` | No | both | Generic model provider access key |
+| `DIGITAL_OCEAN_MODEL_ACCESS_KEY` | No | both | DigitalOcean GenAI model access key |
+
+---
+
+## Healthcheck
+
+The remote API exposes `/healthz` on `$PORT` (default `8001`). App Platform polls it automatically per `infra/do/app.yaml`. For Droplet deployments the deploy script polls it locally before exiting.
+
+Manual check:
+
+```sh
+curl -fsS https://<live-url>/healthz
+# or for Droplet:
+curl -fsS http://<public-ip>:8001/healthz
+```
+
+---
+
+## TLS / HTTPS
+
+- **App Platform**: TLS is provisioned automatically. The app is reachable at `https://<name>-<id>.ondigitalocean.app`. Set `LG_REMOTE_API_TRUST_FORWARDED_HEADERS=true`.
+- **Droplet**: HTTP only by default. Add nginx + certbot (see [Droplet target](#droplet-target) above). Set `LG_REMOTE_API_TRUST_FORWARDED_HEADERS=false` until a trusted proxy is in place.
+
+---
+
+## Updating / rolling deploys
+
+### App Platform
+
+```sh
+# Re-push a new image tag and update the app spec
+DO_REGISTRY=lula-orch DO_APP_NAME=lula-orch bash scripts/do_deploy.sh <new-tag>
+```
+
+App Platform performs a zero-downtime rolling replacement automatically once the new image is pushed and the app is updated.
+
+### Droplet
+
+```sh
+DO_REGISTRY=lula-orch DO_DEPLOY_TARGET=droplet bash scripts/do_deploy.sh <new-tag>
+```
+
+---
+
+## 4. DOKS + gVisor (Kubernetes hardened deployment)
+
+### Why gVisor
+
+The Rust runner executes arbitrary tool invocations (shell commands, file system ops) on behalf of LLM agents. On App Platform and plain Docker the runner shares the host kernel — a compromised tool invocation can escape the container via kernel exploits. gVisor interposes every syscall through its own user-space kernel (`runsc`), so the host kernel is never directly reachable from inside the runner container.
+
+The orchestrator (Python API) does **not** need gVisor — only the runner pod is scheduled on gVisor nodes, reducing the overhead to where it matters.
+
+### Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| `doctl` ≥ 1.100 | `doctl auth init` must succeed |
+| `kubectl` | Configured by the deploy script via `doctl kubernetes cluster kubeconfig save` |
+| cert-manager | Install once per cluster: `kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml` |
+| nginx ingress controller | Install once: `kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml` |
+| `DO_REGISTRY` env var | DOCR registry name |
+| Secret env vars | See [Environment variables](#environment-variables) |
+
+### Step-by-step
+
+#### 1. Create the cluster and gVisor node pool
+
+```sh
+export DO_REGISTRY=lula-orch
+bash scripts/do_deploy_k8s.sh
+```
+
+The script creates:
+- A **default node pool** (2 × `s-2vcpu-4gb`) for the control plane / orchestrator workloads.
+- A **`gvisor-pool`** (2 × `s-2vcpu-4gb`) tainted `sandbox=gvisor:NoSchedule` and labeled `sandbox=gvisor`.
+
+#### 2. Install gVisor on the node pool (automatic via DaemonSet)
+
+`infra/k8s/gvisor-installer.yaml` deploys a DaemonSet to every `sandbox=gvisor` node. The privileged init container:
+
+1. Downloads `runsc` from the official gVisor release bucket.
+2. Installs it to `/usr/local/sbin/runsc`.
+3. Patches `/etc/containerd/config.toml` to register the `runsc` runtime handler.
+4. Restarts `containerd` via `nsenter` into the host PID namespace.
+
+The main container is a pause image that keeps the DaemonSet Pod running so Kubernetes can track node readiness.
+
+#### 3. Apply manifests
+
+```sh
+# After cluster is up and gVisor DaemonSet is running:
+kubectl apply -f infra/k8s/gvisor-runtime-class.yaml
+kubectl apply -f infra/k8s/secrets.yaml        # EDIT secrets first!
+kubectl apply -f infra/k8s/deployment.yaml
+kubectl apply -f infra/k8s/service.yaml
+kubectl apply -f infra/k8s/ingress.yaml
+```
+
+The deploy script applies them all in one pass.
+
+#### 4. Set secrets
+
+Edit `infra/k8s/secrets.yaml` and replace every `REPLACE_ME` value before applying:
+
+```sh
+# Edit the file, then:
+kubectl apply -f infra/k8s/secrets.yaml
+kubectl rollout restart deployment/lula-orch -n lula-orch
+```
+
+#### 5. Set DNS
+
+Point your domain's A record to the LoadBalancer IP printed by the deploy script:
+
+```sh
+kubectl get svc -n ingress-nginx ingress-nginx-controller \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+```
+
+cert-manager will issue a Let's Encrypt certificate automatically once DNS propagates.
+
+### `runtimeClassName: gvisor` — what it means
+
+Setting `runtimeClassName: gvisor` in `infra/k8s/deployment.yaml` instructs the kubelet to create the pod's container using the `runsc` OCI runtime instead of `runc`. Every syscall from the container is intercepted by gVisor's user-space kernel. The container **cannot** directly reach the host kernel, making kernel CVE exploitation significantly harder.
+
+Without this field the pod falls back to `runc` (standard container isolation). The field is enforced — if the RuntimeClass `gvisor` does not exist on the node, the pod fails to schedule.
+
+### Cost guidance
+
+| Configuration | Nodes | Size | Cost/mo (approx) |
+|---|---|---|---|
+| Minimum viable (1+1) | 1 default + 1 gVisor | `s-2vcpu-4gb` | ~$24 |
+| Recommended (2+2) | 2 default + 2 gVisor | `s-2vcpu-4gb` | ~$48 |
+| DOCR Starter | — | 1 repo / 500 MB | Free |
+
+### Security posture comparison
+
+| Dimension | App Platform | Droplet (Docker) | DOKS + gVisor |
+|---|---|---|---|
+| Kernel isolation | Shared (managed) | Shared | gVisor user-space kernel per pod |
+| Kernel CVE exposure | Low (DO-managed) | High | Very low |
+| Container escape risk | Medium | High | Low |
+| Managed TLS | Yes | No (manual nginx+certbot) | Yes (cert-manager) |
+| Rolling deploy | Yes (zero-downtime) | No (brief downtime) | Yes (Kubernetes rollout) |
+| Ops complexity | Low | Medium | High |
+| Cost/mo | ~$5 | ~$6–12 | ~$24–48 |
+| Best for | Dev / personal | Cost-sensitive | Production / regulated |
+
+The script SSHes in, pulls the new image, stops the old container, and starts the new one. There is a brief (~5 s) downtime window during container replacement.
+
+---
+
+## Cost guidance
+
+| Option | Size | vCPU | RAM | Cost/mo |
+|---|---|---|---|---|
+| App Platform Basic | `apps-s-1vcpu-1gb` | 1 | 1 GB | ~$5 |
+| Droplet Basic | `s-1vcpu-2gb` | 1 | 2 GB | ~$6 |
+| Droplet Standard | `s-2vcpu-4gb` | 2 | 4 GB | ~$12 |
+| DOCR Starter | — | — | 1 repo, 500 MB | Free |
+
+App Platform is recommended for simplicity (managed TLS, rolling deploys, zero infra management). Droplet is preferred if you need direct SSH access, GPU attachment, or want to minimise cost at the expense of manual TLS setup.
+
+---
+
+## Quick-start reference
+
+```sh
+# One-time setup
+doctl auth init
+doctl registry create lula-orch --region nyc3
+
+# Deploy (App Platform)
+export DO_REGISTRY=lula-orch
+export LG_REMOTE_API_BEARER_TOKEN=<secret>
+export LG_RUNNER_API_KEY=<secret>
+export DIGITAL_OCEAN_MODEL_ACCESS_KEY=<secret>
+bash scripts/do_deploy.sh
+
+# Deploy (Droplet)
+export DO_DEPLOY_TARGET=droplet
+export DO_DROPLET_SSH_KEY=<fingerprint>
+bash scripts/do_deploy.sh
+```

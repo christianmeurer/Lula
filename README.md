@@ -13,9 +13,9 @@ Lula is a full-stack agentic coding platform with:
 - **Algorithmic context compression** — stable-prefix / working-set split, token budgets, salience-scored fact packs
 - **Full MCP protocol surface** — `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get` with zero-trust schema hash pinning
 - **Episodic + procedural memory** — cross-session recovery facts and verified tool sequences persisted in SQLite
-- **Hardened Rust runner** — Linux namespace isolation (`unshare`), command allowlist, approval gates, redaction pipeline
+- **Hardened Rust runner** — Linux namespace isolation (`unshare`), command allowlist, approval gates, redaction pipeline, prompt-injection detection
 - **Live run API** — `RemoteAPIService` with durable SQLite run store, multi-user namespace isolation, rate limiting, and a frontend SPA at `GET /`
-- **VS Code extension** — configurable settings, inline diff, run history, remote API polling
+- **VS Code extension** — configurable settings, inline diff, run history, verifier report panel, remote API polling
 - **GitHub Actions CI** — Python lint/type/test, Rust clippy/test/fmt, Docker build, optional E2E with secrets
 
 ## Architecture
@@ -129,21 +129,27 @@ All runtime config lives in `configs/runtime.{dev|stage|prod}.toml`.
 ## Orchestration graph
 
 ```
-ingest → router → context_builder → planner
-                                       ↓
-                                  policy_gate
-                                       ↓
-                                   executor
-                                       ↓
-                                   verifier ──(retry)──→ context_builder
-                                       │                       ↑
-                                       └──(discard_reset)──────┘
-                                       │
-                                       ↓
-                                   reporter
+        ingest
+          ↓
+     policy_gate ──────────────┐ (budgets exhausted)
+          ↓ (conditionally)    │
+  context_builder              │
+          ↓                    │
+       router                  │
+          ↓                    │
+       planner                 │
+          ↓                    │
+      executor                 │
+          ↓                    │
+      verifier                 │
+          ↓ (retry)            │
+     [policy_gate]             │
+          │ (success)          │
+          ↓                    ↓
+       reporter ────────────> END
 ```
 
-Recovery routing: verifier classifies failures into `verification_failed`, `architecture_mismatch`, `budget_exceeded`, `test_failure_post_change`, `repeated_verification_failure`, and `acceptance_criteria_unmet`. Each class routes to the correct retry target with a structured `RecoveryPacket`.
+Recovery routing: `verifier` checks the outcome. If tools fail, it routes back to `policy_gate` for a bounded retry loop. `policy_gate` enforces loop budgets (`max_loops`). If budgets allow, `policy_gate` routes to `context_builder`, `router`, or `planner` based on the requested retry target. If budgets are exhausted or the verification succeeds, execution proceeds to `reporter`.
 
 ## Memory subsystems
 
@@ -155,9 +161,16 @@ Recovery routing: verifier classifies failures into `verification_failed`, `arch
 | Procedural cache | SQLite (`procedure_cache_path`) | Cross-session |
 | Checkpoints | SQLite (`checkpoint.db_path`) | Resumable runs |
 
+## Streaming inference
+
+`InferenceClient.chat_completion_stream()` yields SSE tokens as an `AsyncGenerator[str, None]`, keeping the interactive lane non-blocking during graph execution. The `collect_stream()` helper concatenates all tokens into a single string for callers that need the full response. This is used in the interactive lane so that partial tokens are surfaced progressively rather than blocking the entire graph step.
+
 ## Security
 
 - **Rust runner sandbox**: Linux namespace isolation via `unshare --pid --mount --net --fork` when `LG_RUNNER_LINUX_NAMESPACE_ENABLED=1`; falls back to process-level isolation.
+- **Prompt injection detection**: `detect_prompt_injection` in `rs/runner/src/sandbox.rs` scans all subprocess argument strings for bidirectional Unicode overrides, RCE shell vectors, and cryptomining patterns before any exec call is permitted.
+- **Subprocess environment isolation**: `env_clear()` is called before every exec, then an allowlist of safe variables is re-injected — no host environment leaks into sandboxed subprocesses.
+- **Path traversal guard**: `resolve_under_root` / `normalize_path` in the runner rejects `../` traversal even for paths that do not yet exist on disk.
 - **MCP zero-trust**: optional `schema_hash` per server in config; runner refuses to inject tools if hash mismatches.
 - **Constant-time auth**: bearer token comparison uses XOR-fold to prevent timing side-channels.
 - **Redaction pipeline**: runner strips paths, usernames, and IP addresses from MCP responses before returning to orchestrator.
@@ -185,12 +198,16 @@ The extension (`vscode-extension/`) provides:
 - Local runner launch (`cargo run` or pre-built binary via `lula.runnerBinaryPath`)
 - Remote API mode with live status polling
 - Inline diff of `apply_patch` results
+- Verifier report panel — shows the verification JSON inline after each run
+- Pending approval section with **Approve** / **Reject** buttons for gated exec calls
 - Run history (last N runs, configurable)
 - All values configurable via VS Code settings — no hardcoded addresses or keys
 
 Settings: `lula.runnerBindAddress`, `lula.runnerApiKey`, `lula.runnerBinaryPath`, `lula.remoteApiBaseUrl`, `lula.remoteApiBearerToken`, `lula.showInlineDiff`, `lula.maxRunHistory`.
 
-## Docker deployment
+## Deployment
+
+### Docker
 
 ```bash
 # Full image (Rust runner + Python API)
@@ -212,7 +229,21 @@ LG_REMOTE_API_RATE_LIMIT_RPS=60
 LG_RUNNER_LINUX_NAMESPACE_ENABLED=1
 ```
 
-## Azure deployment
+### DigitalOcean App Platform
+
+```bash
+DO_REGISTRY=lula-orch bash scripts/do_deploy.sh
+```
+
+### DOKS + gVisor (Kubernetes hardened)
+
+```bash
+DO_REGISTRY=lula-orch bash scripts/do_deploy_k8s.sh
+```
+
+Pods run under `runtimeClassName: gvisor` (see `infra/k8s/`) for kernel-level sandboxing on top of the Linux namespace isolation already enforced by the Rust runner.
+
+### Azure Container Apps
 
 ```bat
 set AZ_RESOURCE_GROUP=rg-lula
@@ -228,8 +259,8 @@ scripts\azure_deploy_personal.cmd
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`):
-- `python-tests`: ruff lint, mypy, pytest (350 tests)
-- `rust-tests`: clippy, cargo test (108 tests), fmt check
+- `python-tests`: ruff lint, mypy, pytest (~370 tests)
+- `rust-tests`: clippy, cargo test (~124 tests), fmt check
 - `docker-build`: combined and Python-only image builds
 - `e2e-smoke`: E2E smoke tests against live model (gated on `MODEL_ACCESS_KEY` secret)
 - `e2e.yml`: manual `workflow_dispatch` for full live model E2E
@@ -266,6 +297,7 @@ uv run lg-orch trace-serve artifacts/runs --port 8000
 ## Core documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — subsystem overview
+- [`docs/deployment_digitalocean.md`](docs/deployment_digitalocean.md) — DigitalOcean App Platform and DOKS deployment guide
 - [`docs/sota_2026_plan.md`](docs/sota_2026_plan.md) — roadmap and gap analysis
 - [`docs/platform_console.md`](docs/platform_console.md) — console and API reference
 - [`docs/langgraph_plan.md`](docs/langgraph_plan.md) — LangGraph design notes
