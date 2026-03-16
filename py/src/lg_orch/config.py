@@ -246,6 +246,14 @@ def _parse_model_endpoint(models_raw: dict[str, object], key: str) -> ModelEndpo
         model = "deterministic"
     temperature = _parse_float(section.get("temperature", 0.0), default=0.0)
 
+    env_key_prefix = key.upper()  # "PLANNER" or "ROUTER"
+    env_provider = os.environ.get(f"LG_{env_key_prefix}_PROVIDER", "").strip()
+    env_model = os.environ.get(f"LG_{env_key_prefix}_MODEL", "").strip()
+    if env_provider:
+        provider = env_provider
+    if env_model:
+        model = env_model
+
     return ModelEndpoint(provider=provider, model=model, temperature=temperature)
 
 
