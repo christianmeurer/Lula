@@ -8,7 +8,9 @@ from lg_orch.logging import get_logger
 from lg_orch.memory import (
     build_context_layers,
     ensure_history_policy,
+    get_compression_summary,
     prune_pre_verification_history,
+    record_compression_provenance,
 )
 from lg_orch.model_routing import record_model_route
 from lg_orch.tools import MCPClient, RunnerClient
@@ -304,8 +306,18 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
     repo_context["working_set"] = layers["working_set"]
     repo_context["planner_context"] = layers["planner_context"]
     repo_context["compression"] = layers["compression"]
-
-    provenance_raw = state.get("provenance", [])
+   
+    budgets_raw = state.get("budgets", {})
+    budgets = dict(budgets_raw) if isinstance(budgets_raw, dict) else {}
+    current_loop = int(budgets.get("current_loop", 0) or 0)
+   
+    out = record_compression_provenance(
+        state,
+        compression_result=layers,
+        current_loop=current_loop,
+    )
+   
+    provenance_raw = out.get("provenance", [])
     provenance = list(provenance_raw) if isinstance(provenance_raw, list) else []
     provenance.append(
         {
@@ -315,15 +327,16 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
             "compression": layers["compression"],
         }
     )
-
-    telemetry_raw = state.get("telemetry", {})
+   
+    telemetry_raw = out.get("telemetry", {})
     telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
     telemetry["context_budget"] = {
         "stable_prefix": repo_context["stable_prefix"],
         "working_set": repo_context["working_set"],
     }
-
-    out = {**state, "repo_context": repo_context, "provenance": provenance, "telemetry": telemetry}
+    telemetry["compression_summary"] = get_compression_summary(out)
+   
+    out = {**out, "repo_context": repo_context, "provenance": provenance[-20:], "telemetry": telemetry}
     out = append_event(
         out,
         kind="node",

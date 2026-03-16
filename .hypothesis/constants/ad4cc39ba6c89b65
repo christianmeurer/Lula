@@ -1,0 +1,4 @@
+# file: C:\Users\chris\Projects\LG-Orchestration-Platform\py\src\lg_orch\nodes\policy_gate.py
+# hypothesis_version: 6.151.4
+
+['_budget_context', '_budget_max_loops', '_config_policy', 'acceptance_checks', 'acceptance_ok', 'allow', 'allow_network', 'allowed_write_paths', 'budgets', 'checks', 'context', 'current_loop', 'deny', 'end', 'exit_code', 'failure_class', 'failure_fingerprint', 'guards', 'halt_reason', 'keep', 'loop', 'loop_budget', 'loop_summary', 'max_iterations', 'max_loops', 'name', 'network_default', 'node', 'ok', 'patch_bytes_limit', 'phase', 'plan', 'plan_action', 'plan_max_iterations', 'planner', 'policy_gate', 'policy_gate_failed', 'recovery', 'recovery_packet', 'remaining', 'retry_target', 'start', 'summary', 'tool', 'tool_calls_limit', 'tool_calls_used', 'verification']

@@ -5,7 +5,7 @@ from hashlib import sha256
 from typing import Any
 
 from lg_orch.logging import get_logger
-from lg_orch.memory import ensure_history_policy, prune_post_verification_history
+from lg_orch.memory import ensure_history_policy, get_compression_summary, prune_post_verification_history
 from lg_orch.model_routing import record_model_route, tool_routing_metadata
 from lg_orch.state import RecoveryAction, RecoveryPacket, VerificationCheck, VerifierReport
 from lg_orch.tools import RunnerClient
@@ -409,9 +409,22 @@ def _recovery_packet_payload(
     ).model_dump()
 
 
-def _loop_summary_entry(report: dict[str, Any], *, current_loop: int) -> dict[str, Any]:
+def _loop_summary_entry(
+    report: dict[str, Any],
+    *,
+    current_loop: int,
+    acceptance_criteria: list[str] | None = None,
+    acceptance_checks: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     recovery_packet_raw = report.get("recovery_packet", {})
     recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    criteria = acceptance_criteria if acceptance_criteria is not None else []
+    checks = acceptance_checks if acceptance_checks is not None else []
+    unmet_criteria = [
+        str(entry.get("criterion", "")).strip()
+        for entry in checks
+        if isinstance(entry, dict) and not bool(entry.get("ok", False))
+    ]
     return {
         "loop": current_loop,
         "failure_class": report.get("failure_class", ""),
@@ -424,6 +437,9 @@ def _loop_summary_entry(report: dict[str, Any], *, current_loop: int) -> dict[st
         "discard_reason": recovery_packet.get("discard_reason", ""),
         "recovery": report.get("recovery"),
         "recovery_packet": recovery_packet or None,
+        "acceptance_criteria": criteria,
+        "acceptance_unmet": unmet_criteria,
+        "acceptance_ok": report.get("acceptance_ok", False),
     }
 
 
@@ -806,18 +822,43 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
     loop_summaries = list(loop_summaries_raw) if isinstance(loop_summaries_raw, list) else []
     recovery_packet_raw = report.get("recovery_packet", {})
     recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else None
-    if not ok:
-        loop_summaries.append(_loop_summary_entry(report, current_loop=current_loop))
-        loop_summaries = loop_summaries[-5:]
-    facts = _updated_recovery_facts(state, report=report, current_loop=current_loop)
-    telemetry_raw = state.get("telemetry", {})
-    telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
-    diagnostics_raw = telemetry.get("diagnostics", [])
-    diagnostics_telemetry = list(diagnostics_raw) if isinstance(diagnostics_raw, list) else []
-    diagnostics_telemetry.extend(
-        _diagnostics_telemetry_entries(tool_results, current_loop=current_loop, report=report)
+    plan_raw = state.get("plan", {})
+    plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
+    acceptance_criteria_raw = plan.get("acceptance_criteria", [])
+    acceptance_criteria = (
+        [str(c).strip() for c in acceptance_criteria_raw if str(c).strip()]
+        if isinstance(acceptance_criteria_raw, list)
+        else []
     )
-    telemetry["diagnostics"] = diagnostics_telemetry[-20:]
+    acceptance_checks_raw = report.get("acceptance_checks", [])
+    acceptance_checks = (
+        [dict(c) for c in acceptance_checks_raw if isinstance(c, dict)]
+        if isinstance(acceptance_checks_raw, list)
+        else []
+    )
+
+    facts = state.get("facts", [])
+    telemetry = state.get("telemetry", {})
+    if not ok:
+        loop_summaries.append(
+            _loop_summary_entry(
+                report,
+                current_loop=current_loop,
+                acceptance_criteria=acceptance_criteria,
+                acceptance_checks=acceptance_checks,
+            )
+        )
+        loop_summaries = loop_summaries[-5:]
+        facts = _updated_recovery_facts(state, report=report, current_loop=current_loop)
+        telemetry_raw = state.get("telemetry", {})
+        telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
+        diagnostics_raw = telemetry.get("diagnostics", [])
+        diagnostics_telemetry = list(diagnostics_raw) if isinstance(diagnostics_raw, list) else []
+        diagnostics_telemetry.extend(
+            _diagnostics_telemetry_entries(tool_results, current_loop=current_loop, report=report)
+        )
+        telemetry["diagnostics"] = diagnostics_telemetry[-20:]
+        telemetry["compression_summary"] = get_compression_summary(state)
 
     out: dict[str, Any] = {
         **state,

@@ -173,12 +173,15 @@ Targets:
 - [`py/src/lg_orch/main.py`](../py/src/lg_orch/main.py)
 - [`py/src/lg_orch/checkpointing.py`](../py/src/lg_orch/checkpointing.py)
 - [`py/src/lg_orch/trace.py`](../py/src/lg_orch/trace.py)
-- storage/API files to be introduced
+- [`py/src/lg_orch/remote_api.py`](../py/src/lg_orch/remote_api.py)
+- [`py/src/lg_orch/run_store.py`](../py/src/lg_orch/run_store.py)
 
 Goal:
 
 - Add run listing, run detail, replay metadata, and durable storage.
 - Prefer SQLite first; leave Postgres and multi-user concerns for later.
+
+Status: **Completed**. The repository now has a usable HTTP run API with run listing, run detail, cancellation, trace-backed run detail views, and durable SQLite-backed storage for run metadata and recovery facts.
 
 ### Wave 4: provider expansion and routing maturity
 
@@ -194,6 +197,8 @@ Goal:
 - Keep DigitalOcean support intact.
 - Add another OpenAI-compatible provider path cleanly so platform choice is config-driven rather than hard-coded.
 - Surface provider latency, usage, and cache-related telemetry into routing decisions.
+
+Status: **Completed**. DigitalOcean and OpenAI-compatible providers are both wired through config-driven runtime settings, routing decisions are lane-aware, and inference telemetry now records provider/model identity, latency, usage, and cache-related metadata.
 
 ### Wave 5: parity-focused agent quality work
 
@@ -211,6 +216,8 @@ Goal:
 
 - Improve recovery quality, context compression, and evaluation discipline.
 - Measure progress against repeatable tasks instead of relying on anecdotal demos.
+
+Status: **Completed**. The current implementation carries recovery packets and loop summaries through planning and verification, builds stable-prefix and working-set context layers with compression provenance, recalls episodic recovery facts from durable storage, and measures these behaviors in the eval suite and canary task.
 
 ## 6. Practical file order
 
