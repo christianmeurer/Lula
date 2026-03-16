@@ -30,6 +30,12 @@ class EvalTask:
     budget_max_loops: int = 1
     expected_recovery_packet_present: bool = False
     description: str = ""
+    acceptance_criteria: list[str] = field(default_factory=list)
+    expected_tool_calls: list[str] = field(default_factory=list)
+    benchmark_class: str = ""
+    difficulty: str = ""
+    target_file: str = ""
+    target_function: str = ""
 
 
 def load_tasks(tasks_dir: Path) -> list[EvalTask]:
@@ -47,6 +53,12 @@ def load_tasks(tasks_dir: Path) -> list[EvalTask]:
                 budget_max_loops=int(data.get("budget_max_loops", 1)),
                 expected_recovery_packet_present=bool(data.get("expected_recovery_packet_present", False)),
                 description=str(data.get("description", "")),
+                acceptance_criteria=list(data.get("acceptance_criteria", [])),
+                expected_tool_calls=list(data.get("expected_tool_calls", [])),
+                benchmark_class=str(data.get("benchmark_class", "")),
+                difficulty=str(data.get("difficulty", "")),
+                target_file=str(data.get("target_file", "")),
+                target_function=str(data.get("target_function", "")),
             )
         )
     return tasks
@@ -72,6 +84,15 @@ def run_task(task: EvalTask, *, repo_root: Path) -> dict[str, Any]:
         }
     )
     return dict(output)
+
+
+def _score_tool_call_coverage(task: EvalTask, output: dict[str, Any]) -> bool:
+    if not task.expected_tool_calls:
+        return True
+    tool_results_raw = output.get("tool_results", [])
+    tool_results = tool_results_raw if isinstance(tool_results_raw, list) else []
+    used_tools = {str(r.get("tool", "")).strip() for r in tool_results if isinstance(r, dict)}
+    return all(t in used_tools for t in task.expected_tool_calls)
 
 
 def _score_recovery_packet(task: EvalTask, output: dict[str, Any]) -> bool:
@@ -149,6 +170,7 @@ def score_task(task: EvalTask, output: dict[str, Any]) -> dict[str, Any]:
         "acceptance_criteria_tracking": _score_acceptance_criteria_tracking(output),
         "failure_fingerprint_present": _score_failure_fingerprint_present(output),
         "compression_tracking": _score_compression_tracking(output),
+        "tool_call_coverage": _score_tool_call_coverage(task, output),
     }
     passed_checks = sum(1 for ok in checks.values() if ok)
     max_checks = len(checks)
@@ -210,6 +232,10 @@ def evaluate_tasks(
         1 for result in results
         if bool(result.get("checks", {}).get("compression_tracking", False))
     ) / total if total else 0.0
+    tool_call_coverage = sum(
+        1 for result in results
+        if bool(result.get("checks", {}).get("tool_call_coverage", False))
+    ) / total if total else 0.0
 
     return {
         "summary": {
@@ -225,6 +251,7 @@ def evaluate_tasks(
             "acceptance_criteria_tracking": acceptance_criteria_tracking,
             "failure_fingerprint_present": failure_fingerprint_present,
             "compression_tracking": compression_tracking,
+            "tool_call_coverage": tool_call_coverage,
         },
         "results": results,
     }
@@ -247,7 +274,8 @@ def _render_text_report(report: dict[str, Any]) -> str:
             f"loop_summary_quality={float(summary.get('loop_summary_quality', 0.0)):.2f} "
             f"acceptance_criteria_track={float(summary.get('acceptance_criteria_tracking', 0.0)):.2f} "
             f"failure_fingerprint={float(summary.get('failure_fingerprint_present', 0.0)):.2f} "
-            f"compression_track={float(summary.get('compression_tracking', 0.0)):.2f}"
+            f"compression_track={float(summary.get('compression_tracking', 0.0)):.2f} "
+            f"tool_call_coverage={float(summary.get('tool_call_coverage', 0.0)):.2f}"
         )
     ]
     for result in results:

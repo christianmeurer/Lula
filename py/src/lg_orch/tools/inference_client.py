@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import threading
 import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -231,6 +234,82 @@ class InferenceClient:
             cache_metadata=cache_metadata,
             headers=headers,
         )
+
+
+    async def chat_completion_stream(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        max_tokens: int = 1200,
+    ) -> AsyncGenerator[str, None]:
+        breaker = _get_breaker(self.base_url)
+        if not breaker.allow_request():
+            raise RuntimeError("circuit_open")
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max(1, int(max_tokens)),
+            "stream": True,
+        }
+        req_headers = {
+            "authorization": f"Bearer {self.api_key}",
+            "content-type": "application/json",
+        }
+
+        client = httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=httpx.Timeout(float(self.timeout_s)),
+        )
+        try:
+            @retry(
+                reraise=True,
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=0.2, min=0.2, max=2.0),
+                retry=retry_if_exception_type(httpx.TransportError),
+            )
+            async def _connect() -> httpx.Response:
+                return await client.post("/chat/completions", json=payload, headers=req_headers)
+
+            try:
+                resp = await _connect()
+                resp.raise_for_status()
+            except Exception:
+                breaker.record_failure()
+                raise
+
+            try:
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[len("data: "):]
+                    if data == "[DONE]":
+                        continue
+                    chunk = json.loads(data)
+                    delta = chunk["choices"][0]["delta"].get("content", "")
+                    if isinstance(delta, str) and delta:
+                        yield delta
+                breaker.record_success()
+            except Exception:
+                breaker.record_failure()
+                raise
+        finally:
+            await client.aclose()
+
+
+async def collect_stream(gen: AsyncGenerator[str, None]) -> str:
+    """Collect all tokens from an async generator into a single string."""
+    parts: list[str] = []
+    async for token in gen:
+        parts.append(token)
+    return "".join(parts)
 
 
 def _retry_wait_for_http(exc: httpx.HTTPStatusError, attempt: int) -> float:

@@ -30,6 +30,9 @@ The previous version of this document said the graph was still `planner -> execu
 | Algorithmic context compression | Repo map, AST summary, semantic hits, history pruning | No token budget, no stable-prefix vs ephemeral-context split, no map-reduce fact pack, no salience scoring, no compression telemetry | Context is gathered, but not strategically compressed for long-running loops |
 | MCP sampling/protocol readiness | `initialize`, `tools/list`, `tools/call`, redaction metadata, Python MCP wrapper | MCP tools are not injected into planning context, and support for `resources`, `prompts`, `roots`, and `sampling` is absent | The runner can speak a useful subset of MCP, but the orchestrator is not yet truly MCP-native |
 | llm-d style prefix-cache telemetry/affinity | Basic trace events, model-route logs, tool timings | No prompt-prefix segmentation, no cache key/candidate key, no cache hit/miss telemetry, no affinity tags, no provider usage metrics surfaced back into orchestration state | There is no way to optimize prompt locality or observe cache behavior across retries |
+| Streaming inference | No streaming path in inference client or runner HTTP layer | All LLM calls are blocking request/response; any context >4 k tokens creates a synchronous wait that blocks the entire graph step | Competitive products all stream; this is the single largest perceived latency gap |
+| Concurrent tool execution | `batch_execute_tool` in `rs/runner/src/main.rs` iterates calls in a serial `for` loop | Tool batches that could run in parallel (e.g. parallel file reads + search) pay full sequential latency | A `tokio::JoinSet` fan-out is a one-file change with high leverage |
+| Editor integration surface | `vscode-extension/src/extension.ts` is a stub; no tree view, diff preview, or approval UI | The platform has no viable distribution channel until the extension is functional | This is the primary user-facing gap versus Aider / continue.dev / Cursor |
 
 ## 3. Focused findings by subsystem
 
@@ -219,6 +222,25 @@ Goal:
 
 Status: **Completed**. The current implementation carries recovery packets and loop summaries through planning and verification, builds stable-prefix and working-set context layers with compression provenance, recalls episodic recovery facts from durable storage, and measures these behaviors in the eval suite and canary task.
 
+### Wave 6: execution quality, streaming, and distribution
+
+Targets:
+
+- [`rs/runner/src/main.rs`](../rs/runner/src/main.rs)
+- [`py/src/lg_orch/tools/inference_client.py`](../py/src/lg_orch/tools/inference_client.py)
+- [`vscode-extension/src/extension.ts`](../vscode-extension/src/extension.ts)
+- [`eval/run.py`](../eval/run.py)
+- new `eval/tasks/swe_bench_lite.json` or equivalent real-world benchmark fixture
+
+Goal:
+
+1. **Concurrent batch execution in the Rust runner.** Replace the serial `for` loop in `batch_execute_tool` with a `tokio::JoinSet` fan-out. This is a single-file change that removes the primary throughput bottleneck for multi-tool plans.
+2. **Streaming inference path.** Add an SSE or chunked-response path to `inference_client.py` so that long LLM calls stream tokens into state incrementally rather than blocking the graph step. Required for any interactive lane use.
+3. **VSCode extension activation.** Wire `vscode-extension/src/extension.ts` to at least: display current run status, show the last verifier report, and surface approval prompts for mutation plans. Without this, the platform has no viable distribution channel.
+4. **Outcome quality benchmark.** Add at least one repeatable real-world benchmark task (e.g. a SWE-bench Lite subset, or a curated internal set of 10 known-good bug-fix tasks) so that parity improvements can be measured against a pass rate, not only against structural behavior. The current eval suite tests routing and loop mechanics but does not measure whether the agent actually produces correct code.
+
+Status: **Pending.**
+
 ## 6. Practical file order
 
 If implementation starts immediately, the highest-leverage order is:
@@ -247,4 +269,68 @@ If implementation starts immediately, the highest-leverage order is:
 
 ## 8. Summary
 
-The repository is already past the “toy scaffold” stage. The next correct move is not to rebuild core orchestration; it is to package what already works into a usable product surface, add durable run state, make provider choice more portable, and then tighten recovery/evaluation quality until the system is visibly competitive.
+The repository is already past the "toy scaffold" stage. The next correct move is not to rebuild core orchestration; it is to package what already works into a usable product surface, add durable run state, make provider choice more portable, and then tighten recovery/evaluation quality until the system is visibly competitive.
+
+## 9. Next-generation architecture pillars (from field research)
+
+The following five innovations are drawn from a structured analysis of the 2026 agentic coding tool market. They represent the architectural gap between this platform's current state and true enterprise-grade autonomous software engineering. Each pillar is documented here as a forward-looking target; none requires immediate implementation, but all should inform the evolution of the platform beyond Wave 6.
+
+### 9.1 Neurosymbolic vericoding
+
+Current state-of-the-art agents — including this platform — rely entirely on probabilistic LLM output. Code is generated but never formally proven. This creates a "pull request review bottleneck": AI-generated code still requires expensive human or AI-on-AI review because correctness cannot be guaranteed.
+
+**Vericoding** separates the connectionist generation phase from a symbolic verification phase. The LLM generates both executable code and a mathematical proof that the code satisfies a formal specification. A deterministic proof checker (e.g. Dafny, Verus for Rust, or Lean) either accepts or rejects the proof and returns exact failure points. The LLM ingests that deterministic feedback to repair the proof or implementation, looping until the checker passes.
+
+Benchmark success rates (2026): Dafny 82%, Verus/Rust 44%, Lean 27%. The Rust runner in this platform is structurally well-positioned to integrate Verus since it already uses Rust as a first-class language.
+
+**Relevance to this codebase:** The verifier node currently inspects tool results probabilistically. A vericoding pass would replace or augment this with a formal proof step for critical Rust tool runner logic, starting with `sandbox.rs` boundary invariants (already partially annotated with Verus proof stubs).
+
+### 9.2 Tripartite cognitive memory architecture
+
+Current agents — including this platform — operate primarily within a single context window. Even with the `stable_prefix` / `working_set` compression layer already implemented, all memory is ephemeral: session knowledge is discarded when the run ends.
+
+A **Tripartite Cognitive Architecture** adds two persistent layers alongside the in-context working memory:
+
+| Layer | Function | Implementation path |
+|---|---|---|
+| **Episodic** | Stores past events, failures, and outcomes across sessions; enables "I saw this bug pattern before" recall | Vectorized chronological event logs; semantic search over run history; already partially present via `loop_summaries` and `episodic_facts` in `memory.py` |
+| **Semantic** | Encodes domain knowledge, API contracts, architectural rules, and codebase relationships | Knowledge graph backed by vector store; surfaced via MCP `resources/list`; already partially present via AST index and semantic hits in `context_builder.py` |
+| **Procedural** | Stores validated action sequences for repeatable tasks (e.g. "run pytest in this repo") | Action cache / procedure cache; already partially present via `procedure_cache.py` |
+
+The gap is persistence: episodic and semantic facts currently live only within a single run. Connecting `run_store.py` and `memory.py` to a vector-backed long-term store (SQLite FTS or pgvector) would complete this layer.
+
+### 9.3 Cross-repository microservice orchestration
+
+This platform currently operates on a single workspace directory. Enterprise software is built on distributed microservice architectures where a single feature may require synchronized changes across multiple repositories.
+
+The path forward requires:
+
+1. **Repository-level graph indexing** — a SCIP or REPOGRAPH-style index that maps symbol definitions and call sites across repo boundaries, allowing the planner to predict breaking changes before writing code.
+2. **Sub-agent fan-out** — the `MetaOrchState` and `meta_graph.py` already define the data model for sub-agent decomposition. The missing piece is a scheduler that enforces dependency ordering (FrontendAgent waits for PaymentAgent to pass tests) and uses git worktree isolation to prevent parallel agents from conflicting on shared files.
+3. **Multi-provider routing** — routing decisions that span sub-agent assignments, not just model selection within a single run.
+
+### 9.4 Agentic self-healing testing loop
+
+Beyond the current verify/retry loop, a self-healing testing agent would:
+
+- **Continuously monitor** code commits and DOM/API changes without human initiation.
+- **Risk-prioritize** test execution based on the blast radius of each change (using semantic memory of prior failures).
+- **Auto-repair broken tests** when a legitimate application change causes a test to fail due to selector or API changes — committing the repaired test back to the repo.
+- **Predict failures** before they manifest using historical defect patterns and synthetic edge-case generation.
+
+The `verifier` node is the correct insertion point. The gap is: (a) test repair as a first-class plan step, not just a failure signal; (b) continuous monitoring mode (the platform currently runs in request/response mode only).
+
+### 9.5 Kubernetes-native hardware sandboxing (IDEsaster mitigation)
+
+The "IDEsaster" vulnerability class (documented in CVE-2025-49150, CVE-2025-53536) exploits the trust that AI coding environments place in their host OS. Indirect prompt injections — hidden in README files, third-party source code, or malicious MCP servers — can cause agents to modify IDE configuration files and achieve Remote Code Execution.
+
+This platform already has significant mitigations:
+- Command allowlist enforcement in `rs/runner/src/tools/exec.rs`
+- Path boundary enforcement in `rs/runner/src/config.rs`
+- Network-deny-by-default policy in config
+- Prompt injection detection via `detect_prompt_injection()` in `rs/runner/src/sandbox.rs`
+- MCP endpoint redaction metadata
+
+The remaining gap is **host isolation**: the runner currently executes on the developer's machine or in a Docker container with shared kernel access. Full mitigation requires ephemeral gVisor or Kata Container sandboxes orchestrated via Kubernetes, where each tool invocation runs in a fresh, hardware-isolated environment that is destroyed after the task completes. Until then, the `sandbox.rs` `SafeFallback` mode (command allowlist + path scoping) is the practical defense perimeter.
+
+**Kubernetes CRD sandbox** is listed in `## 4.2 Keep future-facing` and remains the correct classification for a project at this maturity stage. The `detect_prompt_injection()` function added in Wave 6 is the pragmatic near-term hardening step.

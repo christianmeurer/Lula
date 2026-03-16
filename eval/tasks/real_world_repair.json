@@ -1,0 +1,21 @@
+{
+  "id": "real-world-repair-001",
+  "request": "The function `approx_token_count` in py/src/lg_orch/memory.py returns 0 for an empty string. Add a guard so that empty input always returns 0 without dividing, and add a check that a single space character returns at least 1. Write the fix and verify it with pytest.",
+  "expected_intent": "code_change",
+  "expected_halt_reason": "",
+  "require_final": true,
+  "expected_acceptance_ok": true,
+  "budget_max_loops": 3,
+  "expected_recovery_packet_present": false,
+  "description": "Real-world repair benchmark: fix a known edge-case in memory.approx_token_count. Measures whether the agent can (1) locate the function, (2) apply a minimal correct patch, and (3) pass verification in ≤3 loops. Pass rate on this task is the primary outcome quality metric.",
+  "acceptance_criteria": [
+    "approx_token_count('') == 0",
+    "approx_token_count(' ') >= 1",
+    "all existing memory tests still pass"
+  ],
+  "expected_tool_calls": ["read_file", "apply_patch", "exec"],
+  "benchmark_class": "real_world_repair",
+  "difficulty": "easy",
+  "target_file": "py/src/lg_orch/memory.py",
+  "target_function": "approx_token_count"
+}

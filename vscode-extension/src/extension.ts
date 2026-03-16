@@ -43,6 +43,9 @@ interface ViewModel {
   runHistory: RunHistoryEntry[];
   showInlineDiff: boolean;
   inlineDiff: string;
+  verifierReport: string;
+  pendingApproval: boolean;
+  pendingApprovalSummary: string;
 }
 
 interface RemoteRunDetails {
@@ -54,6 +57,9 @@ interface RemoteRunDetails {
   trace_path?: unknown;
   trace_ready?: unknown;
   trace?: unknown;
+  pending_approval?: unknown;
+  pending_approval_summary?: unknown;
+  verification?: unknown;
 }
 
 interface RemoteRunLogs {
@@ -67,10 +73,13 @@ class LgOrchExtension {
   private latestTracePath: string | null = null;
   private latestFinalOutput = '';
   private latestInlineDiff = '';
+  private latestVerifierReport = '';
   private runnerStatus = 'stopped';
   private requestStatus = 'idle';
   private requestRunning = false;
   private activeRemoteRunId: string | null = null;
+  private pendingApproval = false;
+  private pendingApprovalSummary = '';
   private readonly runHistory: RunHistoryEntry[] = [];
 
   private chatParticipant: vscode.ChatParticipant | undefined;
@@ -200,6 +209,19 @@ class LgOrchExtension {
         return;
       case 'clearRunHistory':
         this.runHistory.splice(0, this.runHistory.length);
+        this.refresh();
+        return;
+      case 'approveRun':
+        this.appendLog('[approval] user approved');
+        this.pendingApproval = false;
+        this.pendingApprovalSummary = '';
+        this.refresh();
+        return;
+      case 'rejectRun':
+        this.appendLog('[approval] user rejected');
+        this.pendingApproval = false;
+        this.pendingApprovalSummary = '';
+        this.requestStatus = 'rejected';
         this.refresh();
         return;
       default:
@@ -351,6 +373,9 @@ class LgOrchExtension {
     this.latestTracePath = null;
     this.latestFinalOutput = '';
     this.latestInlineDiff = '';
+    this.latestVerifierReport = '';
+    this.pendingApproval = false;
+    this.pendingApprovalSummary = '';
     this.appendLog(`[run] request: ${request}`);
     progressCallback?.('Initializing run...');
     this.refresh();
@@ -422,6 +447,7 @@ class LgOrchExtension {
     const summary = await this.findLatestTrace(workspaceRoot);
     this.latestTracePath = summary.tracePath;
     this.latestFinalOutput = summary.finalOutput;
+    this.latestVerifierReport = summary.verifierReport;
 
     if (summary.tracePath) {
       this.appendLog(`[trace] latest: ${summary.tracePath}`);
@@ -658,6 +684,24 @@ class LgOrchExtension {
       if (this.isShowInlineDiff()) {
         this.latestInlineDiff = this.extractInlineDiff(detail.trace);
       }
+      if (detail.trace.verification !== undefined && detail.trace.verification !== null) {
+        try {
+          this.latestVerifierReport = JSON.stringify(detail.trace.verification, null, 2);
+        } catch {
+          this.latestVerifierReport = String(detail.trace.verification);
+        }
+      }
+    }
+
+    if (detail.pending_approval === true) {
+      this.pendingApproval = true;
+      this.pendingApprovalSummary = typeof detail.pending_approval_summary === 'string'
+        ? detail.pending_approval_summary : '';
+    }
+
+    if (!isRemoteRunInProgress(this.requestStatus)) {
+      this.pendingApproval = false;
+      this.pendingApprovalSummary = '';
     }
 
     this.refresh();
@@ -837,14 +881,14 @@ class LgOrchExtension {
     }
   }
 
-  private async findLatestTrace(workspaceRoot: string): Promise<TraceSummary> {
+  private async findLatestTrace(workspaceRoot: string): Promise<TraceSummary & { verifierReport: string }> {
     const traceDir = path.join(workspaceRoot, 'artifacts', 'runs');
 
     let names: string[];
     try {
       names = await fs.readdir(traceDir);
     } catch {
-      return { tracePath: null, finalOutput: '' };
+      return { tracePath: null, finalOutput: '', verifierReport: '' };
     }
 
     const candidates = await Promise.all(
@@ -858,7 +902,7 @@ class LgOrchExtension {
     );
 
     if (candidates.length === 0) {
-      return { tracePath: null, finalOutput: '' };
+      return { tracePath: null, finalOutput: '', verifierReport: '' };
     }
 
     candidates.sort((left, right) => right.mtimeMs - left.mtimeMs);
@@ -868,15 +912,25 @@ class LgOrchExtension {
       const raw = await fs.readFile(latest.fullPath, 'utf8');
       const parsed: unknown = JSON.parse(raw);
       const finalOutput = isRecord(parsed) ? this.formatOutput(parsed.final) : '';
+      let verifierReport = '';
+      if (isRecord(parsed) && parsed.verification !== undefined && parsed.verification !== null) {
+        try {
+          verifierReport = JSON.stringify(parsed.verification, null, 2);
+        } catch {
+          verifierReport = String(parsed.verification);
+        }
+      }
       return {
         tracePath: this.toDisplayPath(workspaceRoot, latest.fullPath),
         finalOutput,
+        verifierReport,
       };
     } catch (error: unknown) {
       this.appendLog(`[trace] failed to parse ${latest.fullPath}: ${asErrorMessage(error)}`);
       return {
         tracePath: this.toDisplayPath(workspaceRoot, latest.fullPath),
         finalOutput: '',
+        verifierReport: '',
       };
     }
   }
@@ -957,6 +1011,9 @@ class LgOrchExtension {
       runHistory: [...this.runHistory].reverse(),
       showInlineDiff: this.isShowInlineDiff(),
       inlineDiff: this.latestInlineDiff,
+      verifierReport: this.latestVerifierReport,
+      pendingApproval: this.pendingApproval,
+      pendingApprovalSummary: this.pendingApprovalSummary,
     };
   }
 
@@ -1059,9 +1116,23 @@ class LgOrchExtension {
       </div>
     </section>
 
+    <section id="approvalSection" style="display:none">
+      <h2>&#x26A0; Pending Approval</h2>
+      <div id="approvalSummary" style="padding:8px;background:var(--vscode-inputValidation-warningBackground);border-radius:4px;"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button id="approveBtn">Approve</button>
+        <button id="rejectBtn">Reject</button>
+      </div>
+    </section>
+
     <section>
       <h2>Final Output</h2>
       <pre id="finalOutput"></pre>
+    </section>
+
+    <section id="verifierSection">
+      <h2>Verifier Report</h2>
+      <pre id="verifierReport"></pre>
     </section>
 
     <section id="diffSection" style="display:none">
@@ -1123,6 +1194,25 @@ class LgOrchExtension {
           diffSection.style.display = 'none';
         }
 
+        const verifierReportEl = document.getElementById('verifierReport');
+        const verifierSection = document.getElementById('verifierSection');
+        if (state.verifierReport) {
+          verifierReportEl.textContent = state.verifierReport;
+          verifierSection.style.display = '';
+        } else {
+          verifierReportEl.textContent = '';
+          verifierSection.style.display = 'none';
+        }
+
+        const approvalSection = document.getElementById('approvalSection');
+        const approvalSummary = document.getElementById('approvalSummary');
+        if (state.pendingApproval) {
+          approvalSummary.textContent = state.pendingApprovalSummary || 'Mutation plan awaiting approval.';
+          approvalSection.style.display = '';
+        } else {
+          approvalSection.style.display = 'none';
+        }
+
         const historyContainer = document.getElementById('runHistory');
         historyContainer.innerHTML = '';
         for (const entry of (state.runHistory || [])) {
@@ -1137,6 +1227,13 @@ class LgOrchExtension {
 
       document.getElementById('clearHistory').addEventListener('click', () => {
         vscodeApi.postMessage({ type: 'clearRunHistory' });
+      });
+
+      document.getElementById('approveBtn').addEventListener('click', () => {
+        vscodeApi.postMessage({ type: 'approveRun' });
+      });
+      document.getElementById('rejectBtn').addEventListener('click', () => {
+        vscodeApi.postMessage({ type: 'rejectRun' });
       });
     </script>
   </body>

@@ -266,7 +266,7 @@ def test_score_task_has_seven_checks() -> None:
             "verification": {"acceptance_ok": False},
         },
     )
-    assert len(result["checks"]) == 10
+    assert len(result["checks"]) == 11
 
 
 def test_evaluate_tasks_summary_has_recovery_keys() -> None:
