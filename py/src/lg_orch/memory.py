@@ -18,6 +18,8 @@ _CONTEXT_BUDGET_DEFAULTS: dict[str, int] = {
     "tool_result_summary_chars": 480,
 }
 
+_COMPRESSION_PROVENANCE_VERSION = 1
+
 HistoryPolicy = dict[str, int]
 
 
@@ -485,8 +487,108 @@ def build_context_layers(
             },
         },
     }
+    
+    
+def record_compression_provenance(
+    state: dict[str, Any],
+    *,
+    compression_result: dict[str, Any],
+    current_loop: int,
+) -> dict[str, Any]:
+    provenance = _provenance(state)
+    compression_raw = compression_result.get("compression", {})
+    compression = dict(compression_raw) if isinstance(compression_raw, dict) else {}
+    pressure_raw = compression.get("pressure", {})
+    pressure = dict(pressure_raw) if isinstance(pressure_raw, dict) else {}
+    overall_raw = pressure.get("overall", {})
+    overall = dict(overall_raw) if isinstance(overall_raw, dict) else {}
 
+    stable_decisions_raw = compression.get("stable_prefix", [])
+    stable_decisions = (
+        [d for d in stable_decisions_raw if isinstance(d, dict)]
+        if isinstance(stable_decisions_raw, list)
+        else []
+    )
+    working_decisions_raw = compression.get("working_set", [])
+    working_decisions = (
+        [d for d in working_decisions_raw if isinstance(d, dict)]
+        if isinstance(working_decisions_raw, list)
+        else []
+    )
 
+    compressed_segments = int(overall.get("compressed_segments", 0))
+    dropped_segments = int(overall.get("dropped_segments", 0))
+    pressure_score = int(overall.get("score", 0))
+
+    provenance.append(
+        {
+            "event": "context_compression",
+            "version": _COMPRESSION_PROVENANCE_VERSION,
+            "loop": current_loop,
+            "stable_prefix_compressed": sum(
+                1 for d in stable_decisions if str(d.get("action", "")).strip() == "compressed"
+            ),
+            "stable_prefix_dropped": sum(
+                1 for d in stable_decisions if str(d.get("action", "")).strip() == "dropped"
+            ),
+            "working_set_compressed": sum(
+                1 for d in working_decisions if str(d.get("action", "")).strip() == "compressed"
+            ),
+            "working_set_dropped": sum(
+                1 for d in working_decisions if str(d.get("action", "")).strip() == "dropped"
+            ),
+            "total_compressed": compressed_segments,
+            "total_dropped": dropped_segments,
+            "pressure_score": pressure_score,
+            "stable_prefix_decisions": stable_decisions[:5],
+            "working_set_decisions": working_decisions[:5],
+        }
+    )
+    return {**state, "provenance": provenance[-20:]}
+    
+    
+def get_compression_summary(state: dict[str, Any]) -> dict[str, Any]:
+    provenance = _provenance(state)
+    compression_events = [
+        entry
+        for entry in provenance
+        if isinstance(entry, dict) and str(entry.get("event", "")).strip() == "context_compression"
+    ]
+    if not compression_events:
+        return {"total_events": 0, "total_compressed": 0, "total_dropped": 0, "max_pressure": 0}
+
+    total_compressed = sum(int(e.get("total_compressed", 0)) for e in compression_events)
+    total_dropped = sum(int(e.get("total_dropped", 0)) for e in compression_events)
+    max_pressure = max(int(e.get("pressure_score", 0)) for e in compression_events)
+    loops_with_compression = [
+        int(e.get("loop", 0)) for e in compression_events if int(e.get("total_compressed", 0)) > 0
+    ]
+
+    return {
+        "total_events": len(compression_events),
+        "total_compressed": total_compressed,
+        "total_dropped": total_dropped,
+        "max_pressure": max_pressure,
+        "loops_with_compression": loops_with_compression,
+        "last_event": compression_events[-1] if compression_events else None,
+    }
+    
+    
+__all__ = [
+    "HistoryPolicy",
+    "approx_token_count",
+    "build_context_layers",
+    "context_budget_settings",
+    "dedupe_semantic_hits",
+    "ensure_history_policy",
+    "get_compression_summary",
+    "prune_post_verification_history",
+    "prune_pre_verification_history",
+    "record_compression_provenance",
+    "summarize_tool_result",
+]
+    
+    
 def ensure_history_policy(state: dict[str, Any]) -> dict[str, Any]:
     policy_raw = state.get("history_policy", {})
     policy_src = policy_raw if isinstance(policy_raw, dict) else {}

@@ -1,2 +1,4 @@
 - Minimal diff.
+- Batch independent reads, then patch once.
+- Re-read the target immediately before editing if it changed during the task.
 - Update tests or docs only when behavior changes.

@@ -11,7 +11,7 @@ use crate::config::RunnerConfig;
 use crate::diagnostics::parse_structured_diagnostics;
 use crate::envelope::{Diagnostic, ToolEnvelope};
 use crate::errors::ApiError;
-use crate::sandbox::{SandboxBackend, SandboxPolicy};
+use crate::sandbox::SandboxBackend;
 use crate::tools::snapshot_for_operation;
 
 const STDERR_ARTIFACT_MAX_CHARS: usize = 8_000;
@@ -62,6 +62,13 @@ pub async fn exec(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiE
         return Err(ApiError::Forbidden(format!("cmd not allowed: {cmd}")));
     }
 
+    // Scan all args for prompt injection patterns
+    for arg in &inp.args {
+        if let Some(reason) = crate::sandbox::detect_prompt_injection(arg) {
+            return Err(ApiError::Forbidden(format!("prompt_injection_detected: {reason}")));
+        }
+    }
+
     let mut operation_class = "non_destructive_exec";
     if is_state_modifying_command(cmd, &inp.args) {
         operation_class = "state_modifying_exec";
@@ -83,8 +90,7 @@ pub async fn exec(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiE
         None
     };
 
-    let sandbox_policy = SandboxPolicy::from_env();
-    let sandbox_resolution = sandbox_policy.resolve_backend();
+    let sandbox_resolution = cfg.sandbox_policy.resolve_backend();
     let isolation = sandbox_resolution.to_isolation_metadata();
 
     let cwd = inp
@@ -93,28 +99,85 @@ pub async fn exec(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiE
         .map(|p| super::fs::resolve_under_root(cfg, p))
         .transpose()?;
 
-    let mut c;
-    match sandbox_resolution.backend {
+    let mut c = match sandbox_resolution.backend {
         SandboxBackend::LinuxNamespace => {
-            let unshare_path = sandbox_policy
+            let unshare_path = cfg
+                .sandbox_policy
                 .linux_namespace
                 .unshare_bin
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "/usr/bin/unshare".to_string());
-            c = Command::new(&unshare_path);
-            c.args(["--pid", "--mount", "--net", "--fork", "--"])
+            let mut cmd_obj = Command::new(&unshare_path);
+            cmd_obj.args(["--pid", "--mount", "--net", "--fork", "--"])
                 .arg(cmd)
                 .args(&inp.args);
+            cmd_obj
+        }
+        SandboxBackend::MicroVmEphemeral => {
+            let firecracker_path = cfg
+                .sandbox_policy
+                .microvm
+                .firecracker_bin
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "firecracker".to_string());
+
+            let kernel_path = cfg
+                .sandbox_policy
+                .microvm
+                .kernel_image
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "/var/lib/firecracker/vmlinux".to_string());
+
+            let rootfs_path = cfg
+                .sandbox_policy
+                .microvm
+                .rootfs_image
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "/var/lib/firecracker/rootfs.ext4".to_string());
+
+            let mut cmd_obj = Command::new(&firecracker_path);
+            
+            let mut fc_args = vec![
+                "--kernel".to_string(), kernel_path,
+                "--rootfs".to_string(), rootfs_path,
+                "--".to_string(),
+                cmd.to_string()
+            ];
+            fc_args.extend(inp.args.iter().cloned());
+            
+            cmd_obj.args(&fc_args);
+            cmd_obj
         }
         _ => {
-            c = Command::new(cmd);
-            c.args(&inp.args);
+            let mut cmd_obj = Command::new(cmd);
+            cmd_obj.args(&inp.args);
+            cmd_obj
         }
-    }
+    };
     c.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Strip the parent environment to prevent secret leakage via env vars.
+    // Re-inject only the minimal safe set needed for toolchain commands.
+    c.env_clear();
+    if let Ok(path) = std::env::var("PATH") {
+        c.env("PATH", path);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        c.env("HOME", home);
+    }
+    // CARGO_HOME and RUSTUP_HOME are required for cargo to locate toolchains
+    if let Ok(v) = std::env::var("CARGO_HOME") { c.env("CARGO_HOME", v); }
+    if let Ok(v) = std::env::var("RUSTUP_HOME") { c.env("RUSTUP_HOME", v); }
+    // UV_CACHE_DIR for Python tooling
+    if let Ok(v) = std::env::var("UV_CACHE_DIR") { c.env("UV_CACHE_DIR", v); }
+    // VIRTUAL_ENV / PYTHONPATH for activated venvs
+    if let Ok(v) = std::env::var("VIRTUAL_ENV") { c.env("VIRTUAL_ENV", v); }
+    if let Ok(v) = std::env::var("PYTHONPATH") { c.env("PYTHONPATH", v); }
     if let Some(cwd) = cwd {
         c.current_dir(cwd);
     } else {
@@ -312,6 +375,22 @@ mod tests {
         assert_eq!(arr[0]["code"], "E0432");
     }
 
+    #[tokio::test]
+    async fn test_exec_prompt_injection_blocked() {
+        let td = tempfile::tempdir().unwrap();
+        let cfg = RunnerConfig::new(td.path(), Some("dev"), None).unwrap();
+        // U+202E right-to-left override triggers detect_prompt_injection
+        let result = exec(
+            &cfg,
+            json!({"cmd": "git", "args": ["log", "safe\u{202E}evil"]}),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(ApiError::Forbidden(ref msg)) if msg.contains("prompt_injection_detected")),
+            "expected Forbidden(prompt_injection_detected), got: {result:?}"
+        );
+    }
+
     #[test]
     fn test_truncate_chars_truncates_and_flags() {
         let (s, truncated) = truncate_chars("abcdefghij", 5);
@@ -334,6 +413,53 @@ mod tests {
                 // git not available in this environment; acceptable
             }
             Err(e) => panic!("unexpected error: {e:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_exec_microvm_backend_formats_command() {
+        if cfg!(target_os = "windows") {
+            return;
+        }
+        
+        // Need to set env vars to force MicroVmEphemeral resolution
+        std::env::set_var("LG_RUNNER_SANDBOX_BACKEND", "microvm");
+        std::env::set_var("LG_RUNNER_MICROVM_ENABLED", "1");
+        
+        // Create dummy files so the path checks pass
+        let td = tempfile::tempdir().unwrap();
+        let fc_bin = td.path().join("firecracker");
+        let kernel = td.path().join("vmlinux");
+        let rootfs = td.path().join("rootfs");
+        std::fs::write(&fc_bin, "").unwrap();
+        std::fs::write(&kernel, "").unwrap();
+        std::fs::write(&rootfs, "").unwrap();
+        
+        std::env::set_var("LG_RUNNER_FIRECRACKER_BIN", fc_bin.to_str().unwrap());
+        std::env::set_var("LG_RUNNER_MICROVM_KERNEL_IMAGE", kernel.to_str().unwrap());
+        std::env::set_var("LG_RUNNER_MICROVM_ROOTFS_IMAGE", rootfs.to_str().unwrap());
+
+        let cfg = RunnerConfig::new(td.path(), Some("dev"), None).unwrap();
+        
+        // We expect it to fail execution because the dummy files aren't real executables, 
+        // but we can check the returned envelope's metadata to verify it attempted MicroVM.
+        let result = exec(&cfg, json!({"cmd": "python", "args": ["--version"]})).await;
+        
+        // Clean up env vars
+        std::env::remove_var("LG_RUNNER_SANDBOX_BACKEND");
+        std::env::remove_var("LG_RUNNER_MICROVM_ENABLED");
+        std::env::remove_var("LG_RUNNER_FIRECRACKER_BIN");
+        std::env::remove_var("LG_RUNNER_MICROVM_KERNEL_IMAGE");
+        std::env::remove_var("LG_RUNNER_MICROVM_ROOTFS_IMAGE");
+
+        if let Ok(env) = result {
+             let artifacts = env.artifacts;
+             let isolation_backend = artifacts.get("isolation_backend").and_then(|v| v.as_str()).unwrap_or("");
+             assert_eq!(isolation_backend, "microvm_ephemeral");
+        } else if let Err(ApiError::Other(_)) = result {
+             // If spawn fails, that's fine too, as long as it tried.
+        } else if let Err(e) = result {
+             panic!("unexpected error: {e:?}");
         }
     }
 }

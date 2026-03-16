@@ -5,7 +5,7 @@ from hashlib import sha256
 from typing import Any
 
 from lg_orch.logging import get_logger
-from lg_orch.memory import ensure_history_policy, prune_post_verification_history
+from lg_orch.memory import ensure_history_policy, get_compression_summary, prune_post_verification_history
 from lg_orch.model_routing import record_model_route, tool_routing_metadata
 from lg_orch.state import RecoveryAction, RecoveryPacket, VerificationCheck, VerifierReport
 from lg_orch.tools import RunnerClient
@@ -46,6 +46,10 @@ _ARCH_MISMATCH_HINTS = (
     "path escapes root",
     "read denied",
 )
+
+
+def _validate_base_url(url: str) -> bool:
+    return url.startswith("http://") or url.startswith("https://")
 
 
 def _extract_diagnostics(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -180,6 +184,98 @@ def _is_test_failure_post_change(
     return patch_applied
 
 
+def _requires_formal_verification(state: dict[str, Any], tool_results: list[dict[str, Any]]) -> list[str]:
+    if not state.get("_vericoding_enabled", False):
+        return []
+
+    extensions = tuple(state.get("_vericoding_extensions", [".rs"]))
+    files_to_verify: list[str] = []
+
+    for result in tool_results:
+        if str(result.get("tool", "")) == "apply_patch" and result.get("ok"):
+            input_payload = result.get("input", {})
+            if isinstance(input_payload, dict):
+                changes = input_payload.get("changes", [])
+                for change in changes:
+                    if isinstance(change, dict):
+                        path = str(change.get("path", ""))
+                        if path.endswith(extensions) and path not in files_to_verify:
+                            files_to_verify.append(path)
+
+    return files_to_verify
+
+
+def _run_formal_verification(
+    state: dict[str, Any],
+    files_to_verify: list[str],
+    route_metadata: dict[str, Any]
+) -> dict[str, Any] | None:
+    if not files_to_verify:
+        return None
+
+    runner_base_url = str(state.get("_runner_base_url", "http://127.0.0.1:8088"))
+    if not _validate_base_url(runner_base_url):
+        return {
+            "tool": "formal_verification",
+            "ok": False,
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "invalid runner base url for formal verification",
+            "diagnostics": [],
+            "artifacts": {"error": "invalid_base_url"},
+            "route": route_metadata,
+        }
+    api_key = state.get("_runner_api_key")
+    request_id = state.get("_request_id")
+    api_key_s = str(api_key).strip() if api_key is not None else None
+    request_id_s = str(request_id).strip() if request_id is not None else None
+
+    from lg_orch.tools import RunnerClient
+    client = RunnerClient(base_url=runner_base_url, api_key=api_key_s, request_id=request_id_s)
+
+    try:
+        args = ["test", "--all", "--features", "verify"]
+
+        call: dict[str, Any] = {
+            "tool": "exec",
+            "input": {
+                "cmd": "cargo",
+                "args": args,
+                "timeout_s": 120,
+                "_route": route_metadata
+            }
+        }
+
+        results = client.batch_execute_tools(calls=[call])
+        if results:
+             result = results[0]
+             if not result.get("ok"):
+                 return {
+                     "tool": "formal_verification",
+                     "ok": False,
+                     "exit_code": result.get("exit_code", 1),
+                     "stdout": result.get("stdout", ""),
+                     "stderr": f"Formal Verification Failed:\n{result.get('stderr', '')}",
+                     "diagnostics": result.get("diagnostics", []),
+                     "artifacts": {"error": "formal_verification_failed", "files": files_to_verify},
+                     "route": route_metadata
+                 }
+        return None
+    except Exception as e:
+         return {
+             "tool": "formal_verification",
+             "ok": False,
+             "exit_code": 1,
+             "stdout": "",
+             "stderr": f"Failed to execute formal verification: {str(e)}",
+             "diagnostics": [],
+             "artifacts": {"error": "formal_verification_execution_error"},
+             "route": route_metadata
+         }
+    finally:
+        client.close()
+
+
 def _classify_retry(
     tool_results: list[dict[str, Any]],
     *,
@@ -214,6 +310,20 @@ def _classify_retry(
             )
 
         error_tag = str(artifacts.get("error", "")).strip().lower()
+
+        if error_tag == "formal_verification_failed":
+             return (
+                 {
+                     "failure_class": "formal_verification_failed",
+                     "failure_fingerprint": fingerprint,
+                     "rationale": "Symbolic proof checker rejected the implementation. The logic must be mathematically verified.",
+                     "retry_target": "planner",
+                     "context_scope": "working_set",
+                     "plan_action": "amend",
+                 },
+                 "formal_verification_failed",
+             )
+
         if error_tag in {"tool_call_budget_exceeded", "patch_size_budget_exceeded"}:
             return (
                 {
@@ -314,9 +424,22 @@ def _recovery_packet_payload(
     ).model_dump()
 
 
-def _loop_summary_entry(report: dict[str, Any], *, current_loop: int) -> dict[str, Any]:
+def _loop_summary_entry(
+    report: dict[str, Any],
+    *,
+    current_loop: int,
+    acceptance_criteria: list[str] | None = None,
+    acceptance_checks: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     recovery_packet_raw = report.get("recovery_packet", {})
     recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
+    criteria = acceptance_criteria if acceptance_criteria is not None else []
+    checks = acceptance_checks if acceptance_checks is not None else []
+    unmet_criteria = [
+        str(entry.get("criterion", "")).strip()
+        for entry in checks
+        if isinstance(entry, dict) and not bool(entry.get("ok", False))
+    ]
     return {
         "loop": current_loop,
         "failure_class": report.get("failure_class", ""),
@@ -329,6 +452,9 @@ def _loop_summary_entry(report: dict[str, Any], *, current_loop: int) -> dict[st
         "discard_reason": recovery_packet.get("discard_reason", ""),
         "recovery": report.get("recovery"),
         "recovery_packet": recovery_packet or None,
+        "acceptance_criteria": criteria,
+        "acceptance_unmet": unmet_criteria,
+        "acceptance_ok": report.get("acceptance_ok", False),
     }
 
 
@@ -493,10 +619,6 @@ def _build_checks(tool_results: list[dict[str, Any]]) -> list[VerificationCheck]
     return checks
 
 
-def _validate_base_url(url: str) -> bool:
-    return url.startswith("http://") or url.startswith("https://")
-
-
 def _run_verification_calls(state: dict[str, Any], tool_results: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if bool(state.get("_runner_enabled", True)) is False:
         return tool_results, dict(state.get("budgets", {})) if isinstance(state.get("budgets", {}), dict) else {}
@@ -608,6 +730,15 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    files_to_verify = _requires_formal_verification(state, tool_results)
+    if files_to_verify and bool(state.get("_runner_enabled", True)):
+        verification_failure = _run_formal_verification(state, files_to_verify, tool_routing_metadata(state, stage="verifier"))
+        if verification_failure:
+             tool_results.append(verification_failure)
+             log.info("formal_verification_failed", files=files_to_verify)
+        else:
+             log.info("formal_verification_passed", files=files_to_verify)
+
     checks = _build_checks(tool_results)
     has_failures = len(checks) > 0
     discard_reason = ""
@@ -702,18 +833,43 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
     loop_summaries = list(loop_summaries_raw) if isinstance(loop_summaries_raw, list) else []
     recovery_packet_raw = report.get("recovery_packet", {})
     recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else None
-    if not ok:
-        loop_summaries.append(_loop_summary_entry(report, current_loop=current_loop))
-        loop_summaries = loop_summaries[-5:]
-    facts = _updated_recovery_facts(state, report=report, current_loop=current_loop)
-    telemetry_raw = state.get("telemetry", {})
-    telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
-    diagnostics_raw = telemetry.get("diagnostics", [])
-    diagnostics_telemetry = list(diagnostics_raw) if isinstance(diagnostics_raw, list) else []
-    diagnostics_telemetry.extend(
-        _diagnostics_telemetry_entries(tool_results, current_loop=current_loop, report=report)
+    plan_raw = state.get("plan", {})
+    plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
+    acceptance_criteria_raw = plan.get("acceptance_criteria", [])
+    acceptance_criteria = (
+        [str(c).strip() for c in acceptance_criteria_raw if str(c).strip()]
+        if isinstance(acceptance_criteria_raw, list)
+        else []
     )
-    telemetry["diagnostics"] = diagnostics_telemetry[-20:]
+    acceptance_checks_raw = report.get("acceptance_checks", [])
+    acceptance_checks = (
+        [dict(c) for c in acceptance_checks_raw if isinstance(c, dict)]
+        if isinstance(acceptance_checks_raw, list)
+        else []
+    )
+
+    facts = state.get("facts", [])
+    telemetry = state.get("telemetry", {})
+    if not ok:
+        loop_summaries.append(
+            _loop_summary_entry(
+                report,
+                current_loop=current_loop,
+                acceptance_criteria=acceptance_criteria,
+                acceptance_checks=acceptance_checks,
+            )
+        )
+        loop_summaries = loop_summaries[-5:]
+        facts = _updated_recovery_facts(state, report=report, current_loop=current_loop)
+        telemetry_raw = state.get("telemetry", {})
+        telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
+        diagnostics_raw = telemetry.get("diagnostics", [])
+        diagnostics_telemetry = list(diagnostics_raw) if isinstance(diagnostics_raw, list) else []
+        diagnostics_telemetry.extend(
+            _diagnostics_telemetry_entries(tool_results, current_loop=current_loop, report=report)
+        )
+        telemetry["diagnostics"] = diagnostics_telemetry[-20:]
+        telemetry["compression_summary"] = get_compression_summary(state)
 
     out: dict[str, Any] = {
         **state,

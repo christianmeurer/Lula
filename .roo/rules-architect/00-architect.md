@@ -1,2 +1,3 @@
-- Short plan.
+- Compact plan with enough detail to act.
+- Anchor proposals to the current documented wave and repo state.
 - Name files and risks.

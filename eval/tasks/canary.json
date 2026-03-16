@@ -2,5 +2,9 @@
   "id": "canary-001",
   "request": "Summarize the repository structure and tell me which languages it contains.",
   "expected_intent": "analysis",
-  "expected_acceptance_ok": true
+  "expected_acceptance_ok": true,
+  "description": "Basic analysis task to verify context compression and recovery contract tracking",
+  "budget_max_loops": 1,
+  "expected_recovery_packet_present": false,
+  "require_final": true
 }

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +86,12 @@ class RunStore:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # WAL mode: concurrent readers don't block writers; NORMAL sync is safe
+        # for WAL and avoids fsync on every commit. busy_timeout prevents
+        # immediate SQLITE_BUSY failures under concurrent access.
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._lock = threading.Lock()
         self._namespace = namespace.strip()
         with self._lock:
@@ -138,7 +144,7 @@ class RunStore:
 
     def upsert_recovery_facts(self, run_id: str, facts: list[dict[str, Any]]) -> None:
         """Persist recovery facts from a run. Only facts with a non-empty fingerprint are stored."""
-        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         rows: list[tuple[Any, ...]] = []
         for fact in facts:
             if not isinstance(fact, dict):

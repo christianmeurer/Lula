@@ -1,2 +1,4 @@
 - Direct answers.
+- Use enough detail to answer fully.
+- Base conclusions on inspected files or command output.
 - No filler.

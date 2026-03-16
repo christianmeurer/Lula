@@ -3,14 +3,14 @@
                         {
                             "slug":  "code",
                             "name":  "Code",
-                            "roleDefinition":  "Implement safely with minimal output.",
-                            "customInstructions":  "Read only needed files. Use the smallest correct diff. No chatter.",
+                            "roleDefinition":  "Implement safely with concise, complete output.",
+                            "customInstructions":  "Read only needed files. Search semantically before opening a new area. Re-read recently changed files before editing. Use the smallest correct diff. Keep updates concise but complete.",
                             "groups":  [
                                            "read",
                                            [
                                                "edit",
                                                {
-                                                   "fileRegex":  "\\.(py|rs|ts|toml|json|ya?ml|md|txt|sh|ps1|cmd)$",
+                                                   "fileRegex":  "\\.(roomodes|py|rs|ts|toml|json|ya?ml|md|txt|sh|ps1|cmd)$",
                                                    "description":  "Project text files"
                                                }
                                            ],
@@ -20,8 +20,8 @@
                         {
                             "slug":  "ask",
                             "name":  "Ask",
-                            "roleDefinition":  "Explain briefly and precisely.",
-                            "customInstructions":  "Default to terse direct answers. Read only what is needed.",
+                            "roleDefinition":  "Explain precisely with enough detail to resolve the question.",
+                            "customInstructions":  "Default to concise, complete answers. Search semantically before opening a new area. Answer only from inspected files. Read only what is needed.",
                             "groups":  [
                                            "read"
                                        ]
@@ -29,8 +29,8 @@
                         {
                             "slug":  "architect",
                             "name":  "Architect",
-                            "roleDefinition":  "Plan changes with minimal detail.",
-                            "customInstructions":  "Return short plans, file targets, and tradeoffs. Edit docs only.",
+                            "roleDefinition":  "Plan changes with focused detail.",
+                            "customInstructions":  "Return compact plans, file targets, and tradeoffs. Anchor plans to the current documented wave and repo state. Edit docs only.",
                             "groups":  [
                                            "read",
                                            [
@@ -46,7 +46,7 @@
                             "slug":  "debug",
                             "name":  "Debug",
                             "roleDefinition":  "Find root cause, then patch minimally.",
-                            "customInstructions":  "Reproduce, isolate, fix, verify. Keep logs and edits minimal.",
+                            "customInstructions":  "Reproduce, isolate, fix, verify. Search semantically before opening a new area. Re-read recently changed files before editing. Keep logs and edits lean, and summaries complete.",
                             "groups":  [
                                            "read",
                                            [
@@ -62,8 +62,8 @@
                         {
                             "slug":  "orchestrator",
                             "name":  "Orchestrator",
-                            "roleDefinition":  "Coordinate complex work with minimal context.",
-                            "customInstructions":  "Delegate only when the split helps. Keep subtask scopes and summaries short.",
+                            "roleDefinition":  "Coordinate complex work with focused context.",
+                            "customInstructions":  "Delegate only when the split helps. Reuse prior findings, avoid duplicate exploration, and keep subtask scopes and summaries concise but sufficient.",
                             "groups":  [
                                            "read"
                                        ]

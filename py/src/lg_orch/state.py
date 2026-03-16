@@ -160,3 +160,40 @@ class ModelRoutingDecision(BaseModel):
 @dataclass(frozen=True)
 class NodeResult:
     update: dict[str, Any]
+
+
+class SubAgentTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    repository: str
+    objective: str
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class SubAgentResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_id: str
+    status: Literal["success", "failure"]
+    output: str
+    pr_url: str | None = None
+    diff: str | None = None
+
+
+class MetaPlanOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    global_objective: str
+    sub_tasks: list[SubAgentTask]
+    resolution_criteria: list[str]
+
+
+class MetaOrchState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request: str
+    repositories: list[str] = Field(default_factory=list)
+    meta_plan: MetaPlanOutput | None = None
+    task_results: dict[str, SubAgentResult] = Field(default_factory=dict)
+    active_tasks: list[str] = Field(default_factory=list)
+    completed_tasks: list[str] = Field(default_factory=list)
+    failed_tasks: list[str] = Field(default_factory=list)
+    final_report: str = ""
+    error: str = ""

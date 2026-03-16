@@ -1,3 +1,4 @@
 - Delegate narrowly.
-- Pass minimal context.
+- Reuse prior findings before spawning more work.
+- Pass only needed context, but enough to act.
 - Summarize outcomes briefly.

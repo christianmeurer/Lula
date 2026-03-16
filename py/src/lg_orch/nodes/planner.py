@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from lg_orch.logging import get_logger
-from lg_orch.memory import ensure_history_policy, prune_pre_verification_history
+from lg_orch.memory import ensure_history_policy, get_compression_summary, prune_pre_verification_history
 from lg_orch.model_routing import latest_model_route, record_inference_telemetry, record_model_route
 from lg_orch.state import PlannerOutput, PlanStep, ToolCall
 from lg_orch.tools import InferenceClient
@@ -168,6 +168,8 @@ def _planner_model_output(
         base_url = str(oc_cfg.get("base_url", "https://api.openai.com/v1")).strip().rstrip("/")
         if not base_url:
             return None, None
+        if not (base_url.startswith("http://") or base_url.startswith("https://")):
+            return None, None
         timeout_raw = oc_cfg.get("timeout_s", 60)
         timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
     else:
@@ -178,6 +180,8 @@ def _planner_model_output(
             return None, None
         base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
         if not base_url:
+            return None, None
+        if not (base_url.startswith("http://") or base_url.startswith("https://")):
             return None, None
         timeout_raw = do_cfg.get("timeout_s", 60)
         timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
@@ -312,15 +316,26 @@ def planner(state: dict[str, Any]) -> dict[str, Any]:
             model=str(route_decision.get("model", "")),
             response=response,
         )
+        telemetry_raw = out.get("telemetry", {})
+        telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
+        telemetry["compression_summary"] = get_compression_summary(out)
+        out = {**out, "telemetry": telemetry}
+        step_count = len(out.get("plan", {}).get("steps", []))
+        out = append_event(
+            out,
+            kind="node",
+            data={"name": "planner", "phase": "end", "steps": step_count},
+        )
+        return prune_pre_verification_history(out)
     except Exception as exc:
         log.error("planner_failed", error=str(exc))
         fallback_plan = _default_plan(request).model_dump()
         fallback_plan["rollback"] = "Plan generation failed; deterministic fallback used."
         out = {**state, "intent": str(route.get("intent", "analysis") or "analysis"), "plan": fallback_plan}
-    step_count = len(out.get("plan", {}).get("steps", []))
-    out = append_event(
-        out,
-        kind="node",
-        data={"name": "planner", "phase": "end", "steps": step_count},
-    )
-    return prune_pre_verification_history(out)
+        step_count = len(out.get("plan", {}).get("steps", []))
+        out = append_event(
+            out,
+            kind="node",
+            data={"name": "planner", "phase": "end", "steps": step_count},
+        )
+        return prune_pre_verification_history(out)

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import threading
 import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
-
 
 # ---------------------------------------------------------------------------
 # Circuit-breaker
@@ -59,6 +61,37 @@ class _CircuitBreaker:
 _breakers: dict[str, _CircuitBreaker] = {}
 _breakers_lock = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# httpx.Client singleton cache — one shared TCP pool per (base_url, api_key)
+# ---------------------------------------------------------------------------
+
+_client_cache: dict[tuple[str, str], httpx.Client] = {}
+_client_cache_lock = threading.Lock()
+
+
+def _get_or_create_client(base_url: str, api_key: str, timeout_s: int) -> httpx.Client:
+    key = (base_url, api_key)
+    with _client_cache_lock:
+        if key not in _client_cache:
+            headers = {
+                "authorization": f"Bearer {api_key}",
+                "content-type": "application/json",
+            }
+            _client_cache[key] = httpx.Client(
+                base_url=base_url,
+                timeout=float(timeout_s),
+                headers=headers,
+            )
+        return _client_cache[key]
+
+
+def clear_client_cache() -> None:
+    """Close and remove all cached httpx.Client instances (for tests)."""
+    with _client_cache_lock:
+        for client in _client_cache.values():
+            client.close()
+        _client_cache.clear()
+
 
 def _get_breaker(base_url: str) -> _CircuitBreaker:
     with _breakers_lock:
@@ -97,19 +130,15 @@ class InferenceClient:
 
     def __post_init__(self) -> None:
         if self._client is None:
-            headers = {
-                "authorization": f"Bearer {self.api_key}",
-                "content-type": "application/json",
-            }
             object.__setattr__(
                 self,
                 "_client",
-                httpx.Client(base_url=self.base_url, timeout=float(self.timeout_s), headers=headers),
+                _get_or_create_client(self.base_url, self.api_key, self.timeout_s),
             )
 
     def close(self) -> None:
-        if self._client is not None:
-            self._client.close()
+        # No-op: _client is a shared singleton; use clear_client_cache() to close all.
+        pass
 
     def chat_completion(
         self,
@@ -232,6 +261,82 @@ class InferenceClient:
             cache_metadata=cache_metadata,
             headers=headers,
         )
+
+
+    async def chat_completion_stream(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        max_tokens: int = 1200,
+    ) -> AsyncGenerator[str, None]:
+        breaker = _get_breaker(self.base_url)
+        if not breaker.allow_request():
+            raise RuntimeError("circuit_open")
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max(1, int(max_tokens)),
+            "stream": True,
+        }
+        req_headers = {
+            "authorization": f"Bearer {self.api_key}",
+            "content-type": "application/json",
+        }
+
+        client = httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=httpx.Timeout(float(self.timeout_s)),
+        )
+        try:
+            @retry(
+                reraise=True,
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=0.2, min=0.2, max=2.0),
+                retry=retry_if_exception_type(httpx.TransportError),
+            )
+            async def _connect() -> httpx.Response:
+                return await client.post("/chat/completions", json=payload, headers=req_headers)
+
+            try:
+                resp = await _connect()
+                resp.raise_for_status()
+            except Exception:
+                breaker.record_failure()
+                raise
+
+            try:
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[len("data: "):]
+                    if data == "[DONE]":
+                        continue
+                    chunk = json.loads(data)
+                    delta = chunk["choices"][0]["delta"].get("content", "")
+                    if isinstance(delta, str) and delta:
+                        yield delta
+                breaker.record_success()
+            except Exception:
+                breaker.record_failure()
+                raise
+        finally:
+            await client.aclose()
+
+
+async def collect_stream(gen: AsyncGenerator[str, None]) -> str:
+    """Collect all tokens from an async generator into a single string."""
+    parts: list[str] = []
+    async for token in gen:
+        parts.append(token)
+    return "".join(parts)
 
 
 def _retry_wait_for_http(exc: httpx.HTTPStatusError, attempt: int) -> float:

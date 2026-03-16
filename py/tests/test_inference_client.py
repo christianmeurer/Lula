@@ -1,10 +1,9 @@
 """Tests for InferenceClient HTTP 429/5xx retry and circuit-breaker."""
 from __future__ import annotations
 
-import threading
 import time
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -12,11 +11,10 @@ import pytest
 import lg_orch.tools.inference_client as ic_mod
 from lg_orch.tools.inference_client import (
     InferenceClient,
-    _CircuitBreaker,
     _breakers,
     _breakers_lock,
+    _CircuitBreaker,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -249,3 +247,22 @@ def test_half_open_probe_success_closes_circuit(monkeypatch: pytest.MonkeyPatch)
     # Circuit should now be closed
     assert cb.allow_request() is True
     _clear_breaker(base_url)
+
+
+# ---------------------------------------------------------------------------
+# Singleton cache
+# ---------------------------------------------------------------------------
+
+
+def test_client_singleton_reuses_connection() -> None:
+    """Two InferenceClient instances with identical (base_url, api_key) must
+    share the same underlying httpx.Client object."""
+    from lg_orch.tools.inference_client import clear_client_cache
+
+    clear_client_cache()
+    try:
+        c1 = InferenceClient(base_url="http://singleton.test", api_key="shared-key")
+        c2 = InferenceClient(base_url="http://singleton.test", api_key="shared-key")
+        assert c1._client is c2._client, "expected singleton httpx.Client to be shared"
+    finally:
+        clear_client_cache()

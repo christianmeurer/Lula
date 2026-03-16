@@ -31,6 +31,7 @@ def test_score_task_passes_with_matching_output() -> None:
             "tool_results": [],
             "verification": {"acceptance_ok": True, "ok": True},
             "route": {"lane": "fast"},
+            "telemetry": {"compression_summary": {"total_events": 1}},
         },
     )
 
@@ -54,6 +55,7 @@ def test_evaluate_tasks_aggregates_summary() -> None:
             "tool_results": [],
             "verification": {"acceptance_ok": True, "ok": True},
             "route": {"lane": "fast"},
+            "telemetry": {"compression_summary": {"total_events": 1}},
         },
         "b": {
             "intent": "analysis",
@@ -99,6 +101,7 @@ def test_main_json_output_uses_scored_report(tmp_path: Path, capsys: object) -> 
         "tool_results": [],
         "verification": {"acceptance_ok": True, "ok": True},
         "route": {"lane": "fast"},
+        "telemetry": {"compression_summary": {"total_events": 1}},
     }
     try:
         rc = module.main(["--tasks-dir", str(tmp_path), "--format", "json"])
@@ -263,7 +266,7 @@ def test_score_task_has_seven_checks() -> None:
             "verification": {"acceptance_ok": False},
         },
     )
-    assert len(result["checks"]) == 7
+    assert len(result["checks"]) == 11
 
 
 def test_evaluate_tasks_summary_has_recovery_keys() -> None:

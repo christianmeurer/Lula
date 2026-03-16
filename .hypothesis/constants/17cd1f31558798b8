@@ -1,0 +1,4 @@
+# file: C:\Users\chris\Projects\LG-Orchestration-Platform\py\src\lg_orch\trace.py
+# hypothesis_version: 6.151.4
+
+[1000, '_checkpoint', '_remote_api_context', '_request_id', '_run_id', '_trace_events', 'auth_subject', 'checkpoint', 'client_ip', 'correlation', 'data', 'events', 'final', 'intent', 'kind', 'loop_summaries', 'provenance', 'recovery_packet', 'request', 'request_id', 'route', 'run_id', 'snapshots', 'telemetry', 'tool_results', 'ts_ms', 'undo', 'utf-8', 'verification']

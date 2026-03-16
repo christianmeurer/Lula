@@ -11,7 +11,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -30,7 +30,7 @@ _REQUEST_ID_HEADER = "X-Request-ID"
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _non_empty_str(raw: object) -> str | None:
@@ -335,9 +335,18 @@ class RemoteAPIService:
             return None
         with self._lock:
             record = self._runs.get(normalized_run_id)
-            if record is None:
-                return None
-            payload = self._summary_payload_locked(record)
+            if record is not None:
+                payload = self._summary_payload_locked(record)
+            else:
+                payload = None
+        
+        if payload is None and self._run_store is not None:
+            persisted = self._run_store.get_run(normalized_run_id)
+            if persisted is not None:
+                payload = dict(persisted)
+        
+        if payload is None:
+            return None
 
         trace_payload = self._load_trace(Path(payload["trace_path"]))
         payload["trace_ready"] = trace_payload is not None
@@ -567,7 +576,8 @@ def _api_http_response(
         if method != "GET":
             return _json_response(405, {"error": "method_not_allowed"})
         from lg_orch.visualize import render_run_viewer_spa
-        html = render_run_viewer_spa(api_base_url="")
+        from lg_orch.graph import export_mermaid
+        html = render_run_viewer_spa(api_base_url="", mermaid_graph=export_mermaid())
         body = html.encode("utf-8")
         return 200, "text/html; charset=utf-8", body
 
@@ -664,10 +674,10 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
     )
 
     class RemoteAPIRequestHandler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             self._handle_request(method="GET")
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             self._handle_request(method="POST")
 
         def _handle_request(self, *, method: str) -> None:

@@ -12,6 +12,7 @@ mod tools;
 use axum::{routing::get, routing::post, Json, Router};
 use clap::Parser;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::Level;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -84,11 +85,23 @@ async fn batch_execute_tool(
     axum::extract::State(cfg): axum::extract::State<RunnerConfig>,
     Json(req): Json<ToolBatchExecuteRequest>,
 ) -> Result<Json<ToolBatchExecuteResponse>, crate::errors::ApiError> {
-    let mut out: Vec<ToolEnvelope> = Vec::with_capacity(req.calls.len());
-    for call in req.calls {
-        out.push(dispatch_tool(&cfg, call).await?);
+    let cfg = Arc::new(cfg);
+    let n = req.calls.len();
+    let mut set: tokio::task::JoinSet<(usize, Result<ToolEnvelope, crate::errors::ApiError>)> =
+        tokio::task::JoinSet::new();
+    for (idx, call) in req.calls.into_iter().enumerate() {
+        let cfg = Arc::clone(&cfg);
+        set.spawn(async move { (idx, dispatch_tool(&cfg, call).await) });
     }
-    Ok(Json(ToolBatchExecuteResponse { results: out }))
+    let mut out: Vec<Option<ToolEnvelope>> = (0..n).map(|_| None).collect();
+    while let Some(join_result) = set.join_next().await {
+        let (idx, result) = join_result.map_err(|e| {
+            crate::errors::ApiError::Other(anyhow::anyhow!("batch task panicked: {e}"))
+        })?;
+        out[idx] = Some(result?);
+    }
+    let results = out.into_iter().map(Option::unwrap).collect();
+    Ok(Json(ToolBatchExecuteResponse { results }))
 }
 
 #[tokio::main]
