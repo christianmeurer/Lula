@@ -475,13 +475,16 @@ def load_config(*, repo_root: Path) -> AppConfig:
     if policy.network_default not in {"allow", "deny"}:
         raise ConfigError("policy.network_default must be one of: allow, deny")
 
-    api_key = runner_raw.get("api_key")
-    if api_key is None:
-        api_key = os.environ.get("LG_RUNNER_API_KEY")
-    if api_key is not None:
-        if not isinstance(api_key, str) or not api_key.strip():
-            raise ConfigError("missing/invalid runner.api_key")
-        api_key = api_key.strip()
+    api_key_raw = runner_raw.get("api_key")
+    if api_key_raw is None:
+        api_key_raw = os.environ.get("LG_RUNNER_API_KEY")
+    api_key: str | None
+    if api_key_raw is None:
+        api_key = None
+    elif isinstance(api_key_raw, str):
+        api_key = api_key_raw.strip() or None  # empty string → unauthenticated
+    else:
+        raise ConfigError("missing/invalid runner.api_key")
 
     # Allow LG_RUNNER_BASE_URL to override the configured base_url so that
     # the runner can be an external k8s service without rebuilding the image.
