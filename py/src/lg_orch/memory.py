@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from lg_orch.long_term_memory import LongTermMemoryStore
 
 _PRUNED_READ_FILE_PREFIX = "[pruned_read_file_payload]"
 
@@ -307,6 +310,7 @@ def build_context_layers(
     *,
     state: dict[str, Any],
     repo_context: dict[str, Any],
+    long_term: "LongTermMemoryStore | None" = None,
 ) -> dict[str, Any]:
     budgets = context_budget_settings(state)
 
@@ -319,7 +323,24 @@ def build_context_layers(
         else []
     )
 
-    stable_segments: list[tuple[str, str]] = [
+    # --- long-term memory injection ---
+    if long_term is not None:
+        task_text = str(state.get("task", state.get("request", ""))).strip()
+        if task_text:
+            lt_content = long_term.retrieve_for_context(task_text, max_tokens=1000)
+            if lt_content.strip():
+                # Prepend to stable_segments before any other segment
+                stable_segments_pre: list[tuple[str, str]] = [
+                    ("long_term_memories", lt_content)
+                ]
+            else:
+                stable_segments_pre = []
+        else:
+            stable_segments_pre = []
+    else:
+        stable_segments_pre = []
+
+    stable_segments: list[tuple[str, str]] = stable_segments_pre + [
         (
             "repo_summary",
             "\n".join(
@@ -332,6 +353,24 @@ def build_context_layers(
             ),
         )
     ]
+
+    # Store episodes for any finalized loop summaries when long_term is provided
+    if long_term is not None:
+        run_id_raw = state.get("run_id", "")
+        run_id = str(run_id_raw).strip() if run_id_raw else ""
+        if run_id:
+            loop_summaries_raw = state.get("loop_summaries", [])
+            loop_summaries_list = loop_summaries_raw if isinstance(loop_summaries_raw, list) else []
+            for entry in loop_summaries_list:
+                if not isinstance(entry, dict):
+                    continue
+                loop_summary_text = str(entry.get("loop_summary", entry.get("summary", ""))).strip()
+                outcome_text = str(entry.get("outcome", entry.get("status", ""))).strip()
+                if loop_summary_text:
+                    long_term.store_episode(run_id, loop_summary_text, outcome_text, metadata={
+                        "loop": entry.get("loop", 0),
+                        "failure_class": entry.get("failure_class", ""),
+                    })
 
     repo_map = str(repo_context.get("repo_map", "")).strip()
     if repo_map:

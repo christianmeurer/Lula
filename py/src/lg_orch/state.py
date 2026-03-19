@@ -165,6 +165,11 @@ class OrchState(BaseModel):
     resume: dict[str, Any] = Field(default_factory=dict)
     mcp_tools: list[dict[str, Any]] = Field(default_factory=list)
     worktree_path: str | None = None
+    long_term_memory_path: str | None = None
+    repo_root: str | None = None
+    runner_url: str | None = None
+    healing_job_id: str | None = None
+    test_repair_mode: bool = False
 
 
 class ModelRoutingDecision(BaseModel):

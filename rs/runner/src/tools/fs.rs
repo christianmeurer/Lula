@@ -12,6 +12,7 @@ use crate::approval::{require_approval, ApprovalTokenInput};
 use crate::config::RunnerConfig;
 use crate::envelope::{ToolEnvelope, UndoMetadata};
 use crate::errors::ApiError;
+use crate::sandbox::pre_validate_path;
 use crate::snapshots::{undo_to_snapshot, SnapshotError};
 
 fn normalize_path(base: &std::path::Path, rel: &str) -> std::path::PathBuf {
@@ -38,7 +39,16 @@ pub(super) fn resolve_under_root(cfg: &RunnerConfig, rel: &str) -> Result<PathBu
         return Err(ApiError::BadRequest("nul byte".to_string()));
     }
 
+    // Invariant pre-validation: path confinement check (and full invariant suite)
+    // using "read_file" as a generic fs tool name (all known fs tools share the same
+    // path confinement invariant; the tool-name invariant is already enforced at dispatch).
     let candidate = cfg.root_dir.join(rel);
+    pre_validate_path(
+        &cfg.invariant_checker,
+        "read_file",
+        &candidate,
+        &cfg.root_dir,
+    )?;
 
     let full = candidate.canonicalize().unwrap_or_else(|_| normalize_path(&cfg.root_dir, rel));
 

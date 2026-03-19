@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import asyncio
+import time
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from lg_orch.healing_loop import HealingJob, HealingLoop, TestSuiteResult
+
+
+# ---------------------------------------------------------------------------
+# poll_once tests
+# ---------------------------------------------------------------------------
+
+
+def _make_proc(stdout: bytes, returncode: int) -> MagicMock:
+    proc = MagicMock()
+    proc.returncode = returncode
+    proc.communicate = AsyncMock(return_value=(stdout, b""))
+    return proc
+
+
+def test_poll_once_parses_passed_count(tmp_path: Any) -> None:
+    output = b"3 passed in 0.12s\n"
+
+    async def _run() -> TestSuiteResult:
+        with patch("asyncio.create_subprocess_exec", return_value=_make_proc(output, 0)):
+            loop = HealingLoop(repo_path=str(tmp_path))
+            return await loop.poll_once()
+
+    result = asyncio.run(_run())
+    assert result.passed == 3
+    assert result.failed == 0
+    assert isinstance(result, TestSuiteResult)
+
+
+def test_poll_once_parses_failed_tests(tmp_path: Any) -> None:
+    output = (
+        b"FAILED tests/test_foo.py::test_bar - AssertionError\n"
+        b"1 failed, 2 passed in 0.50s\n"
+    )
+
+    async def _run() -> TestSuiteResult:
+        with patch("asyncio.create_subprocess_exec", return_value=_make_proc(output, 1)):
+            loop = HealingLoop(repo_path=str(tmp_path))
+            return await loop.poll_once()
+
+    result = asyncio.run(_run())
+    assert result.failed_tests == ["tests/test_foo.py::test_bar"]
+    assert result.failed == 1
+    assert result.passed == 2
+
+
+def test_poll_once_handles_subprocess_error(tmp_path: Any) -> None:
+    output = b"collected 0 items / 1 error\n"
+
+    async def _run() -> TestSuiteResult:
+        with patch("asyncio.create_subprocess_exec", return_value=_make_proc(output, 2)):
+            loop = HealingLoop(repo_path=str(tmp_path))
+            return await loop.poll_once()
+
+    result = asyncio.run(_run())
+    assert result.errors >= 1
+
+
+# ---------------------------------------------------------------------------
+# HealingLoop integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_healing_loop_creates_job_on_failure(tmp_path: Any) -> None:
+    failing_result = TestSuiteResult(
+        run_id="r1",
+        repo_path=str(tmp_path),
+        passed=0,
+        failed=1,
+        errors=0,
+        failed_tests=["tests/test_foo.py::test_bar"],
+        output="FAILED tests/test_foo.py::test_bar",
+        timestamp=time.time(),
+    )
+
+    call_count = 0
+
+    async def fake_graph_runner(payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal call_count
+        call_count += 1
+        return {"ok": True}
+
+    healing = HealingLoop(
+        repo_path=str(tmp_path),
+        poll_interval_seconds=0.0,
+        max_concurrent_jobs=2,
+        graph_runner=fake_graph_runner,
+    )
+
+    poll_count = 0
+
+    async def fake_poll_once() -> TestSuiteResult:
+        nonlocal poll_count
+        poll_count += 1
+        if poll_count == 1:
+            return failing_result
+        raise asyncio.CancelledError
+
+    healing.poll_once = fake_poll_once  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        try:
+            await asyncio.wait_for(healing.run_until_cancelled(), timeout=2.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+
+    asyncio.run(_run())
+
+    history = healing.get_job_history()
+    assert len(history) >= 1
+    assert history[0].status == "healed"
+    assert call_count >= 1
+
+
+def test_healing_loop_limits_concurrent_jobs(tmp_path: Any) -> None:
+    concurrent_running = 0
+    max_observed = 0
+
+    async def counting_runner(payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal concurrent_running, max_observed
+        concurrent_running += 1
+        max_observed = max(max_observed, concurrent_running)
+        await asyncio.sleep(0.05)
+        concurrent_running -= 1
+        return {"ok": True}
+
+    healing = HealingLoop(
+        repo_path=str(tmp_path),
+        poll_interval_seconds=0.0,
+        max_concurrent_jobs=1,
+        graph_runner=counting_runner,
+    )
+
+    # pre-populate two queued jobs
+    job1 = HealingJob(
+        job_id="j1",
+        repo_path=str(tmp_path),
+        failing_tests=["tests/test_a.py::test_1"],
+        priority=1,
+        created_at=time.time(),
+        status="queued",
+    )
+    job2 = HealingJob(
+        job_id="j2",
+        repo_path=str(tmp_path),
+        failing_tests=["tests/test_b.py::test_2"],
+        priority=1,
+        created_at=time.time(),
+        status="queued",
+    )
+    healing._pending_jobs = [job1, job2]
+    healing._job_history = [job1, job2]
+
+    asyncio.run(healing._dispatch_pending_jobs())
+
+    # with max_concurrent_jobs=1, only 1 dispatched per cycle
+    assert max_observed <= 1
+
+
+def test_healing_loop_stops_on_cancellation(tmp_path: Any) -> None:
+    healing = HealingLoop(
+        repo_path=str(tmp_path),
+        poll_interval_seconds=100.0,
+    )
+
+    async def immediate_cancel() -> TestSuiteResult:
+        raise asyncio.CancelledError
+
+    healing.poll_once = immediate_cancel  # type: ignore[method-assign]
+
+    # Should return cleanly without raising
+    asyncio.run(healing.run_until_cancelled())

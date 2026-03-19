@@ -65,6 +65,20 @@ spec:
               cpu: 2000m
               memory: 2Gi
           securityContext:
-            runAsNonRoot: false
-            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: work-dir
+              mountPath: /workspace
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: work-dir
+          emptyDir: {}
