@@ -5,6 +5,7 @@ mod diagnostics;
 mod envelope;
 mod errors;
 mod indexing;
+mod invariants;
 mod sandbox;
 mod snapshots;
 mod tools;

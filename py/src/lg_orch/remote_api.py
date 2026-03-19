@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import os
@@ -604,6 +605,9 @@ class RemoteAPIService:
         self._rate_limiter = rate_limiter
         self._procedure_cache = procedure_cache
         self._namespace = namespace.strip()
+        # healing loop background tasks: loop_id -> asyncio.Task
+        self._healing_tasks: dict[str, "asyncio.Task[None]"] = {}
+        self._healing_loops: dict[str, "Any"] = {}  # loop_id -> HealingLoop instance
 
     def create_run(
         self,
@@ -1244,6 +1248,79 @@ class RemoteAPIService:
             return None
         return payload_raw
 
+    def start_healing_loop(
+        self,
+        repo_path: str,
+        poll_interval_seconds: float = 60.0,
+    ) -> dict[str, Any]:
+        from lg_orch.healing_loop import HealingLoop
+
+        loop_id = uuid.uuid4().hex
+        healing = HealingLoop(
+            repo_path=repo_path,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+
+        def _run_loop() -> None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                task = loop.create_task(healing.run_until_cancelled())
+                with self._lock:
+                    self._healing_tasks[loop_id] = task  # type: ignore[assignment]
+                loop.run_forever()
+            finally:
+                loop.close()
+
+        with self._lock:
+            self._healing_loops[loop_id] = healing
+
+        thread = threading.Thread(target=_run_loop, name=f"lg-healing-{loop_id}", daemon=True)
+        thread.start()
+
+        self._log.info("healing_loop_started", loop_id=loop_id, repo_path=repo_path)
+        return {"loop_id": loop_id, "status": "started"}
+
+    def stop_healing_loop(self, loop_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            task = self._healing_tasks.get(loop_id)
+            healing = self._healing_loops.get(loop_id)
+
+        if healing is None:
+            return None
+
+        if task is not None:
+            task.cancel()
+
+        with self._lock:
+            self._healing_tasks.pop(loop_id, None)
+            self._healing_loops.pop(loop_id, None)
+
+        self._log.info("healing_loop_stopped", loop_id=loop_id)
+        return {"loop_id": loop_id, "status": "stopped"}
+
+    def get_healing_jobs(self, loop_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            healing = self._healing_loops.get(loop_id)
+
+        if healing is None:
+            return None
+
+        from lg_orch.healing_loop import HealingJob
+
+        def _job_dict(job: HealingJob) -> dict[str, Any]:
+            return {
+                "job_id": job.job_id,
+                "repo_path": job.repo_path,
+                "failing_tests": list(job.failing_tests),
+                "priority": job.priority,
+                "created_at": job.created_at,
+                "status": job.status,
+            }
+
+        jobs = [_job_dict(j) for j in healing.get_job_history()]
+        return {"jobs": jobs}
+
 
 def _api_http_response(
     service: RemoteAPIService,
@@ -1515,6 +1592,53 @@ def _api_http_response(
         from lg_orch.spa.router import create_spa_router
         subpath = "/".join(path_parts[1:]) if len(path_parts) > 1 else ""
         return create_spa_router(spa_dir)(subpath)
+
+    # POST /healing/start
+    if route == "/healing/start":
+        if method != "POST":
+            return _json_response(405, {"error": "method_not_allowed"})
+        try:
+            payload_raw = json.loads((request_body or b"{}").decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return _json_response(400, {"error": "invalid_json"})
+        if not isinstance(payload_raw, dict):
+            return _json_response(400, {"error": "invalid_json"})
+        repo_path_raw = payload_raw.get("repo_path")
+        if not isinstance(repo_path_raw, str) or not repo_path_raw.strip():
+            return _json_response(400, {"error": "missing_repo_path"})
+        poll_interval_raw = payload_raw.get("poll_interval_seconds", 60.0)
+        try:
+            poll_interval = float(poll_interval_raw)
+        except (TypeError, ValueError):
+            poll_interval = 60.0
+        result = service.start_healing_loop(repo_path_raw.strip(), poll_interval_seconds=poll_interval)
+        return _json_response(201, result)
+
+    # POST /healing/{loop_id}/stop
+    if (
+        method == "POST"
+        and len(path_parts) == 3
+        and path_parts[0] == "healing"
+        and path_parts[2] == "stop"
+    ):
+        loop_id = path_parts[1]
+        result_stop = service.stop_healing_loop(loop_id)
+        if result_stop is None:
+            return _json_response(404, {"error": "not_found", "loop_id": loop_id})
+        return _json_response(200, result_stop)
+
+    # GET /healing/{loop_id}/jobs
+    if (
+        method == "GET"
+        and len(path_parts) == 3
+        and path_parts[0] == "healing"
+        and path_parts[2] == "jobs"
+    ):
+        loop_id = path_parts[1]
+        jobs_payload = service.get_healing_jobs(loop_id)
+        if jobs_payload is None:
+            return _json_response(404, {"error": "not_found", "loop_id": loop_id})
+        return _json_response(200, jobs_payload)
 
     return _json_response(404, {"error": "not_found"})
 

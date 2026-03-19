@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from lg_orch.memory import (
     build_context_layers,
     ensure_history_policy,
@@ -155,3 +157,60 @@ def test_build_context_layers_counts_semantic_memories_in_fact_count() -> None:
     assert "semantic_memories" in layers["stable_prefix"]["content"]
     assert layers["planner_context"]["semantic_memory_count"] == 2
     assert layers["planner_context"]["fact_count"] == 2
+
+
+def test_compress_context_with_long_term_memory() -> None:
+    mock_ltm = MagicMock()
+    mock_ltm.retrieve_for_context.return_value = (
+        "[long_term:semantic]\n- the deploy script is at scripts/do_deploy.sh"
+    )
+
+    layers = build_context_layers(
+        state={
+            "task": "deploy the application",
+            "facts": [],
+            "_budget_context": {
+                "stable_prefix_tokens": 400,
+                "working_set_tokens": 220,
+                "tool_result_summary_chars": 160,
+            },
+        },
+        repo_context={
+            "repo_root": ".",
+            "has_py": True,
+            "has_rs": False,
+            "top_level": ["py", "README.md"],
+            "repo_map": "py\nREADME.md",
+            "semantic_hits": [],
+        },
+        long_term=mock_ltm,
+    )
+
+    mock_ltm.retrieve_for_context.assert_called_once_with("deploy the application", max_tokens=1000)
+    assert "long_term_memories" in layers["stable_prefix"]["content"]
+    assert "deploy script" in layers["stable_prefix"]["content"]
+
+
+def test_compress_context_without_long_term_memory() -> None:
+    # long_term=None (default) must not raise and must return normal output
+    layers = build_context_layers(
+        state={
+            "facts": [],
+            "_budget_context": {
+                "stable_prefix_tokens": 240,
+                "working_set_tokens": 220,
+                "tool_result_summary_chars": 160,
+            },
+        },
+        repo_context={
+            "repo_root": ".",
+            "has_py": True,
+            "has_rs": False,
+            "top_level": ["py"],
+            "repo_map": "py",
+            "semantic_hits": [],
+        },
+    )
+    assert "stable_prefix" in layers
+    assert "working_set" in layers
+    assert "long_term_memories" not in layers["stable_prefix"]["content"]
