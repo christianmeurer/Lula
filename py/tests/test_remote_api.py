@@ -1075,3 +1075,93 @@ def test_vote_on_run_returns_404_without_policy(tmp_path: Path) -> None:
     payload = json.loads(body.decode("utf-8"))
     assert payload["error"] == "policy_not_found"
     assert payload["run_id"] == "run-no-policy"
+
+
+# ---------------------------------------------------------------------------
+# Healing loop endpoint tests
+# ---------------------------------------------------------------------------
+
+
+def test_start_healing_loop_returns_loop_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    service = RemoteAPIService(repo_root=tmp_path)
+
+    started_threads: list[str] = []
+
+    def fake_thread_start(self: threading.Thread) -> None:
+        started_threads.append(self.name)
+
+    monkeypatch.setattr(threading.Thread, "start", fake_thread_start)
+
+    status, _, body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/healing/start",
+        request_body=json.dumps(
+            {"repo_path": str(tmp_path), "poll_interval_seconds": 30.0}
+        ).encode("utf-8"),
+    )
+    assert status == 201
+    payload = json.loads(body.decode("utf-8"))
+    assert "loop_id" in payload
+    assert payload["status"] == "started"
+    assert len(payload["loop_id"]) > 0
+
+
+def test_stop_healing_loop_returns_stopped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    service = RemoteAPIService(repo_root=tmp_path)
+
+    monkeypatch.setattr(threading.Thread, "start", lambda self: None)
+
+    # Start first
+    start_status, _, start_body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/healing/start",
+        request_body=json.dumps({"repo_path": str(tmp_path)}).encode("utf-8"),
+    )
+    assert start_status == 201
+    loop_id = json.loads(start_body.decode("utf-8"))["loop_id"]
+
+    # Stop it
+    status, _, body = _api_http_response(
+        service,
+        method="POST",
+        request_path=f"/healing/{loop_id}/stop",
+        request_body=None,
+    )
+    assert status == 200
+    payload = json.loads(body.decode("utf-8"))
+    assert payload["loop_id"] == loop_id
+    assert payload["status"] == "stopped"
+
+
+def test_get_healing_jobs_returns_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    service = RemoteAPIService(repo_root=tmp_path)
+
+    monkeypatch.setattr(threading.Thread, "start", lambda self: None)
+
+    start_status, _, start_body = _api_http_response(
+        service,
+        method="POST",
+        request_path="/healing/start",
+        request_body=json.dumps({"repo_path": str(tmp_path)}).encode("utf-8"),
+    )
+    assert start_status == 201
+    loop_id = json.loads(start_body.decode("utf-8"))["loop_id"]
+
+    status, _, body = _api_http_response(
+        service,
+        method="GET",
+        request_path=f"/healing/{loop_id}/jobs",
+        request_body=None,
+    )
+    assert status == 200
+    payload = json.loads(body.decode("utf-8"))
+    assert "jobs" in payload
+    assert isinstance(payload["jobs"], list)

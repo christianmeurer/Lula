@@ -1,10 +1,13 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
 
+use crate::config::SandboxConfig;
 use crate::envelope::IsolationMetadata;
+use crate::errors::ApiError;
+use crate::invariants::{InvariantChecker, InvariantRequest};
 
 // Verus specification annotations.
 // These are no-ops when compiled without `--features verify`.
@@ -289,6 +292,55 @@ impl SandboxPolicy {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Invariant pre-validation helpers
+// ---------------------------------------------------------------------------
+
+/// Pre-validate an exec-style request through all registered boundary invariants.
+///
+/// Call this at the top of any tool function that runs a command, **before** the
+/// existing per-tool checks.  `allowed_commands` should be the runner's exec
+/// allowlist (see `config::ALLOWED_EXEC_COMMANDS`).
+pub fn pre_validate_exec(
+    checker: &InvariantChecker,
+    tool_name: &str,
+    command: &str,
+    args: &[String],
+    allowed_root: &std::path::Path,
+    allowed_commands: &[String],
+) -> Result<(), ApiError> {
+    let req = InvariantRequest {
+        tool_name: tool_name.to_string(),
+        path: None,
+        command: Some(command.to_string()),
+        args: args.to_vec(),
+        allowed_root: allowed_root.to_path_buf(),
+        allowed_commands: allowed_commands.to_vec(),
+    };
+    checker.check_all(&req)
+}
+
+/// Pre-validate a path-bearing request through all registered boundary invariants.
+///
+/// Call this at the top of any tool function that operates on a filesystem path,
+/// **before** the existing `resolve_under_root` call.
+pub fn pre_validate_path(
+    checker: &InvariantChecker,
+    tool_name: &str,
+    path: &std::path::Path,
+    allowed_root: &std::path::Path,
+) -> Result<(), ApiError> {
+    let req = InvariantRequest {
+        tool_name: tool_name.to_string(),
+        path: Some(path.to_path_buf()),
+        command: None,
+        args: vec![],
+        allowed_root: allowed_root.to_path_buf(),
+        allowed_commands: vec![],
+    };
+    checker.check_all(&req)
+}
+
 /// # Specification (Verus)
 /// ```spec
 /// spec fn spec_parse_bool(s: &str) -> bool {
@@ -366,6 +418,49 @@ pub fn detect_prompt_injection(input: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Validate that `target_path` is under `config.workspace_path` when
+/// `config.enforce_read_only_root` is `true`.
+///
+/// Call this before any file-write or patch-apply operation.
+/// Returns `Err(ApiError::Forbidden)` if the path escapes the workspace.
+pub fn validate_write_path(target_path: &Path, config: &SandboxConfig) -> Result<(), ApiError> {
+    if !config.enforce_read_only_root {
+        return Ok(());
+    }
+
+    // Resolve symlinks and `.` / `..` components if possible, but accept a
+    // non-canonicalisable path (e.g. the file does not yet exist) and fall
+    // back to a lexical prefix check instead.
+    let canonical_target = target_path.canonicalize().unwrap_or_else(|_| {
+        let mut out = PathBuf::new();
+        for component in target_path.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    out.pop();
+                }
+                std::path::Component::CurDir => {}
+                other => out.push(other),
+            }
+        }
+        out
+    });
+
+    let canonical_workspace = config
+        .workspace_path
+        .canonicalize()
+        .unwrap_or_else(|_| config.workspace_path.clone());
+
+    if !canonical_target.starts_with(&canonical_workspace) {
+        return Err(ApiError::Forbidden(format!(
+            "write outside workspace: '{}' is not under '{}'",
+            canonical_target.display(),
+            canonical_workspace.display(),
+        )));
+    }
+
+    Ok(())
 }
 
 fn parse_bool(value: &str) -> bool {

@@ -588,6 +588,17 @@ def _planner_model_output(
     except OSError:
         pass
 
+    if bool(state.get("test_repair_mode", False)):
+        repair_prefix = (
+            "REPAIR MODE: The task is to fix one or more failing tests. Focus exclusively on:\n"
+            "1. Reading the failing test(s) and the code they test.\n"
+            "2. Identifying the root cause (test expectation vs. implementation mismatch).\n"
+            "3. Generating a targeted patch to fix the implementation (not the test, unless the test itself is incorrect).\n"
+            "4. Verifying the fix by re-running only the affected test(s).\n"
+            "Do not refactor unrelated code.\n\n"
+        )
+        system_prompt = repair_prefix + system_prompt
+
     schema_text = ""
     try:
         if schema_path.is_file():

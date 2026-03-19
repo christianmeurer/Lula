@@ -493,8 +493,41 @@ The remaining gap is **host isolation**: the runner currently executes on the de
 
 ## Wave 9 — Persistent Cross-Session Memory and Neurosymbolic Verification
 
-- [ ] **Tripartite persistent memory:** vector-backed long-term store bridging [`py/src/lg_orch/run_store.py`](../py/src/lg_orch/run_store.py) and [`py/src/lg_orch/memory.py`](../py/src/lg_orch/memory.py) across sessions (semantic, episodic, and procedural tiers)
-- [ ] **Neurosymbolic vericoding:** Verus/Dafny proof-checker loop for Rust runner boundary invariants
-- [ ] **Cross-repository microservice orchestration:** SCIP/REPOGRAPH symbol index, multi-repo sub-agent fan-out via [`py/src/lg_orch/meta_graph.py`](../py/src/lg_orch/meta_graph.py)
-- [ ] **Agentic self-healing testing loop:** continuous monitoring mode with test repair as a first-class plan step
-- [ ] **Kubernetes-native gVisor/Kata Container sandboxing:** replace command allowlist with hardware-enforced container boundaries
+Status: **COMPLETE**
+
+- [x] **Tripartite persistent memory:** vector-backed long-term store bridging [`py/src/lg_orch/run_store.py`](../py/src/lg_orch/run_store.py) and [`py/src/lg_orch/memory.py`](../py/src/lg_orch/memory.py) across sessions (semantic, episodic, and procedural tiers)
+  - [`py/src/lg_orch/long_term_memory.py`](../py/src/lg_orch/long_term_memory.py): `LongTermMemoryStore` with three SQLite tables (`semantic_memories`, `episodic_memories`, `procedural_memories`); `semantic_fts` FTS5 virtual table; numpy float32 cosine similarity for semantic search; `stub_embedder()` for testing; `retrieve_for_context()` budget-capped cross-tier retrieval.
+  - [`py/src/lg_orch/memory.py`](../py/src/lg_orch/memory.py): `build_context_layers()` accepts `long_term: LongTermMemoryStore | None`; injects retrieved memories as stable-prefix segment; persists loop summaries as episodes.
+  - `OrchState.long_term_memory_path` field added.
+
+- [x] **Neurosymbolic vericoding:** Verus/Dafny proof-checker loop for Rust runner boundary invariants
+  - [`rs/runner/src/invariants.rs`](../rs/runner/src/invariants.rs): `Invariant` trait, `InvariantRequest`, `InvariantChecker` with four concrete invariants: `PathConfinementInvariant`, `CommandAllowlistInvariant`, `NoShellMetacharInvariant`, `ToolNameKnownInvariant`.
+  - [`py/src/lg_orch/vericoding.py`](../py/src/lg_orch/vericoding.py): Python-side pre-check mirror `PythonInvariantChecker` with `InvariantViolation` typed exception.
+  - Wired into [`rs/runner/src/tools/exec.rs`](../rs/runner/src/tools/exec.rs) and [`rs/runner/src/tools/fs.rs`](../rs/runner/src/tools/fs.rs) as a pre-validation layer.
+
+- [x] **Cross-repository microservice orchestration:** SCIP/REPOGRAPH symbol index, multi-repo sub-agent fan-out via [`py/src/lg_orch/meta_graph.py`](../py/src/lg_orch/meta_graph.py)
+  - [`py/src/lg_orch/scip_index.py`](../py/src/lg_orch/scip_index.py): `ScipIndex`, `ScipSymbol`, `load_scip_index()` reading `scip_index.json` sidecars; `cross_repo_deps()` for cross-index symbol matching.
+  - [`py/src/lg_orch/multi_repo.py`](../py/src/lg_orch/multi_repo.py): `RepoConfig`, `CrossRepoHandoff`, `MultiRepoScheduler` wrapping `MetaGraphScheduler`; injects `repo_root`, `runner_url`, SCIP symbol summaries per task.
+
+- [x] **Agentic self-healing testing loop:** continuous monitoring mode with test repair as a first-class plan step
+  - [`py/src/lg_orch/healing_loop.py`](../py/src/lg_orch/healing_loop.py): `HealingLoop` with `poll_once()` (pytest subprocess), `run_until_cancelled()` continuous polling + `asyncio.TaskGroup` job dispatch; `HealingJob` state machine.
+  - `POST /healing/start`, `POST /healing/{loop_id}/stop`, `GET /healing/{loop_id}/jobs` API endpoints.
+  - `OrchState.test_repair_mode` and `healing_job_id` fields; REPAIR MODE planner prompt prefix.
+
+- [x] **Kubernetes-native gVisor/Kata Container sandboxing:** replace command allowlist with hardware-enforced container boundaries
+  - [`infra/k8s/runner-deployment.yaml`](../infra/k8s/runner-deployment.yaml): `runtimeClassName: gvisor`, hardened `securityContext` (`runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`), `seccompProfile: RuntimeDefault`, `emptyDir /workspace` volume.
+  - [`infra/k8s/kata-runtime-class.yaml`](../infra/k8s/kata-runtime-class.yaml): Kata Containers `RuntimeClass` with `kata-qemu` handler.
+  - [`infra/k8s/network-policy.yaml`](../infra/k8s/network-policy.yaml): `NetworkPolicy` blocking all external egress; allowing only DNS + orchestrator service.
+  - [`rs/runner/src/config.rs`](../rs/runner/src/config.rs): `SandboxConfig` struct with `workspace_path` (default `/workspace`) and `enforce_read_only_root`; [`rs/runner/src/sandbox.rs`](../rs/runner/src/sandbox.rs): `validate_write_path()` enforcing workspace confinement.
+  - [`py/src/lg_orch/k8s_sandbox.py`](../py/src/lg_orch/k8s_sandbox.py): `validate_deployment_manifest()` + `generate_sandbox_config_toml()`.
+
+## Wave 10 — Production Hardening and Enterprise Features
+
+Status: PLANNED
+
+- [ ] Distributed tracing (OpenTelemetry) across Python orchestrator and Rust runner
+- [ ] Horizontal scaling: stateless orchestrator with Redis-backed checkpoint store
+- [ ] RBAC and multi-tenant isolation for the run API
+- [ ] Audit log export (structured JSONL, S3/GCS sink)
+- [ ] SLA-aware model routing: latency budget per lane with automatic degradation
+- [ ] GitOps deployment pipeline (ArgoCD/Flux integration for infra/k8s/)

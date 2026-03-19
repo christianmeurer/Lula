@@ -6,7 +6,73 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use tokio::sync::Mutex;
 
 use crate::indexing::IndexingService;
+use crate::invariants::{build_checker, InvariantChecker};
 use crate::sandbox::SandboxPolicy;
+
+/// Configuration for the Kubernetes sandbox environment.
+///
+/// Populated from environment variables with sensible defaults that match
+/// the `runner-deployment.yaml` manifest produced by Wave 9.
+#[derive(Debug, Clone)]
+pub struct SandboxConfig {
+    /// Kubernetes `runtimeClassName` — informational, logged at startup.
+    pub runtime_class: String,
+    /// Writable workspace directory.  All tool write operations must target
+    /// paths under this prefix when `enforce_read_only_root` is `true`.
+    pub workspace_path: PathBuf,
+    /// When `true`, the runner rejects write operations that target paths
+    /// outside `workspace_path`.
+    pub enforce_read_only_root: bool,
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            runtime_class: "gvisor".to_string(),
+            workspace_path: PathBuf::from("/workspace"),
+            enforce_read_only_root: true,
+        }
+    }
+}
+
+impl SandboxConfig {
+    /// Construct from environment variables, falling back to defaults.
+    ///
+    /// | Env var                          | Default        |
+    /// |----------------------------------|----------------|
+    /// | `LG_SANDBOX_RUNTIME_CLASS`       | `"gvisor"`     |
+    /// | `LG_SANDBOX_WORKSPACE_PATH`      | `"/workspace"` |
+    /// | `LG_SANDBOX_ENFORCE_READONLY`    | `"true"`       |
+    #[must_use]
+    pub fn from_env() -> Self {
+        let runtime_class = std::env::var("LG_SANDBOX_RUNTIME_CLASS")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| "gvisor".to_string());
+
+        let workspace_path = std::env::var("LG_SANDBOX_WORKSPACE_PATH")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/workspace"));
+
+        let enforce_read_only_root = std::env::var("LG_SANDBOX_ENFORCE_READONLY")
+            .ok()
+            .map(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(true);
+
+        Self {
+            runtime_class,
+            workspace_path,
+            enforce_read_only_root,
+        }
+    }
+}
 
 pub struct RateLimiter {
     tokens: f64,
@@ -39,6 +105,12 @@ impl RateLimiter {
     }
 }
 
+/// Commands permitted by the exec tool's allowlist.
+/// Kept in sync with `tools/exec.rs::allowed_cmd`.
+pub const ALLOWED_EXEC_COMMANDS: &[&str] = &[
+    "uv", "python", "pytest", "ruff", "mypy", "cargo", "git",
+];
+
 #[derive(Clone)]
 pub struct RunnerConfig {
     pub root_dir: PathBuf,
@@ -48,6 +120,8 @@ pub struct RunnerConfig {
     pub rate_limiter: Arc<Mutex<RateLimiter>>,
     pub indexing: Arc<IndexingService>,
     pub sandbox_policy: SandboxPolicy,
+    pub sandbox: SandboxConfig,
+    pub invariant_checker: Arc<InvariantChecker>,
 }
 
 impl std::fmt::Debug for RunnerConfig {
@@ -57,6 +131,7 @@ impl std::fmt::Debug for RunnerConfig {
             .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
             .field("rate_limiter", &"<RateLimiter>")
             .field("indexing", &"<IndexingService>")
+            .field("sandbox", &self.sandbox)
             .finish()
     }
 }
@@ -86,6 +161,20 @@ impl RunnerConfig {
         let indexing = Arc::new(IndexingService::new(root_dir.clone(), allow_read.clone())?);
 
         let sandbox_policy = SandboxPolicy::from_env();
+        let sandbox = SandboxConfig::from_env();
+        let allowed_commands: Vec<String> = ALLOWED_EXEC_COMMANDS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        let invariant_checker = build_checker(&root_dir, &allowed_commands);
+
+        tracing::info!(
+            runtime_class = %sandbox.runtime_class,
+            workspace_path = %sandbox.workspace_path.display(),
+            enforce_read_only_root = sandbox.enforce_read_only_root,
+            "sandbox configuration loaded"
+        );
+
         Ok(Self {
             root_dir,
             allow_read,
@@ -94,6 +183,8 @@ impl RunnerConfig {
             rate_limiter: Arc::new(Mutex::new(RateLimiter::new(rate_limit_rps))),
             indexing,
             sandbox_policy,
+            sandbox,
+            invariant_checker,
         })
     }
 

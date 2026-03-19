@@ -7,11 +7,11 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::approval::{require_approval, ApprovalTokenInput};
-use crate::config::RunnerConfig;
+use crate::config::{RunnerConfig, ALLOWED_EXEC_COMMANDS};
 use crate::diagnostics::parse_structured_diagnostics;
 use crate::envelope::{Diagnostic, ToolEnvelope};
 use crate::errors::ApiError;
-use crate::sandbox::SandboxBackend;
+use crate::sandbox::{pre_validate_exec, SandboxBackend};
 use crate::tools::snapshot_for_operation;
 
 const STDERR_ARTIFACT_MAX_CHARS: usize = 8_000;
@@ -58,6 +58,24 @@ pub async fn exec(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiE
     let inp: ExecIn =
         serde_json::from_value(input).map_err(|e| ApiError::BadRequest(e.to_string()))?;
     let cmd = inp.cmd.trim();
+
+    // Invariant pre-validation layer (neurosymbolic vericoding check).
+    // Runs before the existing per-tool checks; does NOT replace them.
+    {
+        let allowed_commands: Vec<String> = ALLOWED_EXEC_COMMANDS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        pre_validate_exec(
+            &cfg.invariant_checker,
+            "exec",
+            cmd,
+            &inp.args,
+            &cfg.root_dir,
+            &allowed_commands,
+        )?;
+    }
+
     if !allowed_cmd(cmd) {
         return Err(ApiError::Forbidden(format!("cmd not allowed: {cmd}")));
     }
