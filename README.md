@@ -10,6 +10,7 @@
 [![LangGraph](https://img.shields.io/badge/langgraph-0.4-green.svg)](https://github.com/langchain-ai/langgraph)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
 [![Release](https://img.shields.io/badge/release-v1.0--rc4-blue.svg)](https://github.com/christianmeurer/Lula/releases)
+[![DOI](https://zenodo.org/badge/1145578823.svg)](https://doi.org/10.5281/zenodo.19138036)
 
 ---
 
