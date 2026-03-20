@@ -182,7 +182,7 @@ def verify_token(token: str, settings: JWTSettings) -> TokenClaims:
             )
         elif settings.jwks_url:
             jwks_data = _fetch_jwks(settings.jwks_url)
-            jwks_obj = pyjwt.PyJWKS(jwks_data)
+            jwks_obj = pyjwt.PyJWKSet(jwks_data)
             unverified_header = pyjwt.get_unverified_header(token)
             kid = unverified_header.get("kid")
             signing_key: pyjwt.PyJWK | None = None
