@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -15,6 +16,8 @@ use crate::sandbox::{
     apply_cgroup_v2_limits, cleanup_cgroup, pre_validate_exec, CgroupLimits, SandboxBackend,
 };
 use crate::tools::{snapshot_for_operation, ToolContext};
+#[cfg(target_os = "linux")]
+use crate::vsock::GuestCommandRequest;
 
 const STDERR_ARTIFACT_MAX_CHARS: usize = 8_000;
 
@@ -166,6 +169,124 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
         .map(|p| super::fs::resolve_under_root(cfg, p))
         .transpose()?;
 
+    // Build the minimal safe environment that would be passed to any command.
+    // Shared between the vsock guest path and the host-command paths below.
+    let mut filtered_env: HashMap<String, String> = HashMap::new();
+    if let Ok(path) = std::env::var("PATH") { filtered_env.insert("PATH".to_string(), path); }
+    if let Ok(home) = std::env::var("HOME") { filtered_env.insert("HOME".to_string(), home); }
+    if let Ok(v) = std::env::var("CARGO_HOME") { filtered_env.insert("CARGO_HOME".to_string(), v); }
+    if let Ok(v) = std::env::var("RUSTUP_HOME") { filtered_env.insert("RUSTUP_HOME".to_string(), v); }
+    if let Ok(v) = std::env::var("UV_CACHE_DIR") { filtered_env.insert("UV_CACHE_DIR".to_string(), v); }
+    if let Ok(v) = std::env::var("VIRTUAL_ENV") { filtered_env.insert("VIRTUAL_ENV".to_string(), v); }
+    if let Ok(v) = std::env::var("PYTHONPATH") { filtered_env.insert("PYTHONPATH".to_string(), v); }
+
+    // -----------------------------------------------------------------------
+    // MicroVmEphemeral path — dispatch command to the guest agent via vsock.
+    // On Linux this sends the request over AF_VSOCK and returns early.
+    // On non-Linux platforms the path is unavailable and returns an error.
+    // -----------------------------------------------------------------------
+    if resolved_backend == SandboxBackend::MicroVmEphemeral {
+        #[cfg(target_os = "linux")]
+        {
+            let vmm = vmm_handle.as_ref().ok_or_else(|| {
+                ApiError::BadRequest("MicroVM not started for this request".into())
+            })?;
+
+            let timeout_secs = inp.timeout_s.unwrap_or(600);
+            let cwd_str = cwd
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| cfg.root_dir.to_string_lossy().to_string());
+
+            let guest_req = GuestCommandRequest {
+                cmd: cmd.to_string(),
+                args: inp.args.clone(),
+                cwd: cwd_str,
+                env: filtered_env,
+                timeout_ms: timeout_secs * 1000,
+            };
+
+            let resp = crate::vsock::send_guest_command(
+                vmm.cid,
+                52525,
+                &guest_req,
+                Duration::from_secs(timeout_secs),
+            )
+            .await?;
+
+            metrics::counter!(
+                "runner_tool_calls_total",
+                "tool" => "exec",
+                "status" => if resp.ok { "ok" } else { "error" }
+            ).increment(1);
+
+            let env_out = if resp.ok {
+                let mut e = ToolEnvelope::ok(
+                    "exec",
+                    resp.stdout,
+                    json!({
+                        "cmd": cmd,
+                        "args": inp.args,
+                        "exit_code": resp.exit_code,
+                        "operation_class": operation_class,
+                        "isolation_backend": isolation.backend,
+                        "isolation_degraded": isolation.degraded,
+                        "isolation_reason": isolation.reason,
+                        "isolation_policy_constraints": isolation.policy_constraints,
+                        "timing_ms": resp.timing_ms,
+                    }),
+                )
+                .with_isolation(isolation);
+                if let Some(approval) = approval_metadata { e = e.with_approval(approval); }
+                if let Some(snapshot) = snapshot_metadata { e = e.with_snapshot(snapshot); }
+                e
+            } else {
+                let diagnostics = parse_structured_diagnostics(&resp.stderr);
+                let (stderr_excerpt, stderr_truncated) =
+                    truncate_chars(&resp.stderr, STDERR_ARTIFACT_MAX_CHARS);
+                let stderr_chars = resp.stderr.chars().count();
+                let diagnostics_artifact = diagnostics_to_artifact_value(&diagnostics);
+                let mut e = ToolEnvelope::err(
+                    "exec",
+                    resp.exit_code,
+                    resp.stderr,
+                    json!({
+                        "cmd": cmd,
+                        "args": inp.args,
+                        "exit_code": resp.exit_code,
+                        "operation_class": operation_class,
+                        "isolation_backend": isolation.backend,
+                        "isolation_degraded": isolation.degraded,
+                        "isolation_reason": isolation.reason,
+                        "isolation_policy_constraints": isolation.policy_constraints,
+                        "stdout": resp.stdout,
+                        "stderr_excerpt": stderr_excerpt,
+                        "stderr_truncated": stderr_truncated,
+                        "stderr_chars": stderr_chars,
+                        "diagnostics": diagnostics_artifact,
+                        "timing_ms": resp.timing_ms,
+                    }),
+                )
+                .with_diagnostics(diagnostics)
+                .with_isolation(isolation);
+                if let Some(approval) = approval_metadata { e = e.with_approval(approval); }
+                if let Some(snapshot) = snapshot_metadata { e = e.with_snapshot(snapshot); }
+                e
+            };
+            return Ok(env_out);
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            return Err(ApiError::BadRequest(
+                "MicroVmEphemeral sandbox requires Linux (vsock not available on this platform)"
+                    .into(),
+            ));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Host-command paths (LinuxNamespace, SafeFallback)
+    // -----------------------------------------------------------------------
     let mut c = match resolved_backend {
         SandboxBackend::LinuxNamespace => {
             let unshare_path = cfg
@@ -181,14 +302,6 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
                 .args(&inp.args);
             cmd_obj
         }
-        SandboxBackend::MicroVmEphemeral => {
-            // The Firecracker VM has been configured and started above via the
-            // socket REST API.  The guest command runs directly; the VM
-            // provides the isolation boundary.
-            let mut cmd_obj = Command::new(cmd);
-            cmd_obj.args(&inp.args);
-            cmd_obj
-        }
         _ => {
             let mut cmd_obj = Command::new(cmd);
             cmd_obj.args(&inp.args);
@@ -199,24 +312,13 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     // Strip the parent environment to prevent secret leakage via env vars.
-    // Re-inject only the minimal safe set needed for toolchain commands.
+    // Re-inject only the minimal safe set built above.
     c.env_clear();
-    if let Ok(path) = std::env::var("PATH") {
-        c.env("PATH", path);
+    for (k, v) in &filtered_env {
+        c.env(k, v);
     }
-    if let Ok(home) = std::env::var("HOME") {
-        c.env("HOME", home);
-    }
-    // CARGO_HOME and RUSTUP_HOME are required for cargo to locate toolchains
-    if let Ok(v) = std::env::var("CARGO_HOME") { c.env("CARGO_HOME", v); }
-    if let Ok(v) = std::env::var("RUSTUP_HOME") { c.env("RUSTUP_HOME", v); }
-    // UV_CACHE_DIR for Python tooling
-    if let Ok(v) = std::env::var("UV_CACHE_DIR") { c.env("UV_CACHE_DIR", v); }
-    // VIRTUAL_ENV / PYTHONPATH for activated venvs
-    if let Ok(v) = std::env::var("VIRTUAL_ENV") { c.env("VIRTUAL_ENV", v); }
-    if let Ok(v) = std::env::var("PYTHONPATH") { c.env("PYTHONPATH", v); }
-    if let Some(cwd) = cwd {
-        c.current_dir(cwd);
+    if let Some(ref cwd_path) = cwd {
+        c.current_dir(cwd_path);
     } else {
         c.current_dir(&cfg.root_dir);
     }
