@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from lg_orch.nodes._planner_memory import _WORD_RE
+from lg_orch.nodes._utils import extract_json_block as _extract_json_block_fn
 from lg_orch.state import AgentHandoff, HandoffEvidence, PlannerOutput, PlanStep, ToolCall
 
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL | re.IGNORECASE)
 _PDF_PATH_RE = re.compile(r'(["\']?)([^"\'\n\r]*?\.pdf)\1', re.IGNORECASE)
 
 
@@ -35,14 +35,8 @@ def _classify_intent(request: str) -> str:
 
 
 def _extract_json_block(raw: str) -> str:
-    fenced = _JSON_FENCE_RE.search(raw)
-    if fenced is not None:
-        return fenced.group(1).strip()
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start != -1 and end != -1 and end >= start:
-        return raw[start : end + 1].strip()
-    return raw.strip()
+    result = _extract_json_block_fn(raw)
+    return result if result is not None else raw.strip()
 
 
 def _extract_pdf_path(request: str) -> str | None:

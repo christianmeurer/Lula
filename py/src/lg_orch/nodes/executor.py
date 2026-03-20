@@ -7,12 +7,17 @@ from typing import Any
 from lg_orch.logging import get_logger
 from lg_orch.memory import ensure_history_policy, prune_pre_verification_history
 from lg_orch.model_routing import tool_routing_metadata
+from lg_orch.nodes._utils import validate_base_url as _validate_base_url_fn
 from lg_orch.tools import RunnerClient
 from lg_orch.trace import append_event
 
 
 def _validate_base_url(url: str) -> bool:
-    return url.startswith("http://") or url.startswith("https://")
+    try:
+        _validate_base_url_fn(url, "runner_base_url")
+        return True
+    except ValueError:
+        return False
 
 
 def _as_int(value: object, *, default: int) -> int:

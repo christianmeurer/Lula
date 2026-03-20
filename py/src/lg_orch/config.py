@@ -5,6 +5,7 @@ import re as _re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from lg_orch.audit import AuditConfig
 
@@ -18,6 +19,11 @@ def _is_valid_sha256_hex(value: str) -> bool:
 
 class ConfigError(ValueError):
     pass
+
+
+# ---------------------------------------------------------------------------
+# Low-level coercion helpers
+# ---------------------------------------------------------------------------
 
 
 def _require_str(tbl: dict[str, object], key: str) -> str:
@@ -62,6 +68,95 @@ def _get_bool(tbl: dict[str, object], key: str, *, default: bool) -> bool:
     if key not in tbl:
         return default
     return _require_bool(tbl, key)
+
+
+# ---------------------------------------------------------------------------
+# Section-aware helpers for load_config() — eliminate repetitive boilerplate
+# ---------------------------------------------------------------------------
+
+
+def _require(raw: dict[str, Any], key: str, section: str) -> Any:
+    val = raw.get(key)
+    if val is None:
+        raise ConfigError(f"[{section}] missing required key '{key}'")
+    return val
+
+
+def _require_section_str(raw: dict[str, Any], key: str, section: str) -> str:
+    val = _require(raw, key, section)
+    if not isinstance(val, str) or not val.strip():
+        raise ConfigError(f"[{section}] '{key}' must be a non-empty string")
+    return val.strip()
+
+
+def _require_section_int(raw: dict[str, Any], key: str, section: str) -> int:
+    val = _require(raw, key, section)
+    if isinstance(val, bool) or not isinstance(val, (int, float, str)):
+        raise ConfigError(f"[{section}] '{key}' must be an integer")
+    try:
+        return int(val) if not isinstance(val, str) else int(val.strip())
+    except (ValueError, TypeError) as exc:
+        raise ConfigError(f"[{section}] '{key}' must be an integer") from exc
+
+
+def _opt_str(raw: dict[str, Any], key: str, default: str = "") -> str:
+    """Return string value for *key* in *raw*, or *default* if absent/None."""
+    val = raw.get(key)
+    if val is None:
+        return default
+    if not isinstance(val, str):
+        raise ConfigError(f"'{key}' must be a string")
+    return val.strip()
+
+
+def _opt_int(raw: dict[str, Any], key: str, default: int = 0) -> int:
+    """Return integer value for *key* in *raw*, or *default* if absent/None."""
+    val = raw.get(key)
+    if val is None:
+        return default
+    if isinstance(val, bool) or not isinstance(val, (int, float, str)):
+        raise ConfigError(f"'{key}' must be an integer")
+    try:
+        return int(val) if not isinstance(val, str) else int(val.strip())
+    except (ValueError, TypeError) as exc:
+        raise ConfigError(f"'{key}' must be an integer") from exc
+
+
+def _opt_bool(raw: dict[str, Any], key: str, default: bool = False) -> bool:
+    """Return bool value for *key* in *raw*, or *default* if absent/None."""
+    val = raw.get(key)
+    if val is None:
+        return default
+    if not isinstance(val, bool):
+        raise ConfigError(f"'{key}' must be a boolean")
+    return val
+
+
+def _opt_str_or_env(raw: dict[str, Any], key: str, env_var: str) -> str | None:
+    """Return config string or fall back to *env_var*; None if both absent."""
+    val = raw.get(key)
+    if val is None:
+        env_val = os.environ.get(env_var)
+        return env_val.strip() or None if isinstance(env_val, str) else None
+    if not isinstance(val, str):
+        raise ConfigError(f"missing/invalid {key}")
+    return val.strip() or None
+
+
+def _opt_int_or_env(raw: dict[str, Any], key: str, env_var: str, default: int = 0) -> int:
+    """Return config int or fall back to *env_var*; *default* if both absent."""
+    val = raw.get(key)
+    if val is None:
+        env_val = os.environ.get(env_var)
+        if env_val is not None:
+            try:
+                return int(env_val.strip())
+            except ValueError as exc:
+                raise ConfigError(f"missing/invalid {env_var}") from exc
+        return default
+    if isinstance(val, bool) or not isinstance(val, int):
+        raise ConfigError(f"missing/invalid {key}")
+    return val
 
 
 def _env_bool(name: str, *, default: bool) -> bool:
@@ -615,56 +710,16 @@ def load_config(*, repo_root: Path) -> AppConfig:
     if auth_mode not in {"off", "bearer"}:
         raise ConfigError("remote_api.auth_mode must be one of: off, bearer")
 
-    bearer_token_raw = remote_api_raw.get("bearer_token")
-    bearer_token: str | None
-    if bearer_token_raw is None:
-        bearer_token = os.environ.get("LG_REMOTE_API_BEARER_TOKEN")
-    elif isinstance(bearer_token_raw, str):
-        bearer_token = bearer_token_raw.strip() or None
-    else:
-        raise ConfigError("missing/invalid remote_api.bearer_token")
-    if bearer_token is not None:
-        bearer_token = bearer_token.strip() or None
+    bearer_token = _opt_str_or_env(remote_api_raw, "bearer_token", "LG_REMOTE_API_BEARER_TOKEN")
     if auth_mode == "bearer" and bearer_token is None:
         raise ConfigError("remote_api.bearer_token is required when remote_api.auth_mode=bearer")
 
-    run_store_path_raw = remote_api_raw.get("run_store_path")
-    run_store_path: str | None
-    if run_store_path_raw is None:
-        env_rsp = os.environ.get("LG_REMOTE_API_RUN_STORE_PATH")
-        run_store_path = env_rsp.strip() or None if isinstance(env_rsp, str) else None
-    elif isinstance(run_store_path_raw, str):
-        run_store_path = run_store_path_raw.strip() or None
-    else:
-        raise ConfigError("missing/invalid remote_api.run_store_path")
-
-    rate_limit_rps_raw = remote_api_raw.get("rate_limit_rps")
-    rate_limit_rps: int
-    if rate_limit_rps_raw is None:
-        env_rlr = os.environ.get("LG_REMOTE_API_RATE_LIMIT_RPS")
-        if env_rlr is not None:
-            try:
-                rate_limit_rps = int(env_rlr.strip())
-            except ValueError as exc:
-                raise ConfigError("missing/invalid LG_REMOTE_API_RATE_LIMIT_RPS") from exc
-        else:
-            rate_limit_rps = 0
-    else:
-        if isinstance(rate_limit_rps_raw, bool) or not isinstance(rate_limit_rps_raw, int):
-            raise ConfigError("missing/invalid remote_api.rate_limit_rps")
-        rate_limit_rps = rate_limit_rps_raw
+    run_store_path = _opt_str_or_env(remote_api_raw, "run_store_path", "LG_REMOTE_API_RUN_STORE_PATH")
+    rate_limit_rps = _opt_int_or_env(remote_api_raw, "rate_limit_rps", "LG_REMOTE_API_RATE_LIMIT_RPS", default=0)
     if rate_limit_rps != 0 and rate_limit_rps < 1:
         raise ConfigError("remote_api.rate_limit_rps must be 0 (disabled) or >= 1")
 
-    procedure_cache_path_raw = remote_api_raw.get("procedure_cache_path")
-    procedure_cache_path: str | None
-    if procedure_cache_path_raw is None:
-        env_pcp = os.environ.get("LG_REMOTE_API_PROCEDURE_CACHE_PATH")
-        procedure_cache_path = env_pcp.strip() or None if isinstance(env_pcp, str) else None
-    elif isinstance(procedure_cache_path_raw, str):
-        procedure_cache_path = procedure_cache_path_raw.strip() or None
-    else:
-        raise ConfigError("missing/invalid remote_api.procedure_cache_path")
+    procedure_cache_path = _opt_str_or_env(remote_api_raw, "procedure_cache_path", "LG_REMOTE_API_PROCEDURE_CACHE_PATH")
 
     default_namespace_raw = remote_api_raw.get("default_namespace")
     default_namespace: str
@@ -676,46 +731,24 @@ def load_config(*, repo_root: Path) -> AppConfig:
     else:
         raise ConfigError("missing/invalid remote_api.default_namespace")
     if default_namespace and not _NAMESPACE_RE.fullmatch(default_namespace):
-        raise ConfigError(
-            "remote_api.default_namespace must match [A-Za-z0-9_-]{1,64} or be empty"
-        )
+        raise ConfigError("remote_api.default_namespace must match [A-Za-z0-9_-]{1,64} or be empty")
 
-    jwt_secret_raw = remote_api_raw.get("jwt_secret")
-    jwt_secret: str | None
-    if jwt_secret_raw is None:
-        env_js = os.environ.get("JWT_SECRET")
-        jwt_secret = env_js.strip() or None if isinstance(env_js, str) else None
-    elif isinstance(jwt_secret_raw, str):
-        jwt_secret = jwt_secret_raw.strip() or None
-    else:
-        raise ConfigError("missing/invalid remote_api.jwt_secret")
-
-    jwks_url_raw = remote_api_raw.get("jwks_url")
-    jwks_url: str | None
-    if jwks_url_raw is None:
-        env_ju = os.environ.get("JWKS_URL")
-        jwks_url = env_ju.strip() or None if isinstance(env_ju, str) else None
-    elif isinstance(jwks_url_raw, str):
-        jwks_url = jwks_url_raw.strip() or None
-    else:
-        raise ConfigError("missing/invalid remote_api.jwks_url")
+    jwt_secret = _opt_str_or_env(remote_api_raw, "jwt_secret", "JWT_SECRET")
+    jwks_url = _opt_str_or_env(remote_api_raw, "jwks_url", "JWKS_URL")
 
     remote_api = RemoteAPIConfig(
         auth_mode=auth_mode,
         bearer_token=bearer_token,
         allow_unauthenticated_healthz=_get_bool(
-            remote_api_raw,
-            "allow_unauthenticated_healthz",
+            remote_api_raw, "allow_unauthenticated_healthz",
             default=_env_bool("LG_REMOTE_API_ALLOW_UNAUTHENTICATED_HEALTHZ", default=True),
         ),
         trust_forwarded_headers=_get_bool(
-            remote_api_raw,
-            "trust_forwarded_headers",
+            remote_api_raw, "trust_forwarded_headers",
             default=_env_bool("LG_REMOTE_API_TRUST_FORWARDED_HEADERS", default=False),
         ),
         access_log_enabled=_get_bool(
-            remote_api_raw,
-            "access_log_enabled",
+            remote_api_raw, "access_log_enabled",
             default=_env_bool("LG_REMOTE_API_ACCESS_LOG_ENABLED", default=True),
         ),
         run_store_path=run_store_path,
@@ -726,57 +759,35 @@ def load_config(*, repo_root: Path) -> AppConfig:
         jwks_url=jwks_url,
     )
 
-    checkpoint_enabled = checkpoint_raw.get("enabled", True)
-    if not isinstance(checkpoint_enabled, bool):
-        raise ConfigError("missing/invalid checkpoint.enabled")
-
-    checkpoint_db_path_raw = checkpoint_raw.get("db_path", "artifacts/checkpoints/langgraph.sqlite")
-    if not isinstance(checkpoint_db_path_raw, str) or not checkpoint_db_path_raw.strip():
+    # Checkpoint section
+    checkpoint_enabled = _opt_bool(checkpoint_raw, "enabled", default=True)
+    checkpoint_db_path = _opt_str(checkpoint_raw, "db_path", default="artifacts/checkpoints/langgraph.sqlite")
+    if not checkpoint_db_path:
         raise ConfigError("missing/invalid checkpoint.db_path")
-
-    checkpoint_namespace_raw = checkpoint_raw.get("namespace", "main")
-    if not isinstance(checkpoint_namespace_raw, str) or not checkpoint_namespace_raw.strip():
+    checkpoint_namespace = _opt_str(checkpoint_raw, "namespace", default="main")
+    if not checkpoint_namespace:
         raise ConfigError("missing/invalid checkpoint.namespace")
-
-    checkpoint_thread_prefix_raw = checkpoint_raw.get("thread_prefix", "lg-orch")
-    if (
-        not isinstance(checkpoint_thread_prefix_raw, str)
-        or not checkpoint_thread_prefix_raw.strip()
-    ):
+    checkpoint_thread_prefix = _opt_str(checkpoint_raw, "thread_prefix", default="lg-orch")
+    if not checkpoint_thread_prefix:
         raise ConfigError("missing/invalid checkpoint.thread_prefix")
-
-    checkpoint_backend_raw = checkpoint_raw.get("backend", "sqlite")
-    if not isinstance(checkpoint_backend_raw, str):
-        raise ConfigError("missing/invalid checkpoint.backend")
-    checkpoint_backend = checkpoint_backend_raw.strip().lower() or "sqlite"
-    if checkpoint_backend not in {"sqlite", "redis", "postgres"}:
+    checkpoint_backend_raw = _opt_str(checkpoint_raw, "backend", default="sqlite").lower() or "sqlite"
+    if checkpoint_backend_raw not in {"sqlite", "redis", "postgres"}:
         raise ConfigError("checkpoint.backend must be one of: sqlite, redis, postgres")
-
-    checkpoint_redis_url_raw = checkpoint_raw.get("redis_url", "redis://localhost:6379/0")
-    if not isinstance(checkpoint_redis_url_raw, str):
-        raise ConfigError("missing/invalid checkpoint.redis_url")
-    checkpoint_redis_url = checkpoint_redis_url_raw.strip() or "redis://localhost:6379/0"
-
-    checkpoint_postgres_dsn_raw = checkpoint_raw.get("postgres_dsn", "")
-    if not isinstance(checkpoint_postgres_dsn_raw, str):
-        raise ConfigError("missing/invalid checkpoint.postgres_dsn")
-    checkpoint_postgres_dsn = checkpoint_postgres_dsn_raw.strip()
-
-    checkpoint_redis_ttl_raw = checkpoint_raw.get("redis_ttl_seconds", 86400)
-    if isinstance(checkpoint_redis_ttl_raw, bool) or not isinstance(checkpoint_redis_ttl_raw, int):
-        raise ConfigError("missing/invalid checkpoint.redis_ttl_seconds")
-    if checkpoint_redis_ttl_raw < 1:
+    checkpoint_redis_url = _opt_str(checkpoint_raw, "redis_url", default="redis://localhost:6379/0") or "redis://localhost:6379/0"
+    checkpoint_postgres_dsn = _opt_str(checkpoint_raw, "postgres_dsn", default="")
+    checkpoint_redis_ttl = _opt_int(checkpoint_raw, "redis_ttl_seconds", default=86400)
+    if checkpoint_redis_ttl < 1:
         raise ConfigError("checkpoint.redis_ttl_seconds must be >= 1")
 
     checkpoint = Checkpoint(
         enabled=checkpoint_enabled,
-        db_path=checkpoint_db_path_raw.strip(),
-        namespace=checkpoint_namespace_raw.strip(),
-        thread_prefix=checkpoint_thread_prefix_raw.strip(),
-        backend=checkpoint_backend,
+        db_path=checkpoint_db_path,
+        namespace=checkpoint_namespace,
+        thread_prefix=checkpoint_thread_prefix,
+        backend=checkpoint_backend_raw,
         redis_url=checkpoint_redis_url,
         postgres_dsn=checkpoint_postgres_dsn,
-        redis_ttl_seconds=checkpoint_redis_ttl_raw,
+        redis_ttl_seconds=checkpoint_redis_ttl,
     )
 
     vericoding = VericodingConfig(
@@ -784,48 +795,36 @@ def load_config(*, repo_root: Path) -> AppConfig:
         extensions=_optional_str_tuple(vericoding_raw, "extensions") or (".rs",),
     )
 
-    audit_log_path_raw = audit_raw.get("log_path", "audit.jsonl")
-    if not isinstance(audit_log_path_raw, str):
-        raise ConfigError("missing/invalid audit.log_path")
-    audit_log_path = audit_log_path_raw.strip() or "audit.jsonl"
-
-    audit_sink_type_raw = audit_raw.get("sink_type")
+    # Audit section
+    audit_log_path = _opt_str(audit_raw, "log_path", default="audit.jsonl") or "audit.jsonl"
+    audit_sink_type_raw2 = audit_raw.get("sink_type")
     audit_sink_type: str | None
-    if audit_sink_type_raw is None:
+    if audit_sink_type_raw2 is None:
         audit_sink_type = None
-    elif isinstance(audit_sink_type_raw, str):
-        v = audit_sink_type_raw.strip().lower()
+    elif isinstance(audit_sink_type_raw2, str):
+        v = audit_sink_type_raw2.strip().lower()
         if v and v not in {"s3", "gcs"}:
             raise ConfigError("audit.sink_type must be one of: s3, gcs or absent")
         audit_sink_type = v or None
     else:
         raise ConfigError("missing/invalid audit.sink_type")
 
-    def _optional_str(tbl: dict[str, object], key: str, *, default: str = "") -> str | None:
-        raw = tbl.get(key)
+    def _audit_opt_str(key: str) -> str | None:
+        raw = audit_raw.get(key)
         if raw is None:
             return None
         if not isinstance(raw, str):
             raise ConfigError(f"missing/invalid audit.{key}")
         return raw.strip() or None
 
-    s3_bucket = _optional_str(audit_raw, "s3_bucket")
-    s3_prefix_raw = audit_raw.get("s3_prefix", "audit")
-    s3_prefix = s3_prefix_raw.strip() if isinstance(s3_prefix_raw, str) else "audit"
-    s3_region_raw = audit_raw.get("s3_region", "us-east-1")
-    s3_region = s3_region_raw.strip() if isinstance(s3_region_raw, str) else "us-east-1"
-    gcs_bucket = _optional_str(audit_raw, "gcs_bucket")
-    gcs_prefix_raw = audit_raw.get("gcs_prefix", "audit")
-    gcs_prefix = gcs_prefix_raw.strip() if isinstance(gcs_prefix_raw, str) else "audit"
-
     audit = AuditConfig(
         log_path=audit_log_path,
         sink_type=audit_sink_type,
-        s3_bucket=s3_bucket,
-        s3_prefix=s3_prefix or "audit",
-        s3_region=s3_region or "us-east-1",
-        gcs_bucket=gcs_bucket,
-        gcs_prefix=gcs_prefix or "audit",
+        s3_bucket=_audit_opt_str("s3_bucket"),
+        s3_prefix=_opt_str(audit_raw, "s3_prefix", default="audit") or "audit",
+        s3_region=_opt_str(audit_raw, "s3_region", default="us-east-1") or "us-east-1",
+        gcs_bucket=_audit_opt_str("gcs_bucket"),
+        gcs_prefix=_opt_str(audit_raw, "gcs_prefix", default="audit") or "audit",
     )
 
     # SLA config
