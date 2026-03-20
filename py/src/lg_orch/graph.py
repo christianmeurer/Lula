@@ -16,6 +16,7 @@ from lg_orch.nodes import (
     router,
     verifier,
 )
+from lg_orch.state import OrchState
 from lg_orch.visualize import GraphEdge, graph_mermaid
 
 
@@ -27,13 +28,13 @@ def _make_traced_node(node_fn: Any, node_name: str) -> Any:
     field in state, when present).
     """
 
-    def _traced(state: dict[str, Any]) -> Any:
+    def _traced(state: OrchState) -> Any:
         try:
             from opentelemetry import trace as _otel_trace
 
             tracer = _otel_trace.get_tracer("lg_orch.graph")
-            run_id = str(state.get("_run_id", ""))
-            lane = str(state.get("_lane", ""))
+            run_id = str(state.model_extra.get("_run_id", ""))
+            lane = str(state.model_extra.get("_lane", ""))
             with tracer.start_as_current_span(
                 f"node.{node_name}",
                 attributes={
@@ -53,15 +54,15 @@ def _make_traced_node(node_fn: Any, node_name: str) -> Any:
     return _traced
 
 
-def route_after_policy_gate(state: dict[str, Any]) -> str:
-    halt_reason = str(state.get("halt_reason", "")).strip()
+def route_after_policy_gate(state: OrchState) -> str:
+    halt_reason = state.halt_reason.strip()
     if halt_reason in {"max_loops_exhausted", "plan_max_iterations_exhausted"}:
         return "reporter"
 
-    if bool(state.get("context_reset_requested", False)):
+    if state.context_reset_requested:
         return "context_builder"
 
-    retry_target = state.get("retry_target")
+    retry_target = state.retry_target
     if retry_target == "router":
         return "router"
     if retry_target == "planner":
@@ -74,16 +75,15 @@ def route_after_policy_gate(state: dict[str, Any]) -> str:
     return "context_builder"
 
 
-def route_after_verifier(state: dict[str, Any]) -> str:
-    verification = state.get("verification", {})
-    if verification.get("ok"):
+def route_after_verifier(state: OrchState) -> str:
+    if state.verification is not None and state.verification.ok:
         return "reporter"
 
     return "policy_gate"
 
 
 def build_graph(*, checkpointer: BaseCheckpointSaver[Any] | None = None) -> Any:
-    g: StateGraph = StateGraph(dict)
+    g: StateGraph = StateGraph(OrchState)
     g.add_node("ingest", _make_traced_node(ingest, "ingest"))
     g.add_node("policy_gate", _make_traced_node(policy_gate, "policy_gate"))
     g.add_node("context_builder", _make_traced_node(context_builder, "context_builder"))

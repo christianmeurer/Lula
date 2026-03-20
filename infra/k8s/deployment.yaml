@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: lula-orch
+        app.kubernetes.io/version: "latest"
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8001"
@@ -36,7 +37,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: lula-orch
-          image: registry.digitalocean.com/lula-orch/lula-orch:latest
+          # Image tag is managed by .github/workflows/release.yml on every v* tag push.
+          # To manually override: kubectl set image deployment/lula-orch lula-orch=<image>@<digest>
+          image: registry.digitalocean.com/lula-registry/lula:latest
           ports:
             - containerPort: 8001
           env:

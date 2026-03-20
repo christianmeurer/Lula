@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from lg_orch.logging import get_logger
-from lg_orch.state import OrchState
+from lg_orch.state import OrchState, validate_state
 from lg_orch.trace import append_event, ensure_run_id
 
 _ORCH_DEFAULTS: dict[str, Any] = {
@@ -38,15 +38,34 @@ _ORCH_DEFAULTS: dict[str, Any] = {
 }
 
 
-def ingest(state: dict[str, Any]) -> dict[str, Any]:
+def ingest(state: OrchState | dict[str, Any]) -> dict[str, Any]:
+    """Entry-point node for the orchestration graph.
+
+    Accepts either an :class:`OrchState` instance (from LangGraph when the graph
+    is typed) or a raw ``dict`` (from unit tests and legacy callers).  In both
+    cases the output is a plain ``dict`` containing validated state fields merged
+    with any underscore-prefixed internal keys.
+    """
     log = get_logger()
-    req = str(state.get("request", "")).strip()
-    internal = {k: v for k, v in state.items() if str(k).startswith("_")}
+
+    # --- Normalise input to a raw dict so the rest of the node is uniform ----
+    if isinstance(state, OrchState):
+        raw: dict[str, Any] = state.model_dump()
+        raw.update(state.model_extra)          # re-attach _run_id, _lane, etc.
+    else:
+        raw = dict(state)
+
+    # Preserve any LangGraph/caller-supplied underscore-prefixed internal keys.
+    internal: dict[str, Any] = {k: v for k, v in raw.items() if str(k).startswith("_")}
     internal = ensure_run_id(internal)
+    req = str(raw.get("request", "")).strip()
+
     try:
-        validated = OrchState(request=req).model_dump()
+        validated_state = validate_state({"request": req})
+        validated = validated_state.model_dump()
     except Exception as exc:
         log.error("ingest_validation_failed", error=str(exc))
         validated = {"request": req, **_ORCH_DEFAULTS}
+
     out = {**validated, **internal}
     return append_event(out, kind="node", data={"name": "ingest", "phase": "end"})

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import math
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+
+_log = logging.getLogger(__name__)
 
 
 def _repo_root() -> Path:
@@ -165,6 +169,118 @@ def run_task(
     return dict(output)
 
 
+# ---------------------------------------------------------------------------
+# Golden file support
+# ---------------------------------------------------------------------------
+
+_NUMERIC_SUFFIX_RE = re.compile(r"-\d+$")
+
+
+def load_golden(task_id: str) -> dict[str, Any] | None:
+    """Load the golden assertion file for *task_id*, or ``None`` if absent.
+
+    The golden directory lives at ``eval/golden/`` next to this file.  Task IDs
+    that carry a numeric instance suffix (e.g. ``test-repair-001``) are
+    normalised to their base form (``test-repair``) before lookup.
+    """
+    base_id = _NUMERIC_SUFFIX_RE.sub("", task_id)
+    golden_path = Path(__file__).resolve().parent / "golden" / f"{base_id}.json"
+    if not golden_path.exists():
+        return None
+    try:
+        return json.loads(golden_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        _log.warning("golden file %s is not valid JSON: %s", golden_path, exc)
+        return None
+
+
+def _get_nested(obj: Any, path: str) -> Any:
+    """Resolve a dotted *path* against *obj*, returning ``None`` on missing keys."""
+    parts = path.split(".")
+    current = obj
+    for part in parts:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def evaluate_golden_assertions(
+    result: dict[str, Any],
+    golden: dict[str, Any],
+) -> tuple[int, int, list[str]]:
+    """Evaluate all assertions in *golden* against *result*.
+
+    Returns ``(passed_count, total_count, failure_messages)``.
+
+    Assertion operators:
+    - ``eq``       — ``actual == value``
+    - ``ne``       — ``actual != value``
+    - ``lte``      — ``actual <= value`` (numeric)
+    - ``gte``      — ``actual >= value`` (numeric)
+    - ``in``       — ``actual in value`` (scalar in list)
+    - ``contains`` — ``value in actual`` (list/string containment)
+    """
+    assertions = golden.get("assertions", [])
+    if not isinstance(assertions, list):
+        return 0, 0, []
+
+    passed = 0
+    failures: list[str] = []
+
+    for assertion in assertions:
+        if not isinstance(assertion, dict):
+            continue
+        # Support both "path" (spec) and "field" (existing files)
+        field_key: str = str(assertion.get("path") or assertion.get("field") or "")
+        op: str = str(assertion.get("op", "")).strip()
+        expected: Any = assertion.get("value")
+
+        if not field_key or not op:
+            continue
+
+        actual = _get_nested(result, field_key)
+
+        ok: bool
+        if op == "eq":
+            ok = actual == expected
+        elif op == "ne":
+            ok = actual != expected
+        elif op == "lte":
+            try:
+                ok = float(actual) <= float(expected)
+            except (TypeError, ValueError):
+                ok = False
+        elif op == "gte":
+            try:
+                ok = float(actual) >= float(expected)
+            except (TypeError, ValueError):
+                ok = False
+        elif op == "in":
+            try:
+                ok = actual in expected
+            except TypeError:
+                ok = False
+        elif op == "contains":
+            try:
+                ok = expected in actual
+            except TypeError:
+                ok = False
+        else:
+            _log.warning("unknown golden assertion operator %r — skipping", op)
+            continue
+
+        if ok:
+            passed += 1
+        else:
+            failures.append(
+                f"golden assertion failed: {field_key} {op} {expected!r} (actual={actual!r})"
+            )
+
+    total = passed + len(failures)
+    return passed, total, failures
+
+
 def _score_tool_call_coverage(task: EvalTask, output: dict[str, Any]) -> bool:
     if not task.expected_tool_calls:
         return True
@@ -295,7 +411,23 @@ def score_task(task: EvalTask, output: dict[str, Any]) -> dict[str, Any]:
     }
     passed_checks = sum(1 for ok in checks.values() if ok)
     max_checks = len(checks)
+    behavioral_all_passed = passed_checks == max_checks
     score = passed_checks / max_checks if max_checks > 0 else 0.0
+
+    # Golden assertions
+    golden = load_golden(task.id)
+    golden_assertions_passed: int = 0
+    golden_assertions_total: int = 0
+    golden_assertion_failures: list[str] = []
+    golden_passed: bool = True
+
+    if golden is not None:
+        golden_assertions_passed, golden_assertions_total, golden_assertion_failures = (
+            evaluate_golden_assertions(output, golden)
+        )
+        golden_passed = len(golden_assertion_failures) == 0
+
+    task_failures: list[str] = list(golden_assertion_failures)
 
     return {
         "id": task.id,
@@ -311,7 +443,11 @@ def score_task(task: EvalTask, output: dict[str, Any]) -> dict[str, Any]:
         "tool_results_count": len(tool_results),
         "checks": checks,
         "score": score,
-        "passed": passed_checks == max_checks,
+        "golden_assertions_passed": golden_assertions_passed,
+        "golden_assertions_total": golden_assertions_total,
+        "golden_assertion_failures": task_failures,
+        "golden_passed": golden_passed,
+        "passed": behavioral_all_passed and golden_passed,
     }
 
 
