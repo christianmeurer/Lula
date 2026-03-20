@@ -110,6 +110,23 @@ The logic for tools is located in `rs/runner/src/tools/`.
   - `apply_patch`: Adds, updates, or deletes files safely.
 - **Exec Tool (`exec.rs`)**:
   - `exec`: Spawns a subprocess. It uses the allowlist defined in `config.rs` (`uv`, `python`, `pytest`, `ruff`, `mypy`, `cargo`, `git`) to prevent arbitrary command execution.
+  - On the `MicroVmEphemeral` backend, `exec` does **not** run the command on the host. Instead it sends a `GuestCommandRequest` to the guest agent running inside the Firecracker microVM over `AF_VSOCK` (CID 3, port 52525). On non-Linux hosts the path returns `ApiError::BadRequest` with a descriptive platform-not-supported message.
+
+### Firecracker vsock guest agent
+
+The `rs/guest-agent/` workspace member provides the `lula-guest-agent` binary that runs inside the Firecracker rootfs.
+
+| Aspect | Detail |
+|---|---|
+| Transport (Linux) | `AF_VSOCK` socket, port configurable via `GUEST_AGENT_PORT` (default 52525) |
+| Transport (test/macOS) | Unix domain socket at `GUEST_AGENT_SOCK` (default `/tmp/lula-agent.sock`) |
+| Protocol | Newline-delimited JSON (one request → one response per connection) |
+| Request shape | `{"cmd":"cargo","args":[...],"cwd":"/workspace","env":{...},"timeout_ms":30000}` |
+| Response shape | `{"ok":true,"exit_code":0,"stdout":"...","stderr":"...","timing_ms":1234}` |
+
+The host-side vsock client lives in `rs/runner/src/vsock.rs`. On Linux it creates an `AF_VSOCK` socket via `libc::socket(AF_VSOCK, SOCK_STREAM, 0)`, connects to the guest CID and port, and performs a single request/response exchange wrapped in a tokio timeout. The `FirecrackerVmm` struct in `sandbox.rs` now carries a `cid: u32` field (default 3) populated after `configure_and_start` configures the vsock device via `PUT /vsock`.
+
+**Linux-only constraint:** All `AF_VSOCK` socket code is guarded by `#[cfg(target_os = "linux")]`. The runner and guest-agent compile and test cleanly on Windows/macOS for development purposes; the `MicroVmEphemeral` execution path returns a graceful `BadRequest` error on those platforms.
 
 ## Eval Framework (`eval/run.py`)
 
