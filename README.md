@@ -13,7 +13,7 @@
 
 ---
 
-**Maturity: Production-Ready (v1.0-rc3)** — All Wave 14–16 debt resolved, all CRITICAL/HIGH sprint items closed, and second sprint (Waves A/B/D) complete (2026-03-20). Full eval framework coverage with SWE-bench adapter active. Production-ready with the exception of external secrets management (ESO/Vault — operational dependency) and Firecracker VMM dispatch path completion.
+**Maturity: Production-Ready (v1.0-rc4)** — All Wave 14–16 debt resolved, all CRITICAL/HIGH sprint items closed, second sprint (Waves A/B/D) complete, and third sprint (Firecracker vsock guest agent) complete (2026-03-20). Full eval framework coverage with SWE-bench adapter active. The sole remaining operational dependency is external secrets management (ESO/Vault).
 
 ---
 
@@ -237,7 +237,7 @@ Full technical detail for each wave is in [`docs/sota_2026_plan.md`](docs/sota_2
 | 10 | Production hardening — OpenTelemetry span propagation Python/Rust, Prometheus metrics, Redis/Postgres checkpoint store, HPA, JWT RBAC, audit log export, SLA-aware routing | 🚧 In Progress |
 | 11 | Evaluation correctness — runner execution for existing fixtures, pass@k scoring, SWE-bench lite adapter, correctness eval CI job | 📋 Planned — golden file assertions are documentation only; not enforced at runtime until Wave 11 runner integration is active |
 | 12 | Streaming completeness — token-level streaming from all nodes to SSE endpoint, SPA chunk rendering, VS Code chunk rendering | 📋 Planned |
-| 13 | Sandbox, tooling, and schema hardening — cgroup v2 resource limits, Firecracker decision, SCIP toolchain script, InferenceClient function calling, schema enforcement at runtime | 📋 Planned — Firecracker integration is scaffolding; SafeFallback/LinuxNamespace currently active |
+| 13 | Sandbox, tooling, and schema hardening — cgroup v2 resource limits, Firecracker vsock guest agent, SCIP toolchain script, InferenceClient function calling, schema enforcement at runtime | ✅ Complete — `MicroVmEphemeral` dispatches over `AF_VSOCK` to `lula-guest-agent` inside the VM (Linux-only; graceful `BadRequest` on non-Linux) |
 | 14 | Typed state migration, eval enforcement, CI/CD release pipeline, image digest pinning | ✅ Complete |
 | 15 | `planner.py` decomposition, MCP connection pooling, `_sla_policy` DI refactor, healing loop multi-runner | ✅ Complete |
 | 16 | Firecracker VMM API integration, ArgoCD Image Updater + sync windows, `DefaultHasher` → SHA-256 | ✅ Complete |

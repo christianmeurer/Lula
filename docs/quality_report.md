@@ -40,7 +40,7 @@ Four commits closed all CRITICAL and HIGH-priority items identified in this repo
 
 **Revised maturity verdict:**
 
-The two CRITICAL blockers are resolved. The `remote_api.py` maintainability liability has been addressed. All CI eval gates are now green. The JWKS cache race condition (previously H6 equivalent on the Python side) is fixed with double-checked locking. Overall maturity advances from **Beta** to **Production-Ready** for the current feature set. The remaining open item is Firecracker VMM dispatch path completion (H3), which is a feature gap rather than a correctness or security defect.
+The two CRITICAL blockers are resolved. The `remote_api.py` maintainability liability has been addressed. All CI eval gates are now green. The JWKS cache race condition (previously H6 equivalent on the Python side) is fixed with double-checked locking. Overall maturity advances from **Beta** to **Production-Ready** for the current feature set. H3 (Firecracker VMM dispatch path) was the sole remaining feature gap at the close of the first sprint; it is resolved in the third sprint.
 
 ---
 
@@ -69,7 +69,7 @@ Four additional commits closed all remaining HIGH-priority and observability gap
 
 **Revised maturity verdict (post second sprint):**
 
-Both sprints are complete. The codebase is now at **v1.0-rc3** with full eval framework coverage (SWE-bench adapter active, nightly CI threshold enforced, `resolved_rate` reported). The JWKS TTL limitation is fully resolved by background refresh. Prometheus instrumentation, supply-chain scanning, pydantic-settings env overlay, and typed node boundaries are all production-active. The sole remaining feature gap is Firecracker VMM dispatch path completion (H3 — architectural complexity, not a correctness defect).
+Both sprints are complete. The codebase is now at **v1.0-rc3** with full eval framework coverage (SWE-bench adapter active, nightly CI threshold enforced, `resolved_rate` reported). The JWKS TTL limitation is fully resolved by background refresh. Prometheus instrumentation, supply-chain scanning, pydantic-settings env overlay, and typed node boundaries are all production-active. **The Firecracker VMM dispatch path (H3) is now fully resolved** — see the Third Sprint entry below.
 
 ---
 
@@ -112,7 +112,7 @@ The analysis was conducted by five specialist reviewers, each assigned a non-ove
 | | API Design | 8.0 | Clean JSON envelope protocol; versioned routes |
 | | Dependency Selection | 7.0 | No `cargo audit` / `cargo deny`; supply-chain not hardened |
 | | Testing Infrastructure | 7.0 | Unit tests present; no `proptest` despite project standard; no integration harness |
-| | Feature Completeness | 7.0 | Firecracker dispatch path incomplete — guest command executes on host |
+| | Feature Completeness | 9.5 | Firecracker vsock guest agent implemented — `MicroVmEphemeral` dispatches via `AF_VSOCK` to `lula-guest-agent` inside the VM (Linux-only, graceful error on non-Linux) |
 | **Infrastructure & DevOps** | Kubernetes Maturity | 9.0 | HPA, resource limits, liveness/readiness probes, gVisor RuntimeClass all present |
 | | GitOps Maturity | 9.0 | ArgoCD Image Updater with semver tracking and weekend blackout windows |
 | | Container Quality | 8.0 | Multi-stage builds; missing `USER` instruction and `.dockerignore` |
@@ -284,7 +284,7 @@ The eval framework's task/golden/fixture directory structure ([`eval/tasks/`](..
 |---|---|---|---|---|
 | H1 | **Fix broken golden file assertions** — regenerate or update `eval/golden/test-repair.json` to match current reporter output | CI eval gate permanently red | [`eval/golden/test-repair.json`](../eval/golden/test-repair.json) | 1–2 h |
 | H2 | **Fix multi-task eval loader** — update `load_tasks()` to handle array-format task files | 10 repair benchmarks unreachable | [`eval/run.py`](../eval/run.py) | 1 h |
-| H3 | **Complete Firecracker dispatch path** — route guest commands through the VMM agent, not host exec | Top isolation tier is inert | [`rs/runner/src/sandbox.rs`](../rs/runner/src/sandbox.rs) | 3–5 d |
+| H3 | ~~**Complete Firecracker dispatch path**~~ — **RESOLVED** — vsock guest agent implemented; `MicroVmEphemeral` dispatches over `AF_VSOCK` to `lula-guest-agent`; Linux-only with graceful `BadRequest` on non-Linux | ~~Top isolation tier is inert~~ | [`rs/runner/src/vsock.rs`](../rs/runner/src/vsock.rs), [`rs/guest-agent/`](../rs/guest-agent/) | — |
 | H4 | **Fix GCS audit sink** — use `asyncio.get_event_loop().run_in_executor()` or an async GCS client | Event loop blocking under load | [`py/src/lg_orch/audit.py`](../py/src/lg_orch/audit.py) | 2–4 h |
 | H5 | **Add `USER` instruction to Dockerfiles** — create a non-root `lula` user | Containers run as root | [`Dockerfile`](../Dockerfile), [`Dockerfile.python`](../Dockerfile.python) | 30 min |
 | H6 | **Fix `LAST_UNDO_POINTER` race** — replace global with per-session state or `tokio::sync::Mutex` | Data corruption under concurrent batches | [`rs/runner/src/tools/fs.rs`](../rs/runner/src/tools/fs.rs) | 2–4 h |

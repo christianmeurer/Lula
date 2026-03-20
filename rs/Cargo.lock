@@ -1053,6 +1053,7 @@ dependencies = [
  "globset",
  "hex",
  "hmac",
+ "libc",
  "metrics",
  "metrics-exporter-prometheus",
  "opentelemetry",
@@ -1126,6 +1127,17 @@ dependencies = [
  "rangemap",
  "time",
  "weezl",
+]
+
+[[package]]
+name = "lula-guest-agent"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

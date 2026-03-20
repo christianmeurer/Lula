@@ -9,6 +9,7 @@ mod invariants;
 mod sandbox;
 mod snapshots;
 mod tools;
+mod vsock;
 
 use axum::{routing::get, routing::post, Json, Router};
 use axum::http::header::CONTENT_TYPE;
