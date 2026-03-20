@@ -59,6 +59,7 @@ dev = [
   "pip-audit>=2.10,<3",
   "pytest>=8.2,<9",
   "pytest-asyncio>=0.23",
+  "pytest-cov>=5.0,<6",
   "ruff>=0.5,<1",
   "types-toml>=0.10.8.20240310",
   "types-PyYAML>=6.0,<7",
@@ -96,6 +97,7 @@ files = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "--cov=lg_orch --cov-report=xml:coverage.xml --cov-fail-under=80"
 markers = [
     "e2e: end-to-end smoke tests (run with LG_E2E=1)",
 ]
