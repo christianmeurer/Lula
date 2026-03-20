@@ -77,8 +77,15 @@ _ARCH_MISMATCH_HINTS = (
 )
 
 
+from lg_orch.nodes._utils import validate_base_url as _validate_base_url_fn
+
+
 def _validate_base_url(url: str) -> bool:
-    return url.startswith("http://") or url.startswith("https://")
+    try:
+        _validate_base_url_fn(url, "runner_base_url")
+        return True
+    except ValueError:
+        return False
 
 
 def _extract_diagnostics(result: dict[str, Any]) -> list[dict[str, Any]]:

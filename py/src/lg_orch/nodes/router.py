@@ -8,23 +8,18 @@ from typing import Any
 from lg_orch.logging import get_logger
 from lg_orch.memory import approx_token_count
 from lg_orch.model_routing import latest_model_route, record_inference_telemetry, record_model_route
+from lg_orch.nodes._utils import extract_json_block as _extract_json_block_fn
+from lg_orch.nodes._utils import resolve_inference_client
 from lg_orch.state import RouterDecision
 from lg_orch.tools import InferenceClient
 from lg_orch.trace import append_event
 
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL | re.IGNORECASE)
 _WORD_RE = re.compile(r"[a-z0-9']+")
 
 
 def _extract_json_block(raw: str) -> str:
-    fenced = _JSON_FENCE_RE.search(raw)
-    if fenced is not None:
-        return fenced.group(1).strip()
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start != -1 and end != -1 and end >= start:
-        return raw[start : end + 1].strip()
-    return raw.strip()
+    result = _extract_json_block_fn(raw)
+    return result if result is not None else raw.strip()
 
 
 def _classify_intent(request: str) -> str:
@@ -182,45 +177,18 @@ def _router_model_output(
     if str(route_decision.get("provider_used", "local")).strip() == "local":
         return None, None
 
+    # Resolve temperature from the slot (not captured by resolve_inference_client)
     models_raw = state.get("_models", {})
     models = models_raw if isinstance(models_raw, dict) else {}
     slot_raw = models.get("router", {})
     slot = slot_raw if isinstance(slot_raw, dict) else {}
-    provider = str(slot.get("provider", "local")).strip().lower()
-    if provider in {"", "local"}:
-        return None, None
-
-    model = str(slot.get("model", "deterministic")).strip()
-    if not model:
-        return None, None
     temperature_raw = slot.get("temperature", 0.0)
     temperature = float(temperature_raw) if isinstance(temperature_raw, (int, float)) else 0.0
 
-    runtime_raw = state.get("_model_provider_runtime", {})
-    runtime = runtime_raw if isinstance(runtime_raw, dict) else {}
-
-    if provider == "openai_compatible":
-        oc_raw = runtime.get("openai_compatible", {})
-        oc_cfg = oc_raw if isinstance(oc_raw, dict) else {}
-        api_key = str(oc_cfg.get("api_key", "")).strip()
-        if not api_key:
-            return None, None
-        base_url = str(oc_cfg.get("base_url", "https://api.openai.com/v1")).strip().rstrip("/")
-        if not base_url:
-            return None, None
-        timeout_raw = oc_cfg.get("timeout_s", 60)
-        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
-    else:
-        do_raw = runtime.get("digitalocean", {})
-        do_cfg = do_raw if isinstance(do_raw, dict) else {}
-        api_key = str(do_cfg.get("api_key", "")).strip()
-        if not api_key:
-            return None, None
-        base_url = str(do_cfg.get("base_url", "https://inference.do-ai.run/v1")).strip().rstrip("/")
-        if not base_url:
-            return None, None
-        timeout_raw = do_cfg.get("timeout_s", 60)
-        timeout_s = int(timeout_raw) if isinstance(timeout_raw, int) and timeout_raw > 0 else 60
+    try:
+        client, model = resolve_inference_client(state, "router", "digitalocean")
+    except ValueError:
+        return None, None
 
     repo_root = Path(str(state.get("_repo_root", "."))).resolve()
     router_prompt_path = repo_root / "prompts" / "router.md"
@@ -249,7 +217,6 @@ def _router_model_output(
         f"verification: {json.dumps(state.get('verification', {}), ensure_ascii=False)}\n"
     )
 
-    client = InferenceClient(base_url=base_url, api_key=api_key, timeout_s=timeout_s)
     lane = str(default_route.lane).strip()
     try:
         if lane == "interactive":
