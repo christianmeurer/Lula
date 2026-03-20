@@ -11,6 +11,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+import structlog
+
+_log: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -106,7 +110,12 @@ class S3AuditSink(AuditSink):
             async with session.client("s3", region_name=self._region) as s3:
                 await s3.put_object(Bucket=self._bucket, Key=key, Body=body)
         except Exception:
-            pass
+            _log.error(
+                "audit.s3_export_failed",
+                bucket=self._bucket,
+                key=key,
+                exc_info=True,
+            )
 
 
 class GCSAuditSink(AuditSink):
@@ -168,7 +177,12 @@ class GCSAuditSink(AuditSink):
             blob = bucket.blob(blob_name)
             blob.upload_from_string(body, content_type="application/x-ndjson")
         except Exception:
-            pass
+            _log.error(
+                "audit.gcs_export_failed",
+                bucket=self._bucket,
+                blob_name=blob_name,
+                exc_info=True,
+            )
 
 
 # ---------------------------------------------------------------------------
