@@ -146,9 +146,7 @@ jobs:
     name: "Build Firecracker Guest Rootfs"
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: >
-      github.ref == 'refs/heads/main' ||
-      contains(github.event.head_commit.modified, 'rs/guest-agent/')
+    if: ${{ github.ref == 'refs/heads/main' || contains(github.event.head_commit.modified, 'rs/guest-agent/') }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
