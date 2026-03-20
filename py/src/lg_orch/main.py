@@ -341,43 +341,40 @@ def cli(argv: list[str] | None = None) -> int:  # noqa: C901
         return serve_command(args, repo_root=repo_root)
 
     if args.cmd == "run-multi":
-        from lg_orch.meta_graph import build_meta_graph
+        import asyncio as _asyncio
 
-        app = build_meta_graph()
-        state: dict[str, Any] = {
-            "request": str(args.request),
-            "repositories": [str(Path(r).expanduser().resolve()) for r in args.repos],
-        }
+        from lg_orch.meta_graph import SubAgentTask, run_meta_graph
+
+        repos = [str(Path(r).expanduser().resolve()) for r in args.repos]
+        tasks = [
+            SubAgentTask(
+                task_id=f"repo-{i}",
+                description=str(args.request),
+                depends_on=[],
+                input_state={"request": str(args.request), "repo_root": repo},
+            )
+            for i, repo in enumerate(repos)
+        ]
+
+        async def _run_graph(state: dict[str, Any]) -> dict[str, Any]:
+            # Placeholder run_graph: returns state unchanged.
+            # Wire to a real graph invocation when integrating with graph.py.
+            return state
 
         print("\n--- Starting Lula Platform Meta-Agent ---")
-        out: dict[str, Any] = {}
-        for event in app.stream(state, stream_mode="updates"):
-            for node_name, node_state in event.items():
-                print(f"\n[Node: {node_name}]")
-                if node_name == "meta_planner":
-                    plan = node_state.get("meta_plan", {})
-                    tasks = (
-                        getattr(plan, "sub_tasks", [])
-                        if hasattr(plan, "sub_tasks")
-                        else plan.get("sub_tasks", [])
-                    )
-                    print(f"Generated Meta-Plan with {len(tasks)} sub-tasks.")
-                elif node_name == "task_dispatcher":
-                    active = node_state.get("active_tasks", [])
-                    print(f"Dispatched tasks: {active}")
-                elif node_name == "sub_agent_executor":
-                    completed = node_state.get("completed_tasks", [])
-                    failed = node_state.get("failed_tasks", [])
-                    print(
-                        f"Execution step complete. Completed: {len(completed)}, Failed: {len(failed)}"
-                    )
-                elif node_name == "meta_evaluator":
-                    print(f"Final Report: {node_state.get('final_report')}")
-                out.update(node_state)
+        result = _asyncio.run(
+            run_meta_graph(tasks, _run_graph, max_parallel=max(1, len(repos)))
+        )
 
+        print(
+            f"\nSucceeded: {result.succeeded}  "
+            f"Failed: {result.failed}  "
+            f"Skipped: {result.skipped}"
+        )
         print("\n--- Final Output ---")
-        print(out.get("final_report", ""))
-        return 0
+        for t in result.tasks:
+            print(f"  [{t.status}] {t.task_id}: {t.error or 'ok'}")
+        return 0 if result.all_succeeded else 1
 
     # "run" command
     if getattr(args, "profile", None):
