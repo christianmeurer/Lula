@@ -54,13 +54,12 @@ rules:
       - poddisruptionbudgets
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-  # RBAC (so ArgoCD can manage its own bindings if needed)
+  # RBAC — namespace-scoped roles/bindings only.
+  # clusterroles/clusterrolebindings excluded — manage ArgoCD's own RBAC out-of-band to prevent privilege escalation
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources:
       - roles
       - rolebindings
-      - clusterroles
-      - clusterrolebindings
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   # Status subresource access (required by server-side apply)
