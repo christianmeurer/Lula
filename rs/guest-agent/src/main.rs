@@ -57,9 +57,45 @@ struct CommandResponse {
 // Request handler
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Guest command allowlist (defense-in-depth)
+// ---------------------------------------------------------------------------
+
+const ALLOWED_GUEST_COMMANDS: &[&str] = &[
+    "python", "python3", "uv", "pip", "pip3",
+    "cargo", "rustc", "node", "npm", "npx",
+    "go", "git", "sh", "bash",
+    "cat", "ls", "find", "grep", "sed", "awk",
+    "mkdir", "cp", "mv", "rm", "touch",
+    "pytest", "ruff", "mypy",
+];
+
+fn is_allowed_command(cmd: &str) -> bool {
+    let base = std::path::Path::new(cmd)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(cmd);
+    ALLOWED_GUEST_COMMANDS.contains(&base)
+}
+
+// ---------------------------------------------------------------------------
+// Request handler
+// ---------------------------------------------------------------------------
+
 #[allow(dead_code)]
 async fn handle_request(req: CommandRequest) -> CommandResponse {
     let started = Instant::now();
+
+    if !is_allowed_command(&req.cmd) {
+        return CommandResponse {
+            ok: false,
+            exit_code: -1,
+            stdout: String::new(),
+            stderr: format!("command '{}' not in guest allowlist", req.cmd),
+            timing_ms: started.elapsed().as_millis() as u64,
+        };
+    }
+
     let t = Duration::from_millis(req.timeout_ms);
 
     let mut cmd = tokio::process::Command::new(&req.cmd);
@@ -133,6 +169,26 @@ where
         if n == 0 {
             return; // EOF
         }
+        // Enforce a 1 MiB request body limit.
+        const MAX_REQUEST_BYTES: usize = 1024 * 1024;
+        if line.len() > MAX_REQUEST_BYTES {
+            let resp = CommandResponse {
+                ok: false,
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: format!(
+                    "request body too large: {} bytes (limit {} bytes)",
+                    line.len(),
+                    MAX_REQUEST_BYTES
+                ),
+                timing_ms: 0,
+            };
+            if let Ok(mut json_bytes) = serde_json::to_vec(&resp) {
+                json_bytes.push(b'\n');
+                let _ = writer.write_all(&json_bytes).await;
+            }
+            return;
+        }
         let resp = match serde_json::from_str::<CommandRequest>(line.trim()) {
             Ok(req) => handle_request(req).await,
             Err(e) => CommandResponse {
@@ -157,7 +213,7 @@ where
 #[cfg(target_os = "linux")]
 mod listener {
     use super::handle_connection;
-    use std::os::unix::io::{FromRawFd, IntoRawFd};
+    use std::os::unix::io::FromRawFd;
     use tokio::net::UnixListener;
 
     /// Vsock port the agent listens on.
@@ -223,9 +279,15 @@ mod listener {
 
         eprintln!("lula-guest-agent listening on vsock port {port}");
 
-        // Wrap the raw fd in a std listener, then convert to tokio.
-        let std_listener = unsafe { std::net::TcpListener::from_raw_fd(fd) };
-        let listener = tokio::net::TcpListener::from_std(std_listener)?;
+        // SAFETY: fd is a valid AF_VSOCK SOCK_STREAM listening socket in
+        // non-blocking mode.  We wrap it as std::os::unix::net::UnixListener
+        // (not std::net::TcpListener) to avoid the TcpListener type-contract
+        // violation (TcpListener requires AF_INET/AF_INET6).  On Linux, both
+        // AF_UNIX and AF_VSOCK are SOCK_STREAM and tokio drives them identically
+        // via epoll.
+        let std_listener = unsafe { std::os::unix::net::UnixListener::from_raw_fd(fd) };
+        std_listener.set_nonblocking(true)?;
+        let listener = UnixListener::from_std(std_listener)?;
 
         loop {
             match listener.accept().await {
@@ -348,6 +410,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_request_nonexistent_command() {
+        // `lula_nonexistent_cmd_xyz` is not in the allowlist, so the guest
+        // agent should reject it before attempting to spawn.
         let req = CommandRequest {
             cmd: "lula_nonexistent_cmd_xyz".to_string(),
             args: vec![],
@@ -358,7 +422,32 @@ mod tests {
         let resp = handle_request(req).await;
         assert!(!resp.ok);
         assert_eq!(resp.exit_code, -1);
-        assert!(resp.stderr.contains("spawn failed"));
+        assert!(resp.stderr.contains("lula_nonexistent_cmd_xyz"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_disallowed_command_rejected() {
+        let req = CommandRequest {
+            cmd: "curl".to_string(),
+            args: vec!["https://example.com".to_string()],
+            cwd: String::new(),
+            env: HashMap::new(),
+            timeout_ms: 5000,
+        };
+        let resp = handle_request(req).await;
+        assert!(!resp.ok);
+        assert_eq!(resp.exit_code, -1);
+        assert!(resp.stderr.contains("not in guest allowlist"));
+    }
+
+    #[test]
+    fn test_is_allowed_command_base_name() {
+        assert!(is_allowed_command("python3"));
+        assert!(is_allowed_command("/usr/bin/python3"));
+        assert!(is_allowed_command("cargo"));
+        assert!(!is_allowed_command("curl"));
+        assert!(!is_allowed_command("/usr/bin/curl"));
+        assert!(!is_allowed_command("nc"));
     }
 
     #[tokio::test]
