@@ -17,8 +17,9 @@ metadata:
   namespace: argocd
 spec:
   description: Lula agentic coding platform
+  # Bootstrap script substitutes REPLACE_WITH_REPO_URL with the actual repo URL
   sourceRepos:
-    - '*'
+    - 'REPLACE_WITH_REPO_URL'
   destinations:
     - namespace: lula-orch
       server: https://kubernetes.default.svc
