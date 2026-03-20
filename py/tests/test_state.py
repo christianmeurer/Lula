@@ -214,9 +214,12 @@ def test_orch_state_invalid_intent() -> None:
         OrchState(request="test", intent="invalid_intent")  # type: ignore[arg-type]
 
 
-def test_orch_state_forbids_extra() -> None:
-    with pytest.raises(ValidationError):
-        OrchState(request="test", unknown="bad")  # type: ignore[call-arg]
+def test_orch_state_allows_extra() -> None:
+    # OrchState uses extra="allow" so that LangGraph can attach internal
+    # underscore-prefixed fields (_run_id, _lane, etc.) without failing
+    # Pydantic validation.  Extra fields are stored in model_extra.
+    state = OrchState(request="test", unknown="tolerated")  # type: ignore[call-arg]
+    assert state.model_extra.get("unknown") == "tolerated"
 
 
 def test_orch_state_model_dump_roundtrip() -> None:
@@ -244,10 +247,13 @@ def test_orch_state_new_phase1_fields_defaults() -> None:
     assert os_.resume == {}
 
 
-def test_orch_state_rejects_runtime_private_mcp_fields() -> None:
-    with pytest.raises(ValidationError):
-        OrchState(
-            request="run mcp",
-            _mcp_enabled=True,  # type: ignore[call-arg]
-            _mcp_servers={"mock": {"command": "python"}},  # type: ignore[call-arg]
-        )
+def test_orch_state_allows_runtime_private_mcp_fields() -> None:
+    # With extra="allow", underscore-prefixed runtime fields that LangGraph or
+    # the ingest harness injects are accepted and round-trip via model_extra.
+    state = OrchState(
+        request="run mcp",
+        _mcp_enabled=True,  # type: ignore[call-arg]
+        _mcp_servers={"mock": {"command": "python"}},  # type: ignore[call-arg]
+    )
+    assert state.model_extra.get("_mcp_enabled") is True
+    assert isinstance(state.model_extra.get("_mcp_servers"), dict)
