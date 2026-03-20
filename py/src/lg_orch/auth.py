@@ -354,6 +354,8 @@ def authorize_stdlib(
 
 #: Sentinel — route is always public.
 _OPEN: tuple[str, ...] = ()
+#: Sentinel — route requires a valid token but no specific role restriction.
+_REQUIRE_AUTH: tuple[str, ...] = ("viewer", "operator", "admin")
 #: Read-only access.
 _READERS: tuple[str, ...] = ("viewer", "operator", "admin")
 #: Mutation access.
@@ -431,8 +433,26 @@ def _route_policy(
     if method == "POST" and path_parts and path_parts[-1] in {"approve", "reject"}:
         return _OPERATORS
 
-    # Everything else: open (healing, vote, approval-policy, …)
-    return _OPEN
+    # POST /runs/{run_id}/vote — operator or admin
+    if (
+        method == "POST"
+        and len(path_parts) == 3
+        and path_parts[0] == "runs"
+        and path_parts[2] == "vote"
+    ):
+        return _OPERATORS
+
+    # GET/PUT /runs/{run_id}/approval-policy (or approval_policy) — admin only
+    if (
+        len(path_parts) == 3
+        and path_parts[0] == "runs"
+        and path_parts[2] in {"approval-policy", "approval_policy"}
+    ):
+        return _ADMINS
+
+    # All other authenticated routes: require a valid token with any role.
+    # Truly public routes (health, SPA) are already handled above.
+    return _REQUIRE_AUTH
 
 
 def jwt_settings_from_config(
