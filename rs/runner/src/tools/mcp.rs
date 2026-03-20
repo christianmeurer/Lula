@@ -20,6 +20,7 @@ use crate::tools::fs::resolve_under_root;
 const JSONRPC_VERSION: &str = "2.0";
 const DEFAULT_MCP_TIMEOUT_S: u64 = 20;
 const MCP_POOL_TTL_SECS: u64 = 300; // 5 minutes
+const MAX_MCP_BODY_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
 
 #[derive(Debug, Deserialize, Clone)]
 struct McpServerConfigIn {
@@ -301,6 +302,13 @@ impl McpStdioClient {
         let len = content_length.ok_or_else(|| {
             ApiError::BadRequest("missing Content-Length header in MCP response".to_string())
         })?;
+
+        if len > MAX_MCP_BODY_BYTES {
+            return Err(ApiError::BadRequest(format!(
+                "MCP response Content-Length {} exceeds 64 MiB limit",
+                len
+            )));
+        }
 
         let mut body = vec![0_u8; len];
         timeout(self.timeout, self.stdout.read_exact(&mut body))
