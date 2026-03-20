@@ -1,16 +1,37 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tokio::process::Command;
+use tokio::sync::Mutex as TokioMutex;
 
 use crate::envelope::CheckpointPointer;
 
 const SNAPSHOT_REF_PREFIX: &str = "refs/lg_orch/snapshots/";
+
+// ---------------------------------------------------------------------------
+// Per-repository serialisation lock
+// ---------------------------------------------------------------------------
+
+/// Global map from canonical repository root path to an async mutex.
+///
+/// This ensures that concurrent [`undo_to_snapshot`] calls targeting the same
+/// repository do not race on `git reset --hard` / `git clean -fd`.
+static REPO_LOCKS: LazyLock<Mutex<HashMap<PathBuf, Arc<TokioMutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn repo_lock(repo: &Path) -> Arc<TokioMutex<()>> {
+    let mut map = REPO_LOCKS.lock().unwrap();
+    map.entry(repo.to_path_buf())
+        .or_insert_with(|| Arc::new(TokioMutex::new(())))
+        .clone()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotRecord {
@@ -170,6 +191,11 @@ pub async fn undo_to_snapshot(
             "{resolved_snapshot}: {stderr_commit}"
         )));
     }
+
+    // Acquire per-repository lock before mutating the working tree so that
+    // concurrent undo calls targeting the same repo cannot interleave.
+    let lock = repo_lock(root_dir);
+    let _guard = lock.lock().await;
 
     let (ok_reset, _, stderr_reset) = run_git(root_dir, &["reset", "--hard", &commit]).await?;
     if !ok_reset {
