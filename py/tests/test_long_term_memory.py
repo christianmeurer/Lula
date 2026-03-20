@@ -2,11 +2,17 @@
 from __future__ import annotations
 
 import time
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from lg_orch.long_term_memory import LongTermMemoryStore, MemoryRecord, stub_embedder
+from lg_orch.long_term_memory import (
+    LongTermMemoryStore,
+    MemoryRecord,
+    _infer_task_type,
+    stub_embedder,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -198,3 +204,108 @@ def test_retrieve_for_context_empty_store_returns_empty(tmp_path: pytest.TempPat
     result = store.retrieve_for_context("anything", max_tokens=1000)
     assert result == ""
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# FIX 1: stub embedder warning
+# ---------------------------------------------------------------------------
+
+
+def test_stub_embedder_warning_emitted_when_no_embedder(tmp_path: pytest.TempPathFactory) -> None:
+    """LongTermMemoryStore must emit a structlog warning when no embedder is supplied."""
+    import lg_orch.long_term_memory as ltm_module
+
+    with patch.object(ltm_module._log, "warning") as mock_warn:
+        store = LongTermMemoryStore(db_path=str(tmp_path / "ltm_stub.db"))
+        store.close()
+
+    events = [call.args[0] if call.args else call.kwargs.get("event", "") for call in mock_warn.call_args_list]
+    assert "long_term_memory.stub_embedder_active" in events, (
+        f"expected stub_embedder_active warning; got events: {events}"
+    )
+
+
+def test_stub_embedder_warning_not_emitted_when_real_embedder_provided(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    """When a real embedder is provided, stub warning must NOT be emitted."""
+    import lg_orch.long_term_memory as ltm_module
+
+    def _real_embedder(text: str) -> "np.ndarray[object, np.dtype[np.float32]]":
+        v = np.zeros(128, dtype=np.float32)
+        v[0] = 1.0
+        return v
+
+    with patch.object(ltm_module._log, "warning") as mock_warn:
+        store = LongTermMemoryStore(db_path=str(tmp_path / "ltm_real.db"), embedder=_real_embedder)
+        store.close()
+
+    events = [call.args[0] if call.args else call.kwargs.get("event", "") for call in mock_warn.call_args_list]
+    assert "long_term_memory.stub_embedder_active" not in events, (
+        f"stub_embedder_active warning must not fire when a real embedder is given; got: {events}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# FIX 2: _infer_task_type
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "query,expected",
+    [
+        ("refactor the auth module", "code_change"),
+        # "fix" matches the "debug" keyword list before "failing" can match "test_repair"
+        ("fix the failing test", "debug"),
+        ("analyze the config", "analysis"),
+        ("completely unknown task xyz", "completely"),
+    ],
+)
+def test_infer_task_type(query: str, expected: str) -> None:
+    assert _infer_task_type(query) == expected, (
+        f"_infer_task_type({query!r}) expected {expected!r}"
+    )
+
+
+def test_infer_task_type_empty_string() -> None:
+    assert _infer_task_type("") == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# FIX 1: row-count warning for large semantic scan
+# ---------------------------------------------------------------------------
+
+
+def test_semantic_scan_large_warning(tmp_path: pytest.TempPathFactory) -> None:
+    """Inserting >5000 rows then calling search_semantic must emit the scan-large warning."""
+    import lg_orch.long_term_memory as ltm_module
+
+    def _fast_embedder(text: str) -> "np.ndarray[object, np.dtype[np.float32]]":
+        v = np.zeros(128, dtype=np.float32)
+        v[0] = 1.0
+        return v
+
+    store = LongTermMemoryStore(
+        db_path=str(tmp_path / "ltm_large.db"),
+        embedder=_fast_embedder,
+    )
+
+    # Bulk-insert 6000 rows directly via the connection to avoid per-row overhead
+    blob = _fast_embedder("x").tobytes()
+    now = time.time()
+    with store._lock:
+        store._conn.executemany(
+            "INSERT INTO semantic_memories (content, metadata, embedding, created_at) VALUES (?, ?, ?, ?)",
+            [(f"fact {i}", "{}", blob, now) for i in range(6_000)],
+        )
+        store._conn.commit()
+
+    with patch.object(ltm_module._log, "warning") as mock_warn:
+        store.search_semantic("anything", top_k=1)
+
+    store.close()
+
+    events = [call.args[0] if call.args else call.kwargs.get("event", "") for call in mock_warn.call_args_list]
+    assert "long_term_memory.semantic_scan_large" in events, (
+        f"expected semantic_scan_large warning; got events: {events}"
+    )
