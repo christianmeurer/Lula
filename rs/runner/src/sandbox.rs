@@ -197,6 +197,10 @@ pub struct FirecrackerVmm {
     socket_path: PathBuf,
     /// The firecracker process itself; kept alive while this handle is held.
     _proc: tokio::process::Child,
+    /// The vsock Context ID assigned to this VM.  Populated after
+    /// [`FirecrackerVmm::configure_and_start`] calls `PUT /vsock`.
+    /// Defaults to 0 (unset); callers must not use it before `configure_and_start`.
+    pub cid: u32,
 }
 
 #[cfg(unix)]
@@ -246,6 +250,7 @@ impl FirecrackerVmm {
         Ok(Self {
             socket_path,
             _proc: child,
+            cid: 0,
         })
     }
 
@@ -272,6 +277,16 @@ impl FirecrackerVmm {
             rp = serde_json::Value::String(rootfs_path.to_string())
         );
         self.put_api("/drives/rootfs", &drive_body).await?;
+
+        // Configure the vsock device so the guest agent can communicate with
+        // the host via AF_VSOCK.  CID 3 is Firecracker's convention for the
+        // first guest.  The UDS path on the host side is used by Firecracker
+        // to multiplex the vsock connection.
+        let vsock_body = serde_json::json!({
+            "guest_cid": 3,
+            "uds_path": "/tmp/fc-vsock.sock"
+        });
+        self.put_api("/vsock", &vsock_body.to_string()).await?;
 
         self.put_api(
             "/actions",
@@ -556,7 +571,8 @@ impl SandboxPolicy {
             .unwrap_or_else(|| PathBuf::from("firecracker"));
 
         match FirecrackerVmm::start(&fc_bin).await {
-            Ok(vmm) => {
+            Ok(mut vmm) => {
+                vmm.cid = 3;
                 base.vmm = Some(vmm);
                 base
             }
