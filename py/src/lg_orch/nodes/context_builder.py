@@ -20,8 +20,15 @@ _WORD_RE = re.compile(r"[a-zA-Z0-9_]+")
 _PERSISTENT_REPO_CONTEXT_KEYS = ("system_prompt", "structural_ast_map", "semantic_hits")
 
 
+from lg_orch.nodes._utils import validate_base_url as _validate_base_url_fn
+
+
 def _validate_base_url(url: str) -> bool:
-    return url.startswith("http://") or url.startswith("https://")
+    try:
+        _validate_base_url_fn(url, "runner_base_url")
+        return True
+    except ValueError:
+        return False
 
 
 def _semantic_query_from_request(request: str) -> str:
