@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from lg_orch.approval_policy import ApprovalPolicy, ApprovalVote
 
+
 Intent = Literal["code_change", "analysis", "research", "question", "refactor", "debug"]
 RouteLane = Literal["interactive", "deep_planning", "recovery"]
 RetryTarget = Literal["planner", "coder", "context_builder", "router"]
@@ -132,7 +133,10 @@ class VerifierReport(BaseModel):
 
 
 class OrchState(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # extra="allow" is required so that LangGraph's internal underscore-prefixed
+    # fields (_run_id, _lane, etc.) can coexist in the graph state without
+    # causing Pydantic validation errors.
+    model_config = ConfigDict(extra="allow")
 
     request: str
     intent: Intent = "analysis"
@@ -239,3 +243,12 @@ class MetaOrchState(BaseModel):
     failed_tasks: list[str] = Field(default_factory=list)
     final_report: str = ""
     error: str = ""
+
+
+def validate_state(state: dict[str, Any]) -> OrchState:
+    """Coerce a raw dict into a validated :class:`OrchState`.
+
+    Used by the ``ingest`` node as the authoritative entry-point into the
+    typed state pipeline.  Raises ``ValidationError`` on invalid input.
+    """
+    return OrchState.model_validate(state)
