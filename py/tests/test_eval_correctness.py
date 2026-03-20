@@ -299,3 +299,157 @@ def test_cli_pass_at_k_table_output(tmp_path: Path, capsys: object) -> None:
     out = capsys.readouterr().out
     assert "pass@k" in out
     assert "canary-001" in out
+
+
+# ---------------------------------------------------------------------------
+# evaluate_golden_assertions — operator unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_evaluate_golden_assertions_eq_pass() -> None:
+    module = _load_eval_run_module()
+    golden = {"assertions": [{"field": "status", "op": "eq", "value": "success"}]}
+    result = {"status": "success"}
+    passed, total, failures = module.evaluate_golden_assertions(result, golden)
+    assert passed == 1
+    assert total == 1
+    assert failures == []
+
+
+def test_evaluate_golden_assertions_eq_fail() -> None:
+    module = _load_eval_run_module()
+    golden = {"assertions": [{"field": "status", "op": "eq", "value": "success"}]}
+    result = {"status": "failure"}
+    passed, total, failures = module.evaluate_golden_assertions(result, golden)
+    assert passed == 0
+    assert total == 1
+    assert len(failures) == 1
+    assert "status" in failures[0]
+
+
+def test_evaluate_golden_assertions_lte() -> None:
+    module = _load_eval_run_module()
+    golden = {"assertions": [{"field": "loop_count", "op": "lte", "value": 3}]}
+    # passes when actual <= expected
+    passed, total, failures = module.evaluate_golden_assertions({"loop_count": 2}, golden)
+    assert passed == 1 and failures == []
+    # fails when actual > expected
+    passed2, total2, failures2 = module.evaluate_golden_assertions({"loop_count": 5}, golden)
+    assert passed2 == 0 and len(failures2) == 1
+
+
+def test_evaluate_golden_assertions_in() -> None:
+    module = _load_eval_run_module()
+    golden = {
+        "assertions": [
+            {"field": "approval_outcome", "op": "in", "value": ["approved", "rejected"]}
+        ]
+    }
+    passed, total, failures = module.evaluate_golden_assertions(
+        {"approval_outcome": "approved"}, golden
+    )
+    assert passed == 1 and failures == []
+    passed2, _, failures2 = module.evaluate_golden_assertions(
+        {"approval_outcome": "pending"}, golden
+    )
+    assert passed2 == 0 and len(failures2) == 1
+
+
+def test_evaluate_golden_assertions_contains() -> None:
+    module = _load_eval_run_module()
+    # list containment
+    golden = {"assertions": [{"field": "tool_calls", "op": "contains", "value": "apply_patch"}]}
+    passed, _, failures = module.evaluate_golden_assertions(
+        {"tool_calls": ["apply_patch", "read_file"]}, golden
+    )
+    assert passed == 1 and failures == []
+    # string containment
+    passed2, _, failures2 = module.evaluate_golden_assertions(
+        {"tool_calls": "apply_patch,read_file"}, golden
+    )
+    assert passed2 == 1 and failures2 == []
+    # fails when not present
+    passed3, _, failures3 = module.evaluate_golden_assertions(
+        {"tool_calls": ["read_file"]}, golden
+    )
+    assert passed3 == 0 and len(failures3) == 1
+
+
+def test_evaluate_golden_assertions_nested_path() -> None:
+    module = _load_eval_run_module()
+    golden = {"assertions": [{"path": "verification.ok", "op": "eq", "value": True}]}
+    result = {"verification": {"ok": True, "acceptance_ok": False}}
+    passed, total, failures = module.evaluate_golden_assertions(result, golden)
+    assert passed == 1 and total == 1 and failures == []
+    # fails when nested value is False
+    result2 = {"verification": {"ok": False}}
+    passed2, _, failures2 = module.evaluate_golden_assertions(result2, golden)
+    assert passed2 == 0 and len(failures2) == 1
+
+
+# ---------------------------------------------------------------------------
+# load_golden — graceful None on missing file
+# ---------------------------------------------------------------------------
+
+
+def test_load_golden_returns_none_for_missing() -> None:
+    module = _load_eval_run_module()
+    result = module.load_golden("task-that-does-not-exist-xyz")
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# score_task integration — golden assertions affect overall passed flag
+# ---------------------------------------------------------------------------
+
+
+def test_score_task_applies_golden_assertions(tmp_path: Path) -> None:
+    """score_task sets passed=False when golden assertions fail."""
+    module = _load_eval_run_module()
+
+    # Write a golden file that will fail (expects status "success" but output is "failure")
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    golden_file = golden_dir / "my-task.json"
+    golden_file.write_text(
+        json.dumps({"assertions": [{"field": "status", "op": "eq", "value": "success"}]}),
+        encoding="utf-8",
+    )
+
+    # Patch load_golden to return our temp golden
+    original_load_golden = module.load_golden
+
+    def _fake_load_golden(task_id: str) -> Any:
+        if task_id.startswith("my-task"):
+            return json.loads(golden_file.read_text(encoding="utf-8"))
+        return original_load_golden(task_id)
+
+    module.load_golden = _fake_load_golden
+    try:
+        task = module.EvalTask(
+            id="my-task-001",
+            request="do something",
+            expected_intent="analysis",
+            expected_acceptance_ok=False,
+            require_final=False,
+        )
+        output: dict[str, Any] = {
+            "intent": "analysis",
+            "halt_reason": "",
+            "final": "",
+            "status": "failure",  # deliberately wrong — golden expects "success"
+            "tool_results": [],
+            "verification": {"acceptance_ok": False, "ok": False},
+            "route": {"lane": "fast"},
+            "telemetry": {"compression_summary": {"total_events": 1}},
+            "loop_summaries": [{"acceptance_criteria": ["done"], "failure_fingerprint": "err"}],
+        }
+        result = module.score_task(task, output)
+    finally:
+        module.load_golden = original_load_golden
+
+    assert result["golden_assertions_total"] == 1
+    assert result["golden_assertions_passed"] == 0
+    assert len(result["golden_assertion_failures"]) == 1
+    assert result["golden_passed"] is False
+    assert result["passed"] is False

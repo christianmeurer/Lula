@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: lula-runner
+        app.kubernetes.io/version: "latest"
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8088"
@@ -29,7 +30,9 @@ spec:
         - name: docr-secret
       containers:
         - name: lula-runner
-          image: registry.digitalocean.com/lula-orch/lula-orch:latest
+          # Image tag is managed by .github/workflows/release.yml on every v* tag push.
+          # To manually override: kubectl set image deployment/lula-runner lula-runner=<image>@<digest>
+          image: registry.digitalocean.com/lula-registry/lula:latest
           command: ["/app/rs/target/release/lg-runner"]
           args:
             - --bind
