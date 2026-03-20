@@ -22,6 +22,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
 import numpy as np
+import structlog
+
+_log = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Public types
@@ -139,6 +142,26 @@ CREATE INDEX IF NOT EXISTS idx_procedural_task_type ON procedural_memories(task_
 # Helpers
 # ---------------------------------------------------------------------------
 
+_TASK_TYPE_KEYWORDS: dict[str, list[str]] = {
+    "code_change": ["refactor", "implement", "add", "create", "write", "update", "change"],
+    "debug": ["fix", "debug", "repair", "resolve", "investigate", "diagnose"],
+    "analysis": ["analyze", "review", "check", "audit", "inspect", "assess"],
+    "test_repair": ["test", "failing", "broken", "pytest", "assertion"],
+    "canary": ["canary", "deploy", "smoke"],
+}
+
+
+def _infer_task_type(query: str) -> str:
+    """Infer a task type from *query* by keyword matching, falling back to first word."""
+    lower = query.lower()
+    for task_type, keywords in _TASK_TYPE_KEYWORDS.items():
+        if any(kw in lower for kw in keywords):
+            return task_type
+    # fallback: first word
+    words = lower.split()
+    return words[0] if words else "unknown"
+
+
 def _cosine_similarity(
     a: "np.ndarray[Any, np.dtype[np.float32]]",
     b: "np.ndarray[Any, np.dtype[np.float32]]",
@@ -168,10 +191,17 @@ class LongTermMemoryStore:
         embedding_dim: int = 128,
     ) -> None:
         self._db_path = db_path
+        _using_stub = embedder is None
         self._embedder: Embedder = embedder if embedder is not None else (
             lambda text: stub_embedder(text, dim=embedding_dim)
         )
         self._embedding_dim = embedding_dim
+        if _using_stub:
+            _log.warning(
+                "long_term_memory.stub_embedder_active",
+                reason="No real embedder provided; semantic search will return meaningless results. "
+                       "Set an embedding provider via config to enable semantic retrieval.",
+            )
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
@@ -237,6 +267,13 @@ class LongTermMemoryStore:
 
         if not rows:
             return []
+
+        row_count = len(rows)
+        if row_count > 5_000:
+            _log.warning(
+                "long_term_memory.semantic_scan_large",
+                row_count=row_count,
+            )
 
         scored: list[tuple[float, MemoryRecord]] = []
         for row in rows:
@@ -458,8 +495,8 @@ class LongTermMemoryStore:
         if budget <= 0:
             return "\n\n".join(parts).strip()
 
-        # --- procedural: query used as task_type heuristic (first word) ---
-        task_hint = query.split()[0].lower() if query.strip() else ""
+        # --- procedural: query used as task_type heuristic ---
+        task_hint = _infer_task_type(query) if query.strip() else ""
         if task_hint:
             procs = self.get_procedures(task_hint, successful_only=True)
             if not procs:
@@ -517,5 +554,7 @@ __all__ = [
     "LongTermMemoryStore",
     "MemoryRecord",
     "Tier",
+    "_infer_task_type",
+    "_TASK_TYPE_KEYWORDS",
     "stub_embedder",
 ]
