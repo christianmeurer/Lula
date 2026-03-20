@@ -23,7 +23,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        run: pip install uv
+        run: pip install "uv>=0.5,<1"
 
       - name: Install dependencies
         working-directory: py
@@ -54,7 +54,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        run: pip install uv
+        run: pip install "uv>=0.5,<1"
 
       - name: Install dependencies
         working-directory: py
@@ -136,7 +136,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        run: pip install uv
+        run: pip install "uv>=0.5,<1"
 
       - name: pip-audit
         working-directory: py
@@ -175,7 +175,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        run: pip install uv
+        run: pip install "uv>=0.5,<1"
 
       - name: Install dependencies
         working-directory: py
