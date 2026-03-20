@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import logging
 import os
 from types import TracebackType
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     pass
@@ -27,7 +28,7 @@ __all__ = [
     "merge_worktree",
 ]
 
-log = logging.getLogger(__name__)
+_log = structlog.get_logger(__name__)
 
 
 class WorktreeError(Exception):
@@ -68,12 +69,12 @@ async def _run_git(*args: str, cwd: str | None = None) -> tuple[int, str, str]:
     stdout = raw_out.decode(errors="replace").strip()
     stderr = raw_err.decode(errors="replace").strip()
     rc: int = proc.returncode if proc.returncode is not None else 1
-    log.debug(
-        "git %s → rc=%d stdout=%r stderr=%r",
-        " ".join(args),
-        rc,
-        stdout,
-        stderr,
+    _log.debug(
+        "worktree.git_cmd",
+        args=" ".join(args),
+        rc=rc,
+        stdout=stdout,
+        stderr=stderr,
     )
     return rc, stdout, stderr
 
@@ -124,7 +125,7 @@ async def create_worktree(run_id: str, base_path: str) -> WorktreeContext:
             f"git worktree add failed for run_id={run_id!r} (rc={rc}): {err}"
         )
 
-    log.debug("worktree created: branch=%r path=%r", branch, worktree_path)
+    _log.debug("worktree.created", branch=branch, path=str(worktree_path))
     return WorktreeContext(
         run_id=run_id,
         branch=branch,
@@ -146,20 +147,20 @@ async def remove_worktree(ctx: WorktreeContext) -> None:
         "worktree", "remove", "--force", ctx.worktree_path,
     )
     if rc != 0:
-        log.warning(
-            "git worktree remove failed for %r (rc=%d): %s",
-            ctx.worktree_path,
-            rc,
-            err,
+        _log.warning(
+            "worktree.remove_failed",
+            path=ctx.worktree_path,
+            rc=rc,
+            stderr=err,
         )
 
     rc, _, err = await _run_git("branch", "-D", ctx.branch)
     if rc != 0:
-        log.warning(
-            "git branch -D failed for %r (rc=%d): %s",
-            ctx.branch,
-            rc,
-            err,
+        _log.warning(
+            "worktree.branch_delete_failed",
+            branch=ctx.branch,
+            rc=rc,
+            stderr=err,
         )
 
 
@@ -196,11 +197,11 @@ async def merge_worktree(ctx: WorktreeContext, strategy: str = "ours") -> None:
             f"(rc={rc}): {err}"
         )
 
-    log.debug(
-        "worktree branch %r merged into %r with strategy=%r",
-        ctx.branch,
-        ctx.base_branch,
-        strategy,
+    _log.debug(
+        "worktree.merged",
+        branch=ctx.branch,
+        base_branch=ctx.base_branch,
+        strategy=strategy,
     )
 
 
@@ -252,5 +253,5 @@ class WorktreeLease:
             try:
                 await merge_worktree(self._ctx)
             except WorktreeError as exc:
-                log.warning("worktree merge failed for %r: %s", self._run_id, exc)
+                _log.warning("worktree.merge_failed", run_id=self._run_id, exc_info=True)
         await remove_worktree(self._ctx)
