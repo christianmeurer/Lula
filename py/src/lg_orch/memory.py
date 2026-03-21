@@ -452,7 +452,11 @@ def build_context_layers(
 
     verification_raw = _state_get(state, "verification", {})
     verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
-    recovery_packet_raw = _state_get(state, "recovery_packet", verification.get("recovery_packet", {}))
+    recovery_packet_raw = _state_get(
+        state,
+        "recovery_packet",
+        verification.get("recovery_packet", {}),
+    )
     recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
     plan_raw = _state_get(state, "plan", {})
     plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
