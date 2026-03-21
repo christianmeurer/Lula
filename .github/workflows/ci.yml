@@ -188,7 +188,7 @@ jobs:
           LG_DRY_RUN: "true"
         run: |
           if uv run python ../eval/run.py --help 2>&1 | grep -q -- '--dry-run'; then
-            uv run python ../eval/run.py --task ../eval/tasks/canary.json --dry-run
+            uv run python ../eval/run.py --tasks canary --dry-run
           else
             echo "canary smoke skipped"
           fi
