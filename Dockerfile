@@ -12,7 +12,6 @@ FROM rust:1.88-bookworm AS rust-builder
 WORKDIR /app
 
 COPY rs/ ./rs/
-COPY Cargo.lock* ./
 
 RUN cargo build --manifest-path ./rs/Cargo.toml --release --locked -p lg-runner
 
