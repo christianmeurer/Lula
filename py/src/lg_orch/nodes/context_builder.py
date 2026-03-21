@@ -64,10 +64,12 @@ def _runner_context_snapshot(
         return {}, [], ""
     query = _semantic_query_from_request(str(state.get("request", "")))
     try:
-        batch_results = client.batch_execute_tools(calls=[
-            {"tool": "ast_index_summary", "input": {"max_files": 200}},
-            {"tool": "search_codebase", "input": {"query": query, "limit": 8}},
-        ])
+        batch_results = client.batch_execute_tools(
+            calls=[
+                {"tool": "ast_index_summary", "input": {"max_files": 200}},
+                {"tool": "search_codebase", "input": {"query": query, "limit": 8}},
+            ]
+        )
     finally:
         client.close()
 
@@ -134,7 +136,8 @@ def _mcp_catalog_snapshot(
     # Exclude hash-mismatch sentinel entries from the raw list surfaced to state.
     clean_tools: list[dict[str, Any]] = (
         [
-            t for t in raw_tools
+            t
+            for t in raw_tools
             if isinstance(t, dict) and not bool(t.get("_schema_hash_mismatch", False))
         ]
         if isinstance(raw_tools, list)
@@ -245,6 +248,7 @@ def _load_cached_procedures(state: dict[str, Any]) -> list[dict[str, Any]]:
         return []
     try:
         from lg_orch.procedure_cache import ProcedureCache
+
         cache = ProcedureCache(db_path=Path(procedure_cache_path))
         try:
             return cache.lookup_procedure(request=request, limit=3)
@@ -270,6 +274,7 @@ def _load_episodic_context(state: dict[str, Any]) -> list[dict[str, Any]]:
         return []
     try:
         from lg_orch.run_store import RunStore
+
         store = RunStore(db_path=Path(run_store_path))
         try:
             return store.get_episodic_context(
@@ -292,6 +297,7 @@ def _load_semantic_context(state: dict[str, Any]) -> list[dict[str, Any]]:
         return []
     try:
         from lg_orch.run_store import RunStore
+
         store = RunStore(db_path=Path(run_store_path))
         try:
             return store.search_semantic_memories(query=query, limit=5)
@@ -408,17 +414,17 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
     repo_context["working_set"] = layers["working_set"]
     repo_context["planner_context"] = layers["planner_context"]
     repo_context["compression"] = layers["compression"]
-   
+
     budgets_raw = state.get("budgets", {})
     budgets = dict(budgets_raw) if isinstance(budgets_raw, dict) else {}
     current_loop = int(budgets.get("current_loop", 0) or 0)
-   
+
     out = record_compression_provenance(
         state,
         compression_result=layers,
         current_loop=current_loop,
     )
-   
+
     provenance_raw = out.get("provenance", [])
     provenance = list(provenance_raw) if isinstance(provenance_raw, list) else []
     provenance.append(
@@ -429,7 +435,7 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
             "compression": layers["compression"],
         }
     )
-   
+
     telemetry_raw = out.get("telemetry", {})
     telemetry = dict(telemetry_raw) if isinstance(telemetry_raw, dict) else {}
     telemetry["context_budget"] = {
@@ -437,7 +443,7 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
         "working_set": repo_context["working_set"],
     }
     telemetry["compression_summary"] = get_compression_summary(out)
-   
+
     out = {
         **out,
         "repo_context": repo_context,

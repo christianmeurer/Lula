@@ -340,9 +340,7 @@ def test_evaluate_golden_assertions_lte() -> None:
 def test_evaluate_golden_assertions_in() -> None:
     module = _load_eval_run_module()
     golden = {
-        "assertions": [
-            {"field": "approval_outcome", "op": "in", "value": ["approved", "rejected"]}
-        ]
+        "assertions": [{"field": "approval_outcome", "op": "in", "value": ["approved", "rejected"]}]
     }
     passed, _total, failures = module.evaluate_golden_assertions(
         {"approval_outcome": "approved"}, golden
@@ -368,9 +366,7 @@ def test_evaluate_golden_assertions_contains() -> None:
     )
     assert passed2 == 1 and failures2 == []
     # fails when not present
-    passed3, _, failures3 = module.evaluate_golden_assertions(
-        {"tool_calls": ["read_file"]}, golden
-    )
+    passed3, _, failures3 = module.evaluate_golden_assertions({"tool_calls": ["read_file"]}, golden)
     assert passed3 == 0 and len(failures3) == 1
 
 

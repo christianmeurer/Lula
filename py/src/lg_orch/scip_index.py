@@ -30,6 +30,7 @@ Sidecar JSON format
 Exported public names:
     ScipSymbol, ScipIndex, load_scip_index
 """
+
 from __future__ import annotations
 
 import json
@@ -50,11 +51,11 @@ class ScipSymbol:
     """A single symbol entry from a SCIP index."""
 
     name: str
-    kind: str          # "function", "class", "variable", "type"
-    file_path: str     # relative to repo root
+    kind: str  # "function", "class", "variable", "type"
+    file_path: str  # relative to repo root
     start_line: int
     end_line: int
-    references: list[str]   # "other/path.py:symbol_name" strings
+    references: list[str]  # "other/path.py:symbol_name" strings
 
 
 @dataclass
@@ -91,9 +92,7 @@ class ScipIndex:
         """Return all symbols whose ``file_path`` equals *relative_path*."""
         return [s for s in self.symbols if s.file_path == relative_path]
 
-    def cross_repo_deps(
-        self, other: ScipIndex
-    ) -> list[tuple[ScipSymbol, ScipSymbol]]:
+    def cross_repo_deps(self, other: ScipIndex) -> list[tuple[ScipSymbol, ScipSymbol]]:
         """Return pairs ``(local_symbol, remote_symbol)`` where ``local_symbol``
         references a symbol that exists in ``other``.
 

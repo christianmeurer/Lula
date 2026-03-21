@@ -280,9 +280,7 @@ enabled = false
     )
 
     with patch("lg_orch.commands.run.run_command", return_value=0) as mock_cmd:
-        rc = cli(
-            ["run", "hello world", "--repo-root", str(tmp_path)]
-        )
+        rc = cli(["run", "hello world", "--repo-root", str(tmp_path)])
     assert rc == 0
     mock_cmd.assert_called_once()
 
@@ -319,4 +317,3 @@ def test_heal_command_callable_directly() -> None:
     from lg_orch.commands.heal import heal_command
 
     assert callable(heal_command)
-

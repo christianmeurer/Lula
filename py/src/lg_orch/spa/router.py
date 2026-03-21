@@ -12,6 +12,7 @@ Routing rules
 * ``main.js``    → serve ``spa/main.js``
 * anything else  → serve ``spa/index.html`` (SPA catch-all)
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

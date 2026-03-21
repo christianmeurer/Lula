@@ -123,7 +123,7 @@ def test_degraded_models_correct_list() -> None:
         fallbacks={"gpt-4o": "gpt-3.5-turbo", "claude-3": "claude-instant"},
     )
     for _ in range(10):
-        policy.record_latency("gpt-4o", 1.0)   # over threshold
+        policy.record_latency("gpt-4o", 1.0)  # over threshold
         policy.record_latency("claude-3", 0.1)  # under threshold
 
     degraded = policy.degraded_models()

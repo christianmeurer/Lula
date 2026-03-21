@@ -1,4 +1,5 @@
 """Tests for py/src/lg_orch/auth.py — JWT/RBAC middleware."""
+
 from __future__ import annotations
 
 import time
@@ -322,17 +323,13 @@ class TestRoutePolicy:
         assert result == ()
 
     def test_post_runs_requires_operator(self) -> None:
-        result = _route_policy(
-            route="/runs", method="POST", path_parts=["runs"], jwt_enabled=True
-        )
+        result = _route_policy(route="/runs", method="POST", path_parts=["runs"], jwt_enabled=True)
         assert "operator" in result
         assert "admin" in result
         assert "viewer" not in result
 
     def test_get_runs_requires_viewer(self) -> None:
-        result = _route_policy(
-            route="/runs", method="GET", path_parts=["runs"], jwt_enabled=True
-        )
+        result = _route_policy(route="/runs", method="GET", path_parts=["runs"], jwt_enabled=True)
         assert "viewer" in result
 
     def test_runs_search_requires_viewer(self) -> None:

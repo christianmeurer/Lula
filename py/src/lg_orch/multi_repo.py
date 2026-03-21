@@ -9,6 +9,7 @@ cross-repo handoffs into each task's initial state before execution.
 Exported public names:
     RepoConfig, CrossRepoHandoff, MultiRepoScheduler
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -39,9 +40,9 @@ _SCIP_SUMMARY_LIMIT = 20  # top N symbols injected into task state
 class RepoConfig:
     """Configuration for a single repository in a multi-repo orchestration."""
 
-    name: str           # logical name, e.g. "auth-service"
-    root_path: str      # absolute path to the repo
-    runner_url: str     # URL of the Rust runner serving this repo
+    name: str  # logical name, e.g. "auth-service"
+    root_path: str  # absolute path to the repo
+    runner_url: str  # URL of the Rust runner serving this repo
     scip_index: ScipIndex | None = None
 
 
@@ -51,7 +52,7 @@ class CrossRepoHandoff:
 
     source_repo: str
     target_repo: str
-    shared_symbols: list[str]    # symbol names that cross the boundary
+    shared_symbols: list[str]  # symbol names that cross the boundary
     objective: str
     context_patch: dict[str, Any] = field(default_factory=dict)
 
@@ -121,9 +122,7 @@ class MultiRepoScheduler:
                 the repo name it maps to does not exist in ``repos``.
         """
         if task_id not in self._task_repo_map:
-            raise ValueError(
-                f"MultiRepoScheduler: task_id '{task_id}' not found in task_repo_map"
-            )
+            raise ValueError(f"MultiRepoScheduler: task_id '{task_id}' not found in task_repo_map")
         repo_name = self._task_repo_map[task_id]
         if repo_name not in self._repos:
             raise ValueError(
@@ -150,9 +149,7 @@ class MultiRepoScheduler:
 
         # Find any handoff whose target_repo matches this task's repo name.
         repo_name = self._task_repo_map[task.task_id]
-        matching: list[CrossRepoHandoff] = [
-            h for h in handoffs if h.target_repo == repo_name
-        ]
+        matching: list[CrossRepoHandoff] = [h for h in handoffs if h.target_repo == repo_name]
         if matching:
             # Use the first matching handoff; convert to a plain dict so the
             # inner graph does not need to import this module's types.

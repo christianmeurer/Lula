@@ -5,6 +5,7 @@ Covers:
 * GET /app/style.css → style.css (text/css)
 * GET /app/main.js  → main.js (application/javascript)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -90,10 +91,10 @@ def test_spa_style_css_returns_css(tmp_path: Path) -> None:
     assert "text/css" in content_type
     css = body.decode("utf-8")
     # Verify GitHub dark palette token and key structural rules are present
-    assert "#0d1117" in css          # background token
-    assert "#c9d1d9" in css          # text colour token
-    assert "node-pulse" in css       # pipeline animation keyframe
-    assert "event-row" in css        # event log row selector
+    assert "#0d1117" in css  # background token
+    assert "#c9d1d9" in css  # text colour token
+    assert "node-pulse" in css  # pipeline animation keyframe
+    assert "event-row" in css  # event log row selector
 
 
 def test_spa_main_js_returns_js(tmp_path: Path) -> None:
@@ -115,11 +116,11 @@ def test_spa_main_js_returns_js(tmp_path: Path) -> None:
     assert "javascript" in content_type
     js = body.decode("utf-8")
     # Verify key identifiers are present
-    assert "EventSource" in js           # SSE connectivity
-    assert "PIPELINE_NODES" in js        # pipeline graph data
-    assert "approveRun" in js            # approval action
-    assert "rejectRun" in js             # rejection action
-    assert "refreshRunList" in js        # sidebar polling
+    assert "EventSource" in js  # SSE connectivity
+    assert "PIPELINE_NODES" in js  # pipeline graph data
+    assert "approveRun" in js  # approval action
+    assert "rejectRun" in js  # rejection action
+    assert "refreshRunList" in js  # sidebar polling
 
 
 def test_index_html_contains_d3_cdn_script(tmp_path: Path) -> None:
@@ -130,9 +131,7 @@ def test_index_html_contains_d3_cdn_script(tmp_path: Path) -> None:
         pytest.skip("spa/index.html not present — skipping test")
 
     html = index_path.read_text(encoding="utf-8")
-    assert "cdn.jsdelivr.net/npm/d3@7" in html, (
-        "index.html must load D3 v7 from the jsDelivr CDN"
-    )
+    assert "cdn.jsdelivr.net/npm/d3@7" in html, "index.html must load D3 v7 from the jsDelivr CDN"
 
 
 def test_main_js_uses_force_simulation(tmp_path: Path) -> None:

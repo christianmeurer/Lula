@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 """PostgreSQL checkpoint backend."""
+
 from __future__ import annotations
 
 import base64
@@ -101,12 +102,10 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
         pool = await self._get_pool()
         # Use table_name safely — it is a fixed string from the constructor,
         # never user-supplied data at runtime.
-        create_table = _POSTGRES_CREATE_TABLE.replace(
-            "lula_checkpoints", self._table_name
+        create_table = _POSTGRES_CREATE_TABLE.replace("lula_checkpoints", self._table_name)
+        create_index = _POSTGRES_CREATE_INDEX.replace("lula_checkpoints", self._table_name).replace(
+            "idx_lula_ckpt_thread", f"idx_{self._table_name}_thread"
         )
-        create_index = _POSTGRES_CREATE_INDEX.replace(
-            "lula_checkpoints", self._table_name
-        ).replace("idx_lula_ckpt_thread", f"idx_{self._table_name}_thread")
         async with pool.connection() as conn:
             await conn.execute(create_table)
             await conn.execute(create_index)
@@ -152,7 +151,9 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
         metadata_payload = (
             metadata_blob_raw
             if isinstance(metadata_blob_raw, (bytes, memoryview))
-            else bytes(metadata_blob_raw) if metadata_blob_raw else b""
+            else bytes(metadata_blob_raw)
+            if metadata_blob_raw
+            else b""
         )
         if isinstance(metadata_payload, memoryview):
             metadata_payload = bytes(metadata_payload)
@@ -277,14 +278,17 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
                 row = await conn.fetchrow(
                     f"SELECT * FROM {tbl}"
                     f" WHERE thread_id = $1 AND checkpoint_ns = $2 AND checkpoint_id = $3",
-                    thread_id, checkpoint_ns, checkpoint_id,
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint_id,
                 )
             else:
                 row = await conn.fetchrow(
                     f"SELECT * FROM {tbl}"
                     f" WHERE thread_id = $1 AND checkpoint_ns = $2"
                     f" ORDER BY created_at DESC LIMIT 1",
-                    thread_id, checkpoint_ns,
+                    thread_id,
+                    checkpoint_ns,
                 )
             if row is None:
                 return None
@@ -330,9 +334,7 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
             async for row_tuple in cur:
                 row = dict(zip(cols, row_tuple, strict=False))
                 tup = self._row_to_tuple(row, requested_config=None)
-                if filter is not None and any(
-                    tup.metadata.get(k) != v for k, v in filter.items()
-                ):
+                if filter is not None and any(tup.metadata.get(k) != v for k, v in filter.items()):
                     continue
                 yield tup
 
@@ -348,9 +350,7 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
         checkpoint_id = str(checkpoint["id"])
 
         checkpoint_type, checkpoint_blob = self._dump_typed(checkpoint)
-        metadata_type, metadata_blob = self._dump_typed(
-            get_checkpoint_metadata(config, metadata)
-        )
+        metadata_type, metadata_blob = self._dump_typed(get_checkpoint_metadata(config, metadata))
 
         pool = await self._get_pool()
         tbl = self._table_name

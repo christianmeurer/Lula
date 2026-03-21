@@ -17,6 +17,7 @@ succeeds we get a validated snapshot for documentation purposes; any
 ``ValidationError`` is logged as a warning and execution continues using plain
 dict access (no behavior change to the running graph).
 """
+
 from __future__ import annotations
 
 import json
@@ -223,8 +224,7 @@ def _router_model_output(
     repo_root = Path(str(state.get("_repo_root", "."))).resolve()
     router_prompt_path = repo_root / "prompts" / "router.md"
     system_prompt = (
-        "You are a router for a repo-aware coding orchestrator. "
-        "Return strict JSON only."
+        "You are a router for a repo-aware coding orchestrator. Return strict JSON only."
     )
     try:
         if router_prompt_path.is_file():
@@ -290,9 +290,7 @@ def router(state: dict[str, Any]) -> dict[str, Any]:
     log = get_logger()
     # Typed boundary validation — best-effort; does not change behaviour.
     try:
-        _validated = OrchState.model_validate(
-            {k: v for k, v in state.items() if v is not None}
-        )
+        _validated = OrchState.model_validate({k: v for k, v in state.items() if v is not None})
     except ValidationError as exc:
         log.warning("router_node received invalid state", validation_errors=str(exc))
         _validated = None

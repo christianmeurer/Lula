@@ -5,6 +5,7 @@
 Thin wrapper that delegates to :func:`lg_orch.remote_api.serve_remote_api`.
 Extracted from ``lg_orch.main.cli`` to keep the dispatcher under 200 lines.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

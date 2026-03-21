@@ -1,4 +1,5 @@
 """Tests for InferenceClient HTTP 429/5xx retry and circuit-breaker."""
+
 from __future__ import annotations
 
 import time
@@ -50,6 +51,7 @@ def _mock_response(
 
 def _make_client(base_url: str = "http://test.local") -> InferenceClient:
     from lg_orch.model_routing import SlaRoutingPolicy
+
     mock_http = MagicMock(spec=httpx.Client)
     client = InferenceClient.__new__(InferenceClient)
     object.__setattr__(client, "base_url", base_url)
@@ -132,9 +134,7 @@ def test_429_retries_with_retry_after_header(monkeypatch: pytest.MonkeyPatch) ->
     client._client.post.side_effect = fake_post  # type: ignore[union-attr]
     monkeypatch.setattr(ic_mod.time, "sleep", lambda s: sleep_calls.append(s))
 
-    result = client.chat_completion(
-        model="m", system_prompt="s", user_prompt="u", temperature=0.0
-    )
+    result = client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
 
     assert call_count == 2
     assert len(sleep_calls) == 1
@@ -178,9 +178,7 @@ def test_500_retries_up_to_limit_then_raises(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(ic_mod.time, "sleep", lambda s: sleep_calls.append(s))
 
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        client.chat_completion(
-            model="m", system_prompt="s", user_prompt="u", temperature=0.0
-        )
+        client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
 
     assert exc_info.value.response.status_code == 500
     # 4 total attempts, 3 sleeps between them
@@ -210,14 +208,10 @@ def test_5_failures_open_circuit_and_next_call_raises(monkeypatch: pytest.Monkey
     # We need 5 breaker failures to open it.
     for _ in range(5):
         with pytest.raises(httpx.HTTPStatusError):
-            client.chat_completion(
-                model="m", system_prompt="s", user_prompt="u", temperature=0.0
-            )
+            client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
 
     with pytest.raises(RuntimeError, match="circuit_open"):
-        client.chat_completion(
-            model="m", system_prompt="s", user_prompt="u", temperature=0.0
-        )
+        client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
     _clear_breaker(base_url)
 
 
@@ -244,9 +238,7 @@ def test_half_open_probe_success_closes_circuit(monkeypatch: pytest.MonkeyPatch)
 
     client._client.post.side_effect = success_post  # type: ignore[union-attr]
 
-    result = client.chat_completion(
-        model="m", system_prompt="s", user_prompt="u", temperature=0.0
-    )
+    result = client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
     assert result.text == "hi"
     # Circuit should now be closed
     assert cb.allow_request() is True
@@ -292,9 +284,7 @@ def test_llm_requests_total_incremented_on_success(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(ic_mod, "_LLM_REQUESTS_TOTAL", mock_counter)
     monkeypatch.setattr(ic_mod, "_LLM_DURATION_SECONDS", mock_histogram)
 
-    result = client.chat_completion(
-        model="m", system_prompt="s", user_prompt="u", temperature=0.0
-    )
+    result = client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
     assert result.text == "hello"
 
     mock_counter.labels.assert_called_once_with(provider="unknown", model="m", status="ok")
@@ -318,9 +308,7 @@ def test_llm_requests_total_incremented_on_error(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(ic_mod, "_LLM_DURATION_SECONDS", MagicMock())
 
     with pytest.raises(httpx.HTTPStatusError):
-        client.chat_completion(
-            model="m", system_prompt="s", user_prompt="u", temperature=0.0
-        )
+        client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
 
     label_calls = mock_counter.labels.call_args_list
     assert any(call.kwargs.get("status") == "error" for call in label_calls)
@@ -339,8 +327,6 @@ def test_llm_metrics_none_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(ic_mod, "_LLM_REQUESTS_TOTAL", None)
     monkeypatch.setattr(ic_mod, "_LLM_DURATION_SECONDS", None)
 
-    result = client.chat_completion(
-        model="m", system_prompt="s", user_prompt="u", temperature=0.0
-    )
+    result = client.chat_completion(model="m", system_prompt="s", user_prompt="u", temperature=0.0)
     assert result.text == "ok"
     _clear_breaker(base_url)

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 """Prompt construction, schema validation, and deterministic fallback plan for the planner."""
+
 from __future__ import annotations
 
 import json
@@ -97,9 +98,7 @@ def _format_mcp_tool_catalog(mcp_tools: list[dict[str, Any]]) -> str:
             props = input_schema.get("properties", {})
             if isinstance(props, dict) and props:
                 schema_summary = {
-                    k: str(v.get("type", "any"))
-                    for k, v in props.items()
-                    if isinstance(v, dict)
+                    k: str(v.get("type", "any")) for k, v in props.items() if isinstance(v, dict)
                 }
                 lines.append(f"  Input schema: {schema_summary}")
     if not lines:
@@ -275,9 +274,7 @@ def _build_planner_prompts(
     mcp_prompt = _planner_mcp_prompt(repo_context)
     mcp_tools_raw = state.get("mcp_tools", [])
     mcp_tools: list[dict[str, Any]] = (
-        [t for t in mcp_tools_raw if isinstance(t, dict)]
-        if isinstance(mcp_tools_raw, list)
-        else []
+        [t for t in mcp_tools_raw if isinstance(t, dict)] if isinstance(mcp_tools_raw, list) else []
     )
     mcp_tool_catalog = _format_mcp_tool_catalog(mcp_tools)
     semantic_memory_prompt = _planner_semantic_memory_prompt(repo_context, request=request)

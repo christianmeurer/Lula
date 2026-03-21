@@ -255,9 +255,7 @@ def record_model_route(
         cache_affinity=cache_affinity,
         prefix_segment=prefix_segment,
         interactive_context_limit=int(routing.get("interactive_context_limit", 1800) or 1800),
-        deep_planning_context_limit=int(
-            routing.get("deep_planning_context_limit", 3200) or 3200
-        ),
+        deep_planning_context_limit=int(routing.get("deep_planning_context_limit", 3200) or 3200),
         recovery_retry_threshold=int(routing.get("recovery_retry_threshold", 1) or 1),
         compression_pressure=compression_pressure,
         fact_count=fact_count,
@@ -499,4 +497,3 @@ def build_sla_policy(config: SlaConfig) -> SlaRoutingPolicy | None:
         thresholds[entry.model_id] = entry.threshold_p95_s
         fallbacks[entry.model_id] = entry.fallback_model_id
     return SlaRoutingPolicy(thresholds=thresholds, fallbacks=fallbacks)
-

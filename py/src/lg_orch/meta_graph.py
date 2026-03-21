@@ -11,6 +11,7 @@ Exported public names:
     SubAgentTask, DependencyGraph, DependencyPatch, MetaGraphScheduler,
     MetaRunResult, run_meta_graph
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -108,17 +109,13 @@ class DependencyGraph:
         task_ids = [t.task_id for t in tasks]
         if len(task_ids) != len(set(task_ids)):
             duplicates = {tid for tid in task_ids if task_ids.count(tid) > 1}
-            raise ValueError(
-                f"Duplicate task_ids in task list: {sorted(duplicates)}"
-            )
+            raise ValueError(f"Duplicate task_ids in task list: {sorted(duplicates)}")
         self._tasks = tasks
         self._id_set: set[str] = set(task_ids)
         # Internal adjacency: maps each task_id to the list of task_ids it
         # depends on.  This is a graph-owned copy so mutations here do not
         # propagate back to SubAgentTask.depends_on.
-        self._depends_on: dict[str, list[str]] = {
-            t.task_id: list(t.depends_on) for t in tasks
-        }
+        self._depends_on: dict[str, list[str]] = {t.task_id: list(t.depends_on) for t in tasks}
         self._validate_no_cycles()
 
     # ------------------------------------------------------------------
@@ -135,9 +132,7 @@ class DependencyGraph:
         for task_id, deps in self._depends_on.items():
             for dep in deps:
                 if dep not in self._id_set:
-                    raise ValueError(
-                        f"Task '{task_id}' declares unknown dependency '{dep}'"
-                    )
+                    raise ValueError(f"Task '{task_id}' declares unknown dependency '{dep}'")
 
         # Build in-degree map and reverse-adjacency map.
         in_degree: dict[str, int] = {tid: 0 for tid in self._id_set}
@@ -148,9 +143,7 @@ class DependencyGraph:
                 dependents[dep].append(task_id)
 
         # Kahn's BFS.
-        queue: deque[str] = deque(
-            tid for tid, deg in in_degree.items() if deg == 0
-        )
+        queue: deque[str] = deque(tid for tid, deg in in_degree.items() if deg == 0)
         processed = 0
         while queue:
             node = queue.popleft()
@@ -175,13 +168,9 @@ class DependencyGraph:
         would introduce a cycle.
         """
         if from_id not in self._id_set:
-            raise ValueError(
-                f"add_edge: unknown task_id '{from_id}'"
-            )
+            raise ValueError(f"add_edge: unknown task_id '{from_id}'")
         if to_id not in self._id_set:
-            raise ValueError(
-                f"add_edge: unknown task_id '{to_id}'"
-            )
+            raise ValueError(f"add_edge: unknown task_id '{to_id}'")
         if from_id in self._depends_on[to_id]:
             # Edge already exists; idempotent.
             return
@@ -212,9 +201,7 @@ class DependencyGraph:
         new_graph: DependencyGraph = object.__new__(DependencyGraph)
         new_graph._tasks = self._tasks  # shared task objects intentionally
         new_graph._id_set = set(self._id_set)
-        new_graph._depends_on = {
-            tid: list(deps) for tid, deps in self._depends_on.items()
-        }
+        new_graph._depends_on = {tid: list(deps) for tid, deps in self._depends_on.items()}
         return new_graph
 
     # ------------------------------------------------------------------
@@ -250,9 +237,7 @@ class DependencyGraph:
                 continue
             # If any dep failed, this task is forever blocked → treat as done.
             # If no dep failed, this task might still run → not done yet.
-            if not any(
-                dep in failed_ids for dep in self._depends_on[task.task_id]
-            ):
+            if not any(dep in failed_ids for dep in self._depends_on[task.task_id]):
                 return False
         return True
 
@@ -292,9 +277,7 @@ class MetaGraphScheduler:
         # run_graph may legitimately be None in test setups that only test
         # isolation wiring; callers that actually invoke run() must provide it.
         self._run_graph: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] = (
-            run_graph
-            if run_graph is not None
-            else _missing_run_graph
+            run_graph if run_graph is not None else _missing_run_graph
         )
         self._max_parallel = max(1, max_parallel)
         self._fail_fast = fail_fast
@@ -463,9 +446,7 @@ class MetaGraphScheduler:
             log.info(
                 "meta_graph.task_success",
                 task_id=task.task_id,
-                duration_s=round(
-                    task.finished_at - (task.started_at or task.finished_at), 4
-                ),
+                duration_s=round(task.finished_at - (task.started_at or task.finished_at), 4),
             )
             self._maybe_apply_patch(task.task_id, final_state)
         except Exception as exc:
@@ -476,9 +457,7 @@ class MetaGraphScheduler:
                 "meta_graph.task_failed",
                 task_id=task.task_id,
                 error=task.error,
-                duration_s=round(
-                    task.finished_at - (task.started_at or task.finished_at), 4
-                ),
+                duration_s=round(task.finished_at - (task.started_at or task.finished_at), 4),
             )
 
     async def _run_task_isolated(self, task: SubAgentTask) -> None:
@@ -504,9 +483,7 @@ class MetaGraphScheduler:
                 "meta_graph.task_success",
                 task_id=task.task_id,
                 worktree_path=final_state.get("worktree_path"),
-                duration_s=round(
-                    task.finished_at - (task.started_at or task.finished_at), 4
-                ),
+                duration_s=round(task.finished_at - (task.started_at or task.finished_at), 4),
             )
             self._maybe_apply_patch(task.task_id, final_state)
         except Exception as exc:
@@ -518,18 +495,14 @@ class MetaGraphScheduler:
                     "meta_graph.task_failed",
                     task_id=task.task_id,
                     error=task.error,
-                    duration_s=round(
-                        task.finished_at - (task.started_at or task.finished_at), 4
-                    ),
+                    duration_s=round(task.finished_at - (task.started_at or task.finished_at), 4),
                 )
 
     # ------------------------------------------------------------------
     # Dynamic dependency patching
     # ------------------------------------------------------------------
 
-    def _maybe_apply_patch(
-        self, task_id: str, result: dict[str, Any]
-    ) -> None:
+    def _maybe_apply_patch(self, task_id: str, result: dict[str, Any]) -> None:
         """Apply a :class:`DependencyPatch` from *result* if rewiring is enabled.
 
         This method is synchronous (no awaits) so it is effectively atomic
@@ -582,9 +555,7 @@ class MetaGraphScheduler:
 
 
 def _missing_run_graph(state: dict[str, Any]) -> Any:
-    raise RuntimeError(
-        "MetaGraphScheduler.run() called but no run_graph was provided."
-    )
+    raise RuntimeError("MetaGraphScheduler.run() called but no run_graph was provided.")
 
 
 async def run_meta_graph(

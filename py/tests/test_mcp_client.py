@@ -18,6 +18,7 @@ def _runner_mock() -> RunnerClient:
 # _compute_tools_hash
 # ---------------------------------------------------------------------------
 
+
 def test_compute_tools_hash_is_deterministic() -> None:
     tools = [{"name": "echo", "description": "Echo tool"}]
     assert _compute_tools_hash(tools) == _compute_tools_hash(tools)
@@ -169,6 +170,7 @@ def test_discover_tools_skips_hash_check_when_unpinned() -> None:
 # summarize_tools mismatch filtering
 # ---------------------------------------------------------------------------
 
+
 def test_summarize_tools_excludes_mismatch_sentinels() -> None:
     mismatch_entry = {
         "server_name": "bad_server",
@@ -190,6 +192,7 @@ def test_summarize_tools_excludes_mismatch_sentinels() -> None:
 # ---------------------------------------------------------------------------
 # list_resources / read_resource / list_prompts / get_prompt
 # ---------------------------------------------------------------------------
+
 
 def test_list_resources_returns_list() -> None:
     runner = _runner_mock()
@@ -306,4 +309,3 @@ def test_summarize_capabilities_returns_counts() -> None:
     assert "prompts_count" in caps
     assert caps["resources_count"] == 1
     assert caps["prompts_count"] == 1
-

@@ -8,6 +8,7 @@ valid output.
 Run with:
     LG_E2E=1 uv run pytest tests/test_e2e.py -v
 """
+
 from __future__ import annotations
 
 import os
@@ -77,7 +78,12 @@ class TestE2ESmoke:
         out = dict(app.invoke(_base_state("Summarize the repository structure.")))
         assert isinstance(out.get("intent"), str), "intent must be a string"
         assert out.get("intent") in {
-            "analysis", "code_change", "research", "question", "refactor", "debug"
+            "analysis",
+            "code_change",
+            "research",
+            "question",
+            "refactor",
+            "debug",
         }, f"unexpected intent: {out.get('intent')}"
         assert "route" in out, "route must be present in output"
         assert isinstance(out.get("route"), dict), "route must be a dict"
@@ -182,5 +188,6 @@ class TestE2ESmoke:
         route = out.get("route", {})
         assert isinstance(route, dict)
         # Lane must be one of the valid values
-        assert str(route.get("lane", "")) in {"interactive", "deep_planning", "recovery"}, \
+        assert str(route.get("lane", "")) in {"interactive", "deep_planning", "recovery"}, (
             f"unexpected lane: {route.get('lane')}"
+        )

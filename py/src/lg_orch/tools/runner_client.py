@@ -255,16 +255,12 @@ class RunnerClient:
             results = _do()
             if _TOOL_CALLS_TOTAL is not None:
                 for c in calls:
-                    _TOOL_CALLS_TOTAL.labels(
-                        tool_name=str(c.get("tool", "")), status="ok"
-                    ).inc()
+                    _TOOL_CALLS_TOTAL.labels(tool_name=str(c.get("tool", "")), status="ok").inc()
             return results
         except httpx.HTTPStatusError as e:
             if _TOOL_CALLS_TOTAL is not None:
                 for c in calls:
-                    _TOOL_CALLS_TOTAL.labels(
-                        tool_name=str(c.get("tool", "")), status="error"
-                    ).inc()
+                    _TOOL_CALLS_TOTAL.labels(tool_name=str(c.get("tool", "")), status="error").inc()
             status = e.response.status_code if e.response is not None else 0
             approval_payload: dict[str, Any] | None = None
             if status == 428 and e.response is not None:
@@ -301,9 +297,7 @@ class RunnerClient:
         except httpx.HTTPError as e:
             if _TOOL_CALLS_TOTAL is not None:
                 for c in calls:
-                    _TOOL_CALLS_TOTAL.labels(
-                        tool_name=str(c.get("tool", "")), status="error"
-                    ).inc()
+                    _TOOL_CALLS_TOTAL.labels(tool_name=str(c.get("tool", "")), status="error").inc()
             return [
                 {
                     "tool": str(c.get("tool", "")),

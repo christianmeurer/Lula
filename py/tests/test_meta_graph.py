@@ -6,6 +6,7 @@ meta_evaluator, build_meta_graph) are replaced here because those
 functions no longer exist after the rewrite.  Every scenario described
 in the implementation spec is covered.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -131,9 +132,7 @@ class TestDependencyGraph:
 
 
 class TestMetaRunResult:
-    def _make(
-        self, succeeded: int, failed: int, skipped: int
-    ) -> MetaRunResult:
+    def _make(self, succeeded: int, failed: int, skipped: int) -> MetaRunResult:
         return MetaRunResult(
             tasks=[],
             total_duration_s=0.0,
@@ -225,15 +224,11 @@ def test_fanout_bc_run_concurrently() -> None:
 
     tasks = [_task("a"), _task("b", deps=["a"]), _task("c", deps=["a"])]
 
-    result = asyncio.run(
-        run_meta_graph(tasks, tracking_graph, max_parallel=4)
-    )
+    result = asyncio.run(run_meta_graph(tasks, tracking_graph, max_parallel=4))
 
     assert result.all_succeeded is True
     # Both B and C must have been in-flight simultaneously.
-    assert max_concurrent[0] == 2, (
-        f"Expected max concurrent = 2 (fan-out), got {max_concurrent[0]}"
-    )
+    assert max_concurrent[0] == 2, f"Expected max concurrent = 2 (fan-out), got {max_concurrent[0]}"
 
 
 # ---------------------------------------------------------------------------
@@ -302,9 +297,7 @@ def test_fail_fast_skips_remaining() -> None:
         await asyncio.sleep(10.0)
         return {}
 
-    result = asyncio.run(
-        run_meta_graph(tasks, selective_graph, fail_fast=True, max_parallel=1)
-    )
+    result = asyncio.run(run_meta_graph(tasks, selective_graph, fail_fast=True, max_parallel=1))
 
     assert result.succeeded == 0
     assert result.failed == 1
@@ -347,9 +340,7 @@ def test_fail_non_fast_independent_task_still_runs() -> None:
             raise RuntimeError("task a failed")
         return {"result": "ok"}
 
-    result = asyncio.run(
-        run_meta_graph(tasks, selective_graph, fail_fast=False)
-    )
+    result = asyncio.run(run_meta_graph(tasks, selective_graph, fail_fast=False))
 
     assert result.succeeded == 1
     assert result.failed == 1
@@ -372,14 +363,12 @@ def test_fail_non_fast_blocked_dependency_still_skipped() -> None:
             raise RuntimeError("task a error")
         return {}
 
-    result = asyncio.run(
-        run_meta_graph(tasks, selective_graph, fail_fast=False)
-    )
+    result = asyncio.run(run_meta_graph(tasks, selective_graph, fail_fast=False))
 
     task_map = {t.task_id: t for t in result.tasks}
     assert task_map["a"].status == "failed"
-    assert task_map["b"].status == "skipped"   # blocked by failed dep
-    assert task_map["c"].status == "success"   # independent — should run
+    assert task_map["b"].status == "skipped"  # blocked by failed dep
+    assert task_map["c"].status == "success"  # independent — should run
 
 
 # ---------------------------------------------------------------------------
@@ -406,9 +395,7 @@ def test_max_parallel_cap() -> None:
     # 5 independent tasks — all ready at once, but only 2 can run together.
     tasks = [_task(str(i)) for i in range(5)]
 
-    result = asyncio.run(
-        run_meta_graph(tasks, slow_graph, max_parallel=max_parallel)
-    )
+    result = asyncio.run(run_meta_graph(tasks, slow_graph, max_parallel=max_parallel))
 
     assert result.all_succeeded is True
     assert peak[0] <= max_parallel, (
@@ -673,9 +660,7 @@ def test_scheduler_discards_cyclic_patch() -> None:
 
     tasks = [_task("a"), _task("b", deps=["a"])]
 
-    result = asyncio.run(
-        run_meta_graph(tasks, cyclic_patch_graph, dynamic_rewiring=True)
-    )
+    result = asyncio.run(run_meta_graph(tasks, cyclic_patch_graph, dynamic_rewiring=True))
 
     # The cyclic patch was discarded; original topology preserved.
     # B still ran after A (linear chain intact).

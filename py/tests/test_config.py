@@ -320,7 +320,7 @@ def test_load_config_mcp_invalid_timeout_rejected(monkeypatch: pytest.MonkeyPatc
     bad_toml = (
         _VALID_TOML
         + "\n[mcp]\nenabled = true\n[mcp.servers.s1]\n"
-        + "command = \"python\"\ntimeout_s = 0\n"
+        + 'command = "python"\ntimeout_s = 0\n'
     )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
@@ -358,12 +358,12 @@ def test_load_config_run_store_path_none_by_default(monkeypatch: pytest.MonkeyPa
 
 def test_load_config_run_store_path_from_toml(monkeypatch: pytest.MonkeyPatch) -> None:
     toml = _VALID_TOML.replace(
-        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        '[remote_api]\nauth_mode = "bearer"\nbearer_token = "remote-token"\n'
         "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
         "access_log_enabled = true",
-        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        '[remote_api]\nauth_mode = "bearer"\nbearer_token = "remote-token"\n'
         "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
-        "access_log_enabled = true\nrun_store_path = \"artifacts/runs.sqlite\"",
+        'access_log_enabled = true\nrun_store_path = "artifacts/runs.sqlite"',
     )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
@@ -383,12 +383,12 @@ def test_load_config_run_store_path_from_env(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_load_config_run_store_path_empty_string_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
     toml = _VALID_TOML.replace(
-        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        '[remote_api]\nauth_mode = "bearer"\nbearer_token = "remote-token"\n'
         "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
         "access_log_enabled = true",
-        "[remote_api]\nauth_mode = \"bearer\"\nbearer_token = \"remote-token\"\n"
+        '[remote_api]\nauth_mode = "bearer"\nbearer_token = "remote-token"\n'
         "allow_unauthenticated_healthz = true\ntrust_forwarded_headers = true\n"
-        "access_log_enabled = true\nrun_store_path = \"\"",
+        'access_log_enabled = true\nrun_store_path = ""',
     )
     monkeypatch.setenv("LG_PROFILE", "dev")
     monkeypatch.delenv("LG_REMOTE_API_RUN_STORE_PATH", raising=False)
@@ -413,7 +413,7 @@ def test_load_config_openai_compatible_defaults(monkeypatch: pytest.MonkeyPatch)
 def test_load_config_openai_compatible_from_toml(monkeypatch: pytest.MonkeyPatch) -> None:
     extra = (
         "\n[models.openai_compatible]\n"
-        "base_url = \"https://my-endpoint.example.com/v1\"\n"
+        'base_url = "https://my-endpoint.example.com/v1"\n'
         "timeout_s = 30\n"
     )
     monkeypatch.setenv("LG_PROFILE", "dev")

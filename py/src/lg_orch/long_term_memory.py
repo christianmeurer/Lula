@@ -11,6 +11,7 @@ Three independent tiers:
 
 No external vector DB is required; numpy handles all embedding math.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -193,8 +194,10 @@ class LongTermMemoryStore:
     ) -> None:
         self._db_path = db_path
         _using_stub = embedder is None
-        self._embedder: Embedder = embedder if embedder is not None else (
-            lambda text: stub_embedder(text, dim=embedding_dim)
+        self._embedder: Embedder = (
+            embedder
+            if embedder is not None
+            else (lambda text: stub_embedder(text, dim=embedding_dim))
         )
         self._embedding_dim = embedding_dim
         if _using_stub:
@@ -221,9 +224,7 @@ class LongTermMemoryStore:
         return vec.astype(np.float32)
 
     @staticmethod
-    def _blob_to_vec(
-        blob: bytes, dim: int
-    ) -> np.ndarray[Any, np.dtype[np.float32]]:
+    def _blob_to_vec(blob: bytes, dim: int) -> np.ndarray[Any, np.dtype[np.float32]]:
         return np.frombuffer(blob, dtype=np.float32).copy()
 
     @staticmethod
@@ -264,8 +265,7 @@ class LongTermMemoryStore:
 
         with self._lock:
             rows = self._conn.execute(
-                "SELECT id, content, metadata, embedding, created_at "
-                "FROM semantic_memories"
+                "SELECT id, content, metadata, embedding, created_at FROM semantic_memories"
             ).fetchall()
 
         if not rows:
@@ -526,8 +526,7 @@ class LongTermMemoryStore:
                             tier="procedural",
                             run_id=None,
                             content=(
-                                f"task_type: {row['task_type']}\n"
-                                f"steps: {', '.join(steps_list)}"
+                                f"task_type: {row['task_type']}\nsteps: {', '.join(steps_list)}"
                             ),
                             metadata=meta,
                             created_at=float(row["created_at"]),

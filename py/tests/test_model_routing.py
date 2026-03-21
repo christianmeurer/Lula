@@ -145,4 +145,3 @@ def test_record_inference_telemetry_captures_route_metadata() -> None:
     assert entry["latency_sensitive"] is False
     assert entry["usage"]["input_tokens"] == 120
     assert entry["cache_metadata"]["x-cache-hit"] == "true"
-

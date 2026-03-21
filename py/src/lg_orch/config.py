@@ -14,8 +14,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from lg_orch.audit import AuditConfig
 
-_SHA256_RE = _re.compile(r'^[0-9a-f]{64}$')
-_NAMESPACE_RE = _re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+_SHA256_RE = _re.compile(r"^[0-9a-f]{64}$")
+_NAMESPACE_RE = _re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _is_valid_sha256_hex(value: str) -> bool:
@@ -293,7 +293,7 @@ class RemoteAPIConfig:
     procedure_cache_path: str | None = None
     default_namespace: str = ""
     jwt_secret: str | None = None  # reads JWT_SECRET env
-    jwks_url: str | None = None    # reads JWKS_URL env
+    jwks_url: str | None = None  # reads JWKS_URL env
 
 
 @dataclass(frozen=True)
@@ -543,10 +543,7 @@ def _parse_openai_compatible_serverless(
     api_key_raw = section_dict.get("api_key")
     api_key: str | None
     if api_key_raw is None:
-        api_key = (
-            os.environ.get("OPENAI_COMPATIBLE_API_KEY")
-            or os.environ.get("MODEL_ACCESS_KEY")
-        )
+        api_key = os.environ.get("OPENAI_COMPATIBLE_API_KEY") or os.environ.get("MODEL_ACCESS_KEY")
     elif isinstance(api_key_raw, str):
         api_key = api_key_raw.strip() or None
     else:
@@ -661,8 +658,7 @@ def load_config(*, repo_root: Path) -> AppConfig:
     # the runner can be an external k8s service without rebuilding the image.
     runner_base_url_env = os.environ.get("LG_RUNNER_BASE_URL", "").strip()
     runner_base_url = (
-        runner_base_url_env if runner_base_url_env
-        else _require_str(runner_raw, "base_url")
+        runner_base_url_env if runner_base_url_env else _require_str(runner_raw, "base_url")
     )
 
     runner = Runner(
@@ -802,15 +798,18 @@ def load_config(*, repo_root: Path) -> AppConfig:
         auth_mode=auth_mode,
         bearer_token=bearer_token,
         allow_unauthenticated_healthz=_get_bool(
-            remote_api_raw, "allow_unauthenticated_healthz",
+            remote_api_raw,
+            "allow_unauthenticated_healthz",
             default=_env_bool("LG_REMOTE_API_ALLOW_UNAUTHENTICATED_HEALTHZ", default=True),
         ),
         trust_forwarded_headers=_get_bool(
-            remote_api_raw, "trust_forwarded_headers",
+            remote_api_raw,
+            "trust_forwarded_headers",
             default=_env_bool("LG_REMOTE_API_TRUST_FORWARDED_HEADERS", default=False),
         ),
         access_log_enabled=_get_bool(
-            remote_api_raw, "access_log_enabled",
+            remote_api_raw,
+            "access_log_enabled",
             default=_env_bool("LG_REMOTE_API_ACCESS_LOG_ENABLED", default=True),
         ),
         run_store_path=run_store_path,

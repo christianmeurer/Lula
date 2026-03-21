@@ -3,6 +3,7 @@
 All git subprocess calls are mocked via unittest.mock.patch so tests run
 without a real git repository.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,9 +29,7 @@ def _make_proc(returncode: int, stdout: str = "", stderr: str = "") -> MagicMock
     """Return a mock asyncio subprocess with the given outcome."""
     proc = MagicMock()
     proc.returncode = returncode
-    proc.communicate = AsyncMock(
-        return_value=(stdout.encode(), stderr.encode())
-    )
+    proc.communicate = AsyncMock(return_value=(stdout.encode(), stderr.encode()))
     return proc
 
 
@@ -81,22 +80,28 @@ class TestCreateWorktree:
         rev_parse_proc = _make_proc(0, stdout="main")
         add_proc = _make_proc(1, stderr="fatal: could not create worktree")
 
-        with patch(
-            "lg_orch.worktree.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            side_effect=[rev_parse_proc, add_proc],
-        ), pytest.raises(WorktreeError, match="git worktree add failed"):
+        with (
+            patch(
+                "lg_orch.worktree.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                side_effect=[rev_parse_proc, add_proc],
+            ),
+            pytest.raises(WorktreeError, match="git worktree add failed"),
+        ):
             asyncio.run(create_worktree(run_id, "/repo"))
 
     def test_create_worktree_raises_when_rev_parse_fails(self) -> None:
         """WorktreeError raised when rev-parse itself fails."""
         rev_parse_proc = _make_proc(1, stderr="not a git repo")
 
-        with patch(
-            "lg_orch.worktree.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            return_value=rev_parse_proc,
-        ), pytest.raises(WorktreeError, match="git rev-parse"):
+        with (
+            patch(
+                "lg_orch.worktree.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=rev_parse_proc,
+            ),
+            pytest.raises(WorktreeError, match="git rev-parse"),
+        ):
             asyncio.run(create_worktree("x", "/no-repo"))
 
 
@@ -156,11 +161,14 @@ class TestMergeWorktree:
         checkout_proc = _make_proc(0)
         merge_proc = _make_proc(1, stderr="CONFLICT (content)")
 
-        with patch(
-            "lg_orch.worktree.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            side_effect=[checkout_proc, merge_proc],
-        ), pytest.raises(WorktreeError, match="git merge"):
+        with (
+            patch(
+                "lg_orch.worktree.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                side_effect=[checkout_proc, merge_proc],
+            ),
+            pytest.raises(WorktreeError, match="git merge"),
+        ):
             asyncio.run(merge_worktree(ctx))
 
     def test_merge_worktree_raises_on_checkout_failure(self) -> None:
@@ -168,11 +176,14 @@ class TestMergeWorktree:
         ctx = _make_ctx()
         bad_checkout = _make_proc(1, stderr="pathspec error")
 
-        with patch(
-            "lg_orch.worktree.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-            return_value=bad_checkout,
-        ), pytest.raises(WorktreeError, match="git checkout"):
+        with (
+            patch(
+                "lg_orch.worktree.asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=bad_checkout,
+            ),
+            pytest.raises(WorktreeError, match="git checkout"),
+        ):
             asyncio.run(merge_worktree(ctx))
 
 
