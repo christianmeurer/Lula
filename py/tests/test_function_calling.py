@@ -312,7 +312,7 @@ def test_planner_schema_invalid_logs_warning_and_returns_safe_default() -> None:
     mock_response = MagicMock()
     mock_response.text = invalid_response_text
 
-    with patch("lg_orch.nodes.planner.InferenceClient") as MockClient:
+    with patch("lg_orch.tools.InferenceClient") as MockClient:
         instance = MagicMock()
         instance.chat_completion.return_value = mock_response
         MockClient.return_value = instance
@@ -426,7 +426,7 @@ def test_planner_jsonschema_validate_called_with_schema() -> None:
     mock_response = MagicMock()
     mock_response.text = valid_plan_json
 
-    with patch("lg_orch.nodes.planner.InferenceClient") as MockClient:
+    with patch("lg_orch.tools.InferenceClient") as MockClient:
         instance = MagicMock()
         instance.chat_completion.return_value = mock_response
         MockClient.return_value = instance
