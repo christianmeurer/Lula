@@ -63,8 +63,8 @@ struct CommandResponse {
 
 const ALLOWED_GUEST_COMMANDS: &[&str] = &[
     "python", "python3", "uv", "pip", "pip3", "cargo", "rustc", "node", "npm", "npx", "go", "git",
-    "sh", "bash", "cat", "ls", "find", "grep", "sed", "awk", "mkdir", "cp", "mv", "rm", "touch",
-    "pytest", "ruff", "mypy",
+    "sh", "bash", "echo", "cat", "ls", "find", "grep", "sed", "awk", "mkdir", "cp", "mv", "rm",
+    "touch", "true", "false", "pytest", "ruff", "mypy",
 ];
 
 fn is_allowed_command(cmd: &str) -> bool {
