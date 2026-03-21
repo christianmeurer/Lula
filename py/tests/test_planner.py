@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
+from lg_orch.nodes._planner_prompt import _format_mcp_tool_catalog
 from lg_orch.nodes.planner import (
     _classify_intent,
-    _format_mcp_tool_catalog,
     _planner_model_output,
     planner,
 )
