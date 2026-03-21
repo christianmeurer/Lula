@@ -140,12 +140,14 @@ class MCPClient:
                         expected=expected_hash,
                         actual=actual_hash,
                     )
-                    out.append({
-                        "server_name": server_name,
-                        "_schema_hash_mismatch": True,
-                        "_expected_hash": expected_hash,
-                        "_actual_hash": actual_hash,
-                    })
+                    out.append(
+                        {
+                            "server_name": server_name,
+                            "_schema_hash_mismatch": True,
+                            "_expected_hash": expected_hash,
+                            "_actual_hash": actual_hash,
+                        }
+                    )
                     continue
 
             actual_hash = _compute_tools_hash(tools)
@@ -161,7 +163,8 @@ class MCPClient:
         discovered = tools if tools is not None else self.discover_tools()
         valid_tools = [t for t in discovered if not bool(t.get("_schema_hash_mismatch", False))]
         mismatch_servers = [
-            str(t.get("server_name", "")) for t in discovered
+            str(t.get("server_name", ""))
+            for t in discovered
             if bool(t.get("_schema_hash_mismatch", False))
         ]
         grouped: dict[str, list[dict[str, Any]]] = {}
@@ -196,7 +199,7 @@ class MCPClient:
                     "tools": tool_summaries,
                 }
             )
-            tool_names = ', '.join(name for name in names if name) or 'no tools'
+            tool_names = ", ".join(name for name in names if name) or "no tools"
             lines.append(f"{server_name}: {tool_names}")
 
         return {
@@ -384,9 +387,9 @@ class MCPClient:
 
             tools_data = self.discover_tools()
             server_tools = [
-                t for t in tools_data
-                if t.get("server_name") == server_name
-                and not t.get("_schema_hash_mismatch")
+                t
+                for t in tools_data
+                if t.get("server_name") == server_name and not t.get("_schema_hash_mismatch")
             ]
             resources = self.list_resources(server_name)
             prompts = self.list_prompts(server_name)
@@ -395,12 +398,14 @@ class MCPClient:
             total_resources += len(resources)
             total_prompts += len(prompts)
 
-            servers.append({
-                "server_name": server_name,
-                "tools": len(server_tools),
-                "resources": len(resources),
-                "prompts": len(prompts),
-            })
+            servers.append(
+                {
+                    "server_name": server_name,
+                    "tools": len(server_tools),
+                    "resources": len(resources),
+                    "prompts": len(prompts),
+                }
+            )
 
         return {
             "tools_count": total_tools,
@@ -408,4 +413,3 @@ class MCPClient:
             "prompts_count": total_prompts,
             "servers": servers,
         }
-

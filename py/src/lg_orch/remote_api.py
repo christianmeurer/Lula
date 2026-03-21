@@ -17,6 +17,7 @@ All heavy logic lives in ``lg_orch.api.*``.  This module:
 * Re-exports the public API that tests and callers depend on.
 * Contains the HTTP dispatch function and ``serve_remote_api`` entry-point.
 """
+
 from __future__ import annotations
 
 import json
@@ -81,9 +82,16 @@ def _spawn_run_subprocess(
     *, argv: list[str], cwd: Path, env: dict[str, str] | None = None
 ) -> subprocess.Popen[str]:
     return subprocess.Popen(
-        argv, cwd=str(cwd), env=env,
-        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace", bufsize=1,
+        argv,
+        cwd=str(cwd),
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
     )
 
 
@@ -99,6 +107,7 @@ def _json_response(status: int, payload: dict[str, Any]) -> tuple[int, str, byte
 
 def _request_id_from_value(raw: object) -> str:
     import uuid
+
     value = _non_empty_str(raw)
     return value or uuid.uuid4().hex
 
@@ -135,6 +144,7 @@ def _authorize_request(
     allow_unauthenticated_healthz: bool,
 ) -> tuple[str, tuple[int, str, bytes] | None]:
     import hmac
+
     if route == "/healthz" and allow_unauthenticated_healthz:
         return "", None
     if route == "/metrics":
@@ -207,30 +217,46 @@ _audit_logger: AuditLogger | None = None
 
 
 def _hdl_metrics(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     return _handle_metrics(method)
 
 
 def _hdl_root_ui(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "GET":
         return _json_response(405, {"error": "method_not_allowed"})
     from lg_orch.graph import export_mermaid
     from lg_orch.visualize import render_run_viewer_spa
+
     html = render_run_viewer_spa(api_base_url="", mermaid_graph=export_mermaid())
     return 200, "text/html; charset=utf-8", html.encode("utf-8")
 
 
 def _hdl_healthz(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "GET":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -238,9 +264,14 @@ def _hdl_healthz(
 
 
 def _hdl_v1_runs(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method == "GET":
         return _json_response(200, {"runs": service.list_runs()})
@@ -270,9 +301,14 @@ def _hdl_v1_runs(
 
 
 def _hdl_runs_list(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "GET":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -280,9 +316,14 @@ def _hdl_runs_list(
 
 
 def _hdl_runs_search(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "GET":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -306,9 +347,14 @@ def _hdl_runs_search(
 
 
 def _hdl_v1_run_logs(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "GET":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -320,9 +366,14 @@ def _hdl_v1_run_logs(
 
 
 def _hdl_v1_run_cancel(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "POST":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -334,9 +385,14 @@ def _hdl_v1_run_cancel(
 
 
 def _hdl_v1_run_approve_reject(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "POST":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -361,17 +417,27 @@ def _hdl_v1_run_approve_reject(
 
 
 def _hdl_v1_run_stream(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     return -1, "sse", path_parts[2].encode("utf-8")  # type: ignore[return-value]
 
 
 def _hdl_v1_run_get(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "GET":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -383,9 +449,14 @@ def _hdl_v1_run_get(
 
 
 def _hdl_runs_stream(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     _sse_run_id = path_parts[1]
     if service.get_run(_sse_run_id) is None:
@@ -394,9 +465,14 @@ def _hdl_runs_stream(
 
 
 def _hdl_runs_approve_reject(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     try:
         payload_raw = json.loads((request_body or b"{}").decode("utf-8"))
@@ -419,9 +495,14 @@ def _hdl_runs_approve_reject(
 
 
 def _hdl_runs_approval_policy(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     try:
         payload_raw = json.loads((request_body or b"{}").decode("utf-8"))
@@ -435,6 +516,7 @@ def _hdl_runs_approval_policy(
     kind = policy_raw.get("kind")
     if kind == "timed":
         from typing import cast as _cast
+
         policy = TimedApprovalPolicy(
             timeout_seconds=float(policy_raw.get("timeout_seconds", 300.0)),
             auto_action=_cast(
@@ -459,9 +541,14 @@ def _hdl_runs_approval_policy(
 
 
 def _hdl_runs_vote(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     try:
         payload_raw = json.loads((request_body or b"{}").decode("utf-8"))
@@ -489,9 +576,14 @@ def _hdl_runs_vote(
 
 
 def _hdl_spa(
-    service: RemoteAPIService, method: str, request_path: str,
-    request_body: bytes | None, auth_subject: str, path_parts: list[str],
-    request_id: str, client_ip: str,
+    service: RemoteAPIService,
+    method: str,
+    request_path: str,
+    request_body: bytes | None,
+    auth_subject: str,
+    path_parts: list[str],
+    request_id: str,
+    client_ip: str,
 ) -> tuple[int, str, bytes]:
     if method != "GET":
         return _json_response(405, {"error": "method_not_allowed"})
@@ -499,6 +591,7 @@ def _hdl_spa(
     if not spa_dir.exists():
         return _json_response(503, {"error": "spa_not_available"})
     from lg_orch.spa.router import create_spa_router
+
     subpath = "/".join(path_parts[1:]) if len(path_parts) > 1 else ""
     return create_spa_router(spa_dir)(subpath)
 
@@ -525,7 +618,9 @@ _EXACT_ROUTE_TABLE: dict[str, _HandlerFn] = {
 
 
 def _match_parameterized(
-    route: str, method: str, path_parts: list[str],
+    route: str,
+    method: str,
+    path_parts: list[str],
 ) -> _HandlerFn | None:
     """Return the handler for a parameterized route, or None if no match."""
     n = len(path_parts)
@@ -564,12 +659,7 @@ def _match_parameterized(
     ):
         return _hdl_runs_approval_policy
     # /runs/{run_id}/vote
-    if (
-        method == "POST"
-        and n == 3
-        and path_parts[0] == "runs"
-        and path_parts[2] == "vote"
-    ):
+    if method == "POST" and n == 3 and path_parts[0] == "runs" and path_parts[2] == "vote":
         return _hdl_runs_vote
     # /app/...
     if path_parts and path_parts[0] == "app":
@@ -593,7 +683,9 @@ def _api_http_dispatch(
 ) -> tuple[int, str, bytes]:
     route = urlsplit(request_path).path.rstrip("/") or "/"
     auth_subject, auth_error = _authorize_request(
-        route=route, auth_mode=auth_mode, expected_bearer_token=expected_bearer_token,
+        route=route,
+        auth_mode=auth_mode,
+        expected_bearer_token=expected_bearer_token,
         authorization_header=authorization_header,
         allow_unauthenticated_healthz=allow_unauthenticated_healthz,
     )
@@ -603,11 +695,17 @@ def _api_http_dispatch(
             method=method, route=route, path_parts=_pp, status=auth_error[0]
         )
         if _audit_logger is not None:
-            _audit_logger.log(AuditEvent(
-                ts=utc_now_iso(), subject="anonymous", roles=[],
-                action=_action, resource_id=_rid, outcome="denied",
-                detail="bearer_auth_failed",
-            ))
+            _audit_logger.log(
+                AuditEvent(
+                    ts=utc_now_iso(),
+                    subject="anonymous",
+                    roles=[],
+                    action=_action,
+                    resource_id=_rid,
+                    outcome="denied",
+                    detail="bearer_auth_failed",
+                )
+            )
         return auth_error
 
     if service._rate_limiter is not None and not service._rate_limiter.acquire():
@@ -629,15 +727,23 @@ def _api_http_dispatch(
                 auth_subject = _claims.sub
         except AuthError as _auth_exc:
             _action, _rid = _audit_action_and_resource(
-                method=method, route=route, path_parts=path_parts,
+                method=method,
+                route=route,
+                path_parts=path_parts,
                 status=_auth_exc.status_code,
             )
             if _audit_logger is not None:
-                _audit_logger.log(AuditEvent(
-                    ts=utc_now_iso(), subject="anonymous", roles=[],
-                    action=_action, resource_id=_rid, outcome="denied",
-                    detail=_auth_exc.detail,
-                ))
+                _audit_logger.log(
+                    AuditEvent(
+                        ts=utc_now_iso(),
+                        subject="anonymous",
+                        roles=[],
+                        action=_action,
+                        resource_id=_rid,
+                        outcome="denied",
+                        detail=_auth_exc.detail,
+                    )
+                )
             return _json_response(_auth_exc.status_code, {"error": _auth_exc.detail})
 
     handler: _HandlerFn | None = _EXACT_ROUTE_TABLE.get(route)
@@ -645,8 +751,14 @@ def _api_http_dispatch(
         handler = _match_parameterized(route, method, path_parts)
     if handler is not None:
         return handler(
-            service, method, request_path, request_body,
-            auth_subject, path_parts, request_id, client_ip,
+            service,
+            method,
+            request_path,
+            request_body,
+            auth_subject,
+            path_parts,
+            request_id,
+            client_ip,
         )
 
     _admin_response = register_admin_routes(
@@ -674,10 +786,17 @@ def _api_http_response(
 ) -> tuple[int, str, bytes]:
     """Public entry point: wraps ``_api_http_dispatch`` with audit emission."""
     status, content_type, body = _api_http_dispatch(
-        service, method=method, request_path=request_path, request_body=request_body,
-        request_id=request_id, client_ip=client_ip, auth_mode=auth_mode,
-        expected_bearer_token=expected_bearer_token, authorization_header=authorization_header,
-        allow_unauthenticated_healthz=allow_unauthenticated_healthz, jwt_settings=jwt_settings,
+        service,
+        method=method,
+        request_path=request_path,
+        request_body=request_body,
+        request_id=request_id,
+        client_ip=client_ip,
+        auth_mode=auth_mode,
+        expected_bearer_token=expected_bearer_token,
+        authorization_header=authorization_header,
+        allow_unauthenticated_healthz=allow_unauthenticated_healthz,
+        jwt_settings=jwt_settings,
     )
     if _audit_logger is not None and status not in {401, 403}:
         _route = urlsplit(request_path).path.rstrip("/") or "/"
@@ -686,15 +805,17 @@ def _api_http_response(
             method=method, route=_route, path_parts=_pp, status=status
         )
         _outcome: Literal["ok", "denied", "error"] = "error" if status >= 500 else "ok"
-        _audit_logger.log(AuditEvent(
-            ts=utc_now_iso(),
-            subject=auth_mode if auth_mode != "off" else "anonymous",
-            roles=[],
-            action=_action,
-            resource_id=_rid,
-            outcome=_outcome,
-            detail=None,
-        ))
+        _audit_logger.log(
+            AuditEvent(
+                ts=utc_now_iso(),
+                subject=auth_mode if auth_mode != "off" else "anonymous",
+                roles=[],
+                action=_action,
+                resource_id=_rid,
+                outcome=_outcome,
+                detail=None,
+            )
+        )
     return status, content_type, body
 
 

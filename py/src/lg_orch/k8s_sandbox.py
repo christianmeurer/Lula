@@ -5,6 +5,7 @@
 Used at deploy time to validate Deployment manifests against expected
 sandbox hardening requirements (Wave 9: gVisor/Kata Container sandboxing).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,9 +27,7 @@ class SandboxConfig:
 def _get_container(manifest: dict[str, Any]) -> dict[str, Any] | None:
     """Return the first container spec from a Deployment manifest, or None."""
     try:
-        containers: list[dict[str, Any]] = (
-            manifest["spec"]["template"]["spec"]["containers"]
-        )
+        containers: list[dict[str, Any]] = manifest["spec"]["template"]["spec"]["containers"]
         if containers:
             return containers[0]
     except (KeyError, TypeError, IndexError):
@@ -82,24 +81,19 @@ def validate_deployment_manifest(
 
     # --- runAsNonRoot ---
     if sc.get("runAsNonRoot") is not True:
-        violations.append(
-            f"runAsNonRoot: expected True, got {sc.get('runAsNonRoot')!r}"
-        )
+        violations.append(f"runAsNonRoot: expected True, got {sc.get('runAsNonRoot')!r}")
 
     # --- allowPrivilegeEscalation ---
     if sc.get("allowPrivilegeEscalation") is not False:
         violations.append(
-            "allowPrivilegeEscalation: expected False, "
-            f"got {sc.get('allowPrivilegeEscalation')!r}"
+            f"allowPrivilegeEscalation: expected False, got {sc.get('allowPrivilegeEscalation')!r}"
         )
 
     # --- capabilities.drop includes ALL ---
     caps: dict[str, Any] = sc.get("capabilities") or {}
     drop: list[str] = caps.get("drop") or []
     if "ALL" not in drop:
-        violations.append(
-            f"capabilities.drop: expected 'ALL' to be present, got {drop!r}"
-        )
+        violations.append(f"capabilities.drop: expected 'ALL' to be present, got {drop!r}")
 
     return violations
 

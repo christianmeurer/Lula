@@ -36,10 +36,7 @@ def test_poll_once_parses_passed_count(tmp_path: Any) -> None:
 
 
 def test_poll_once_parses_failed_tests(tmp_path: Any) -> None:
-    output = (
-        b"FAILED tests/test_foo.py::test_bar - AssertionError\n"
-        b"1 failed, 2 passed in 0.50s\n"
-    )
+    output = b"FAILED tests/test_foo.py::test_bar - AssertionError\n1 failed, 2 passed in 0.50s\n"
 
     async def _run() -> TestSuiteResult:
         with patch("asyncio.create_subprocess_exec", return_value=_make_proc(output, 1)):

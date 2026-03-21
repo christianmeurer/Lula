@@ -127,12 +127,22 @@ def test_context_builder_fetches_structural_ast_and_semantic_hits(
         mock_client = MagicMock()
         mock_client.batch_execute_tools.return_value = [
             {
-                "ok": True, "stdout": _json.dumps(ast_payload), "exit_code": 0,
-                "stderr": "", "diagnostics": [], "timing_ms": 0, "artifacts": {},
+                "ok": True,
+                "stdout": _json.dumps(ast_payload),
+                "exit_code": 0,
+                "stderr": "",
+                "diagnostics": [],
+                "timing_ms": 0,
+                "artifacts": {},
             },
             {
-                "ok": True, "stdout": _json.dumps(semantic_payload), "exit_code": 0,
-                "stderr": "", "diagnostics": [], "timing_ms": 0, "artifacts": {},
+                "ok": True,
+                "stdout": _json.dumps(semantic_payload),
+                "exit_code": 0,
+                "stderr": "",
+                "diagnostics": [],
+                "timing_ms": 0,
+                "artifacts": {},
             },
         ]
         mock_client_cls.return_value = mock_client
@@ -158,12 +168,22 @@ def test_context_builder_preserves_ast_context_on_reset(mock_client_cls: MagicMo
         mock_client = MagicMock()
         mock_client.batch_execute_tools.return_value = [
             {
-                "ok": False, "stdout": "", "exit_code": 1,
-                "stderr": "", "diagnostics": [], "timing_ms": 0, "artifacts": {},
+                "ok": False,
+                "stdout": "",
+                "exit_code": 1,
+                "stderr": "",
+                "diagnostics": [],
+                "timing_ms": 0,
+                "artifacts": {},
             },
             {
-                "ok": False, "stdout": "", "exit_code": 1,
-                "stderr": "", "diagnostics": [], "timing_ms": 0, "artifacts": {},
+                "ok": False,
+                "stdout": "",
+                "exit_code": 1,
+                "stderr": "",
+                "diagnostics": [],
+                "timing_ms": 0,
+                "artifacts": {},
             },
         ]
         mock_client_cls.return_value = mock_client
@@ -392,10 +412,16 @@ def test_context_builder_discovers_mcp_tools_and_populates_state(
                     "server_name": "fs",
                     "tool_count": 2,
                     "tools": [
-                        {"name": "read_file", "description": "Reads a file from the workspace.",
-                         "input_schema": None},
-                        {"name": "apply_patch", "description": "Applies a unified diff patch.",
-                         "input_schema": None},
+                        {
+                            "name": "read_file",
+                            "description": "Reads a file from the workspace.",
+                            "input_schema": None,
+                        },
+                        {
+                            "name": "apply_patch",
+                            "description": "Applies a unified diff patch.",
+                            "input_schema": None,
+                        },
                     ],
                 }
             ],
@@ -474,10 +500,18 @@ def test_context_builder_mcp_hash_mismatch_tools_excluded_from_mcp_tools(
 ) -> None:
     """Tools with _schema_hash_mismatch=True must be excluded from state['mcp_tools']."""
     fixture_tools = [
-        {"name": "good_tool", "description": "Works fine.", "server_name": "fs",
-         "_schema_hash": "ok"},
-        {"_schema_hash_mismatch": True, "server_name": "fs",
-         "_expected_hash": "aaa", "_actual_hash": "bbb"},
+        {
+            "name": "good_tool",
+            "description": "Works fine.",
+            "server_name": "fs",
+            "_schema_hash": "ok",
+        },
+        {
+            "_schema_hash_mismatch": True,
+            "server_name": "fs",
+            "_expected_hash": "aaa",
+            "_actual_hash": "bbb",
+        },
     ]
     with tempfile.TemporaryDirectory() as td:
         mock_mcp = MagicMock()

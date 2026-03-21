@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 """Prometheus metrics definitions and /metrics route registration."""
+
 from __future__ import annotations
 
 import prometheus_client
@@ -50,6 +51,7 @@ def handle_metrics(method: str) -> tuple[int, str, bytes]:
     """
     if method != "GET":
         import json
+
         body = json.dumps({"error": "method_not_allowed"}).encode("utf-8")
         return 405, "application/json; charset=utf-8", body
     body = prometheus_client.generate_latest()

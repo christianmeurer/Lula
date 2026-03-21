@@ -71,9 +71,7 @@ CREATE TABLE IF NOT EXISTS recovery_facts (
 )
 """
 
-_CREATE_INDEX_RUNS_NAMESPACE = (
-    "CREATE INDEX IF NOT EXISTS idx_runs_namespace ON runs(namespace)"
-)
+_CREATE_INDEX_RUNS_NAMESPACE = "CREATE INDEX IF NOT EXISTS idx_runs_namespace ON runs(namespace)"
 _CREATE_INDEX_RECOVERY_FACTS_NAMESPACE = (
     "CREATE INDEX IF NOT EXISTS idx_recovery_facts_namespace ON recovery_facts(namespace)"
 )
@@ -370,20 +368,22 @@ class RunStore:
                 else 0
             )
             retry_target = fact.get("retry_target")
-            rows.append((
-                fingerprint,
-                run_id,
-                loop,
-                str(fact.get("failure_class", "")).strip(),
-                str(fact.get("summary", fact.get("loop_summary", ""))).strip(),
-                str(fact.get("last_check", "")).strip(),
-                str(fact.get("context_scope", "")).strip(),
-                str(retry_target).strip() if retry_target is not None else None,
-                str(fact.get("plan_action", "keep")).strip() or "keep",
-                salience,
-                now,
-                self._namespace,
-            ))
+            rows.append(
+                (
+                    fingerprint,
+                    run_id,
+                    loop,
+                    str(fact.get("failure_class", "")).strip(),
+                    str(fact.get("summary", fact.get("loop_summary", ""))).strip(),
+                    str(fact.get("last_check", "")).strip(),
+                    str(fact.get("context_scope", "")).strip(),
+                    str(retry_target).strip() if retry_target is not None else None,
+                    str(fact.get("plan_action", "keep")).strip() or "keep",
+                    salience,
+                    now,
+                    self._namespace,
+                )
+            )
         if not rows:
             return
         sql = (

@@ -6,6 +6,7 @@ Procedural memory cache backed by SQLite.
 Stores verified tool sequences (procedures) so the planner can retrieve
 and reuse them without full LLM re-planning for routine operations.
 """
+
 from __future__ import annotations
 
 import json
@@ -88,8 +89,15 @@ class ProcedureCache:
                   task_class=excluded.task_class,
                   created_at=excluded.created_at
                 """,
-                (procedure_id, canonical_name, request_hash, task_class,
-                 steps_json, verification_json, created_at),
+                (
+                    procedure_id,
+                    canonical_name,
+                    request_hash,
+                    task_class,
+                    steps_json,
+                    verification_json,
+                    created_at,
+                ),
             )
             self._conn.commit()
         return procedure_id
@@ -138,16 +146,18 @@ class ProcedureCache:
                 verification = json.loads(row["verification_json"])
             except (json.JSONDecodeError, KeyError):
                 continue
-            result.append({
-                "procedure_id": row["procedure_id"],
-                "canonical_name": row["canonical_name"],
-                "task_class": row["task_class"],
-                "steps": steps,
-                "verification": verification,
-                "use_count": row["use_count"],
-                "last_used_at": row["last_used_at"],
-                "created_at": row["created_at"],
-            })
+            result.append(
+                {
+                    "procedure_id": row["procedure_id"],
+                    "canonical_name": row["canonical_name"],
+                    "task_class": row["task_class"],
+                    "steps": steps,
+                    "verification": verification,
+                    "use_count": row["use_count"],
+                    "last_used_at": row["last_used_at"],
+                    "created_at": row["created_at"],
+                }
+            )
         return result
 
     def record_use(self, procedure_id: str, *, used_at: str) -> None:

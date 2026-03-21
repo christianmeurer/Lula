@@ -138,9 +138,7 @@ def _configured_write_allowlist(guards: dict[str, Any]) -> tuple[str, ...]:
     if not isinstance(raw, list):
         return ()
     patterns = [
-        _normalize_rel_path(entry)
-        for entry in raw
-        if isinstance(entry, str) and entry.strip()
+        _normalize_rel_path(entry) for entry in raw if isinstance(entry, str) and entry.strip()
     ]
     return tuple(patterns)
 
@@ -220,9 +218,7 @@ def executor(state: dict[str, Any]) -> dict[str, Any]:
     require_approval_for_mutations = bool(guards.get("require_approval_for_mutations", False))
     allowed_write_paths = _configured_write_allowlist(guards)
     checkpoint_state_raw = state.get("_checkpoint", {})
-    checkpoint_state = (
-        dict(checkpoint_state_raw) if isinstance(checkpoint_state_raw, dict) else {}
-    )
+    checkpoint_state = dict(checkpoint_state_raw) if isinstance(checkpoint_state_raw, dict) else {}
     stop_execution = False
     for step in plan.get("steps", []):
         if stop_execution:

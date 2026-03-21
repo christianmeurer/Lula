@@ -17,6 +17,7 @@ succeeds we get a validated snapshot for documentation purposes; any
 ``ValidationError`` is logged as a warning and execution continues using plain
 dict access (no behavior change to the running graph).
 """
+
 from __future__ import annotations
 
 import json
@@ -149,9 +150,7 @@ def planner(state: dict[str, Any]) -> dict[str, Any]:
     log = get_logger()
     # Typed boundary validation — best-effort; does not change behaviour.
     try:
-        _validated = OrchState.model_validate(
-            {k: v for k, v in state.items() if v is not None}
-        )
+        _validated = OrchState.model_validate({k: v for k, v in state.items() if v is not None})
     except ValidationError as exc:
         log.warning("planner_node received invalid state", validation_errors=str(exc))
         _validated = None
@@ -198,9 +197,7 @@ def planner(state: dict[str, Any]) -> dict[str, Any]:
         verification_raw = state.get("verification", {})
         verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
         recovery_packet_raw = state.get("recovery_packet", verification.get("recovery_packet", {}))
-        recovery_packet = (
-            dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
-        )
+        recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
         if plan_payload.get("recovery") is None and isinstance(verification.get("recovery"), dict):
             plan_payload["recovery"] = dict(verification["recovery"])
         elif plan_payload.get("recovery") is None and recovery_packet:

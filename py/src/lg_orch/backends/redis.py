@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 """Redis checkpoint backend."""
+
 from __future__ import annotations
 
 import json
@@ -89,14 +90,10 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
     def _ckpt_key(self, thread_id: str, checkpoint_ns: str, checkpoint_id: str) -> str:
         return f"{self._key_prefix}{thread_id}:{checkpoint_ns}:{checkpoint_id}"
 
-    def _blobs_key(
-        self, thread_id: str, checkpoint_ns: str, channel: str, version: str
-    ) -> str:
+    def _blobs_key(self, thread_id: str, checkpoint_ns: str, channel: str, version: str) -> str:
         return f"{self._key_prefix}blobs:{thread_id}:{checkpoint_ns}:{channel}:{version}"
 
-    def _writes_key(
-        self, thread_id: str, checkpoint_ns: str, checkpoint_id: str
-    ) -> str:
+    def _writes_key(self, thread_id: str, checkpoint_ns: str, checkpoint_id: str) -> str:
         return f"{self._key_prefix}writes:{thread_id}:{checkpoint_ns}:{checkpoint_id}"
 
     def _idx_key(self, thread_id: str, checkpoint_ns: str) -> str:
@@ -216,9 +213,7 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
         checkpoint_type = str(data["checkpoint_type"])
         checkpoint_blob = data["checkpoint_blob"]
         checkpoint_payload = (
-            checkpoint_blob
-            if isinstance(checkpoint_blob, bytes)
-            else bytes(checkpoint_blob)
+            checkpoint_blob if isinstance(checkpoint_blob, bytes) else bytes(checkpoint_blob)
         )
         checkpoint = cast(
             Checkpoint,
@@ -264,9 +259,7 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
                 w_type = str(entry.get("type_tag", ""))
                 w_payload_raw = entry.get("payload", b"")
                 w_payload = (
-                    w_payload_raw
-                    if isinstance(w_payload_raw, bytes)
-                    else bytes(w_payload_raw)
+                    w_payload_raw if isinstance(w_payload_raw, bytes) else bytes(w_payload_raw)
                 )
                 pending_writes.append(
                     (
@@ -335,9 +328,7 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
                     checkpoint_id=ckpt_id,
                     requested_config=None,
                 )
-                if filter is not None and any(
-                    tup.metadata.get(k) != v for k, v in filter.items()
-                ):
+                if filter is not None and any(tup.metadata.get(k) != v for k, v in filter.items()):
                     continue
                 yield tup
                 yielded += 1
@@ -357,9 +348,7 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
         checkpoint_id = str(checkpoint["id"])
 
         checkpoint_type, checkpoint_blob = self._dump_typed(checkpoint)
-        metadata_type, metadata_blob = self._dump_typed(
-            get_checkpoint_metadata(config, metadata)
-        )
+        metadata_type, metadata_blob = self._dump_typed(get_checkpoint_metadata(config, metadata))
 
         data: dict[str, Any] = {
             "checkpoint_type": checkpoint_type,

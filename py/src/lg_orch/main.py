@@ -9,6 +9,7 @@ directly by tests (``_build_parser``, ``_trace_http_response``) and by the
 commands submodules (``_validated_run_id``, ``_trace_run_summary``,
 ``_serve_trace_http``) are kept here for backward-compatibility.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -192,9 +193,7 @@ def _trace_run_summary(
         "working_set_tokens": working_set.get("token_estimate", 0),
         "checkpoint_thread_id": checkpoint.get("thread_id", ""),
         "checkpoint_id": (
-            checkpoint.get("latest_checkpoint_id")
-            or checkpoint.get("resume_checkpoint_id")
-            or ""
+            checkpoint.get("latest_checkpoint_id") or checkpoint.get("resume_checkpoint_id") or ""
         ),
     }
 
@@ -326,18 +325,22 @@ def cli(argv: list[str] | None = None) -> int:
 
     if args.cmd == "trace-view":
         from lg_orch.commands.trace import trace_view_command
+
         return trace_view_command(args)
 
     if args.cmd == "trace-site":
         from lg_orch.commands.trace import trace_site_command
+
         return trace_site_command(args)
 
     if args.cmd == "trace-serve":
         from lg_orch.commands.trace import trace_serve_command
+
         return trace_serve_command(args)
 
     if args.cmd == "serve-api":
         from lg_orch.commands.serve import serve_command
+
         return serve_command(args, repo_root=repo_root)
 
     if args.cmd == "run-multi":
@@ -362,14 +365,10 @@ def cli(argv: list[str] | None = None) -> int:
             return state
 
         print("\n--- Starting Lula Platform Meta-Agent ---")
-        result = _asyncio.run(
-            run_meta_graph(tasks, _run_graph, max_parallel=max(1, len(repos)))
-        )
+        result = _asyncio.run(run_meta_graph(tasks, _run_graph, max_parallel=max(1, len(repos))))
 
         print(
-            f"\nSucceeded: {result.succeeded}  "
-            f"Failed: {result.failed}  "
-            f"Skipped: {result.skipped}"
+            f"\nSucceeded: {result.succeeded}  Failed: {result.failed}  Skipped: {result.skipped}"
         )
         print("\n--- Final Output ---")
         for t in result.tasks:
@@ -379,6 +378,7 @@ def cli(argv: list[str] | None = None) -> int:
     # "run" command
     if getattr(args, "profile", None):
         import os
+
         os.environ["LG_PROFILE"] = str(args.profile)
 
     from lg_orch.config import load_config

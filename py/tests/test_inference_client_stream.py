@@ -1,4 +1,5 @@
 """Tests for InferenceClient.chat_completion_stream and collect_stream."""
+
 from __future__ import annotations
 
 import asyncio

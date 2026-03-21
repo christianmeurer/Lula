@@ -1,4 +1,5 @@
 """Tests for lg_orch.long_term_memory (Wave 9 - Tripartite Persistent Memory)."""
+
 from __future__ import annotations
 
 import time
@@ -103,9 +104,7 @@ def test_semantic_search_cosine_ordering(tmp_path: pytest.TempPathFactory) -> No
 
     results = store.search_semantic("deploy the application", top_k=2)
     assert len(results) == 2
-    assert "deploy" in results[0].content.lower(), (
-        "deploy fact must rank first for a deploy query"
-    )
+    assert "deploy" in results[0].content.lower(), "deploy fact must rank first for a deploy query"
     store.close()
 
 
@@ -239,9 +238,7 @@ def test_stub_embedder_warning_not_emitted_when_real_embedder_provided(
         return v
 
     with patch.object(ltm_module._log, "warning") as mock_warn:
-        store = LongTermMemoryStore(
-            db_path=str(tmp_path / "ltm_real.db"), embedder=_real_embedder
-        )
+        store = LongTermMemoryStore(db_path=str(tmp_path / "ltm_real.db"), embedder=_real_embedder)
         store.close()
 
     events = [
@@ -269,9 +266,7 @@ def test_stub_embedder_warning_not_emitted_when_real_embedder_provided(
     ],
 )
 def test_infer_task_type(query: str, expected: str) -> None:
-    assert _infer_task_type(query) == expected, (
-        f"_infer_task_type({query!r}) expected {expected!r}"
-    )
+    assert _infer_task_type(query) == expected, f"_infer_task_type({query!r}) expected {expected!r}"
 
 
 def test_infer_task_type_empty_string() -> None:

@@ -12,6 +12,7 @@ continues to work.  Methods that need to call them do so via a lazy import:
 This indirection means pytest's ``monkeypatch.setattr(remote_api, "_spawn_run_subprocess",
 fake)`` is seen by the service class at call time.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -70,6 +71,7 @@ def _non_empty_str(raw: object) -> str | None:
 
 def _normalized_run_id(raw: object) -> str | None:
     import re as _re
+
     _RUN_ID_RE = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     value = _non_empty_str(raw)
     if value is None:
@@ -184,8 +186,7 @@ def _apply_trace_state_to_payload(
     out["trace"] = trace_payload
     approval_state = _approval_state_from_trace(trace_payload)
     out["thread_id"] = (
-        str(approval_state.get("thread_id", "")).strip()
-        or str(out.get("thread_id", "")).strip()
+        str(approval_state.get("thread_id", "")).strip() or str(out.get("thread_id", "")).strip()
     )
     out["checkpoint_id"] = (
         str(approval_state.get("checkpoint_id", "")).strip()
@@ -205,7 +206,8 @@ def _apply_trace_state_to_payload(
     else:
         out.setdefault("approval_history", [])
     if out["pending_approval"] and str(out.get("status", "")).strip() not in {
-        "cancelled", "rejected"
+        "cancelled",
+        "rejected",
     }:
         out["status"] = "suspended"
     return out
@@ -297,23 +299,29 @@ def _semantic_memories_from_trace(
         summary = str(entry.get("summary", "")).strip()
         if not summary:
             continue
-        memories.append({
-            "kind": "loop_summary",
-            "source": str(entry.get("failure_class", "")).strip() or "loop_summary",
-            "summary": summary,
-        })
+        memories.append(
+            {
+                "kind": "loop_summary",
+                "source": str(entry.get("failure_class", "")).strip() or "loop_summary",
+                "summary": summary,
+            }
+        )
 
     approval_state = _approval_state_from_trace(trace_payload)
     approval_summary_str = str(approval_state.get("summary", "")).strip()
     if approval_summary_str:
-        memories.append({
-            "kind": "approval_summary",
-            "source": (
-                str(approval_state.get("details", {}).get("operation_class", "approval")).strip()
-                or "approval"
-            ),
-            "summary": approval_summary_str,
-        })
+        memories.append(
+            {
+                "kind": "approval_summary",
+                "source": (
+                    str(
+                        approval_state.get("details", {}).get("operation_class", "approval")
+                    ).strip()
+                    or "approval"
+                ),
+                "summary": approval_summary_str,
+            }
+        )
     history_raw = approval_state.get("history", [])
     history = (
         [entry for entry in history_raw if isinstance(entry, dict)]
@@ -455,11 +463,20 @@ class RemoteAPIService:
         trace_path = _trace_path_for_run(self._repo_root, trace_out_dir, run_id)
 
         argv = [
-            sys.executable, "-m", "lg_orch.main", "run", request,
-            "--repo-root", str(self._repo_root),
-            "--trace", "--run-id", run_id,
-            "--trace-out-dir", str(trace_out_dir),
-            "--view", view,
+            sys.executable,
+            "-m",
+            "lg_orch.main",
+            "run",
+            request,
+            "--repo-root",
+            str(self._repo_root),
+            "--trace",
+            "--run-id",
+            run_id,
+            "--trace-out-dir",
+            str(trace_out_dir),
+            "--view",
+            view,
         ]
 
         for key, flag in (
@@ -491,6 +508,7 @@ class RemoteAPIService:
                 raise ValueError("duplicate_run_id")
             # Lazy import so tests can monkeypatch remote_api._spawn_run_subprocess
             import lg_orch.remote_api as _m
+
             process = _m._spawn_run_subprocess(argv=argv, cwd=self._repo_root, env=run_env)
             self._runs[run_id] = RunRecord(
                 run_id=run_id,
@@ -517,6 +535,7 @@ class RemoteAPIService:
         with self._lock:
             self._run_start_times[run_id] = time.monotonic()
         import lg_orch.remote_api as _m2
+
         _m2._start_daemon_thread(
             target=lambda: self._capture_process_output(run_id),
             name=f"lg-orch-run-{run_id}",
@@ -692,6 +711,7 @@ class RemoteAPIService:
             )
             argv = _resume_argv(record)
             import lg_orch.remote_api as _m
+
             process = _m._spawn_run_subprocess(argv=argv, cwd=self._repo_root, env=run_env)
 
             record.argv = argv
@@ -718,6 +738,7 @@ class RemoteAPIService:
         if self._run_store is not None:
             self._run_store.upsert(payload_out)
         import lg_orch.remote_api as _m2
+
         _m2._start_daemon_thread(
             target=lambda: self._capture_process_output(normalized_run_id),
             name=f"lg-orch-run-{normalized_run_id}",
@@ -941,8 +962,7 @@ class RemoteAPIService:
                     verification = plan.get("verification", [])
                     req = str(state_raw.get("request", request_val)).strip()
                     task_class = (
-                        str(state_raw.get("route", {}).get("task_class", "")).strip()
-                        or "analysis"
+                        str(state_raw.get("route", {}).get("task_class", "")).strip() or "analysis"
                     )
                     if isinstance(steps, list) and steps:
                         canonical_name = _canonical_procedure_name(steps)
@@ -1020,11 +1040,14 @@ class RemoteAPIService:
                     trace = self._load_trace(record.trace_path)
                     new_logs = record.logs[seen_log_lines:]
                     seen_log_lines = len(record.logs)
-                    payload = _apply_trace_state_to_payload({
-                        **summary,
-                        "log_lines": len(record.logs),
-                        "new_log_lines": new_logs,
-                    }, trace)
+                    payload = _apply_trace_state_to_payload(
+                        {
+                            **summary,
+                            "log_lines": len(record.logs),
+                            "new_log_lines": new_logs,
+                        },
+                        trace,
+                    )
             if payload is None:
                 data = _json.dumps({"error": "not_found", "run_id": run_id})
                 try:

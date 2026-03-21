@@ -1,4 +1,4 @@
-﻿# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 from __future__ import annotations
 
@@ -61,12 +61,7 @@ def _tool_label(result: dict[str, Any]) -> str:
 
 
 def _html_card(title: str, body: str) -> str:
-    return (
-        '<section class="card">\n'
-        f"  <h2>{escape(title)}</h2>\n"
-        f"{body}\n"
-        "</section>"
-    )
+    return f'<section class="card">\n  <h2>{escape(title)}</h2>\n{body}\n</section>'
 
 
 def _html_document(*, title: str, body: str, include_mermaid: bool) -> str:
@@ -256,20 +251,20 @@ def render_trace_dashboard_html(
             (
                 "<li>"
                 f'<span class="mono">'
-                f'+{_duration_s(int(event.get("ts_ms", start_ms)), start_ms):0.2f}s</span>'
+                f"+{_duration_s(int(event.get('ts_ms', start_ms)), start_ms):0.2f}s</span>"
                 f"<span>{escape(_event_label(event))}</span>"
                 "</li>"
             )
             for event in events[-24:]
         )
     else:
-        timeline_items = '<li><span>No events captured.</span></li>'
+        timeline_items = "<li><span>No events captured.</span></li>"
 
     if tool_results:
         tool_items = "\n".join(
             (
                 "<li>"
-                f'<span class="badge {'ok' if bool(result.get("ok", False)) else 'err'}">'
+                f'<span class="badge {"ok" if bool(result.get("ok", False)) else "err"}">'
                 f"{'OK' if bool(result.get('ok', False)) else 'ERR'}</span>"
                 f"<span>{escape(_tool_label(result))}</span>"
                 "</li>"
@@ -277,12 +272,10 @@ def render_trace_dashboard_html(
             for result in tool_results[-24:]
         )
     else:
-        tool_items = '<li><span>No tool invocations captured.</span></li>'
+        tool_items = "<li><span>No tool invocations captured.</span></li>"
 
     graph_body = (
-        '<pre class="mermaid">'
-        f"{escape(mermaid_graph.strip())}"
-        "</pre>"
+        f'<pre class="mermaid">{escape(mermaid_graph.strip())}</pre>'
         if mermaid_graph and mermaid_graph.strip()
         else "<p>No graph available.</p>"
     )
@@ -334,10 +327,7 @@ def render_trace_dashboard_html(
     if bool(approval.get("pending", False)):
         summary_lines.append(
             "  <li><strong>approval</strong><span>"
-            + escape(
-                str(approval.get('summary', 'pending approval')).strip()
-                or 'pending approval'
-            )
+            + escape(str(approval.get("summary", "pending approval")).strip() or "pending approval")
             + "</span></li>"
         )
     approval_history_raw = approval.get("history", [])
@@ -369,7 +359,7 @@ def render_trace_dashboard_html(
         _html_card("Graph", graph_body),
         _html_card("Timeline", f'<ul class="items">\n{timeline_items}\n</ul>'),
         _html_card("Tool Results", f'<ul class="items">\n{tool_items}\n</ul>'),
-        _html_card("Final Output", f'<pre>{escape(final or "(empty)")}</pre>'),
+        _html_card("Final Output", f"<pre>{escape(final or '(empty)')}</pre>"),
     ]
 
     if approval_history:
@@ -378,12 +368,12 @@ def render_trace_dashboard_html(
                 "<li>"
                 f'<span class="mono">{escape(str(entry.get("ts", "")))}</span>'
                 '<div class="stack">'
-                f'<strong>{escape(str(entry.get("decision", "")).strip() or "decision")}</strong>'
+                f"<strong>{escape(str(entry.get('decision', '')).strip() or 'decision')}</strong>"
                 f'<span class="muted">actor='
-                f'{escape(str(entry.get("actor", "")).strip() or "unknown")} '
-                f'challenge={escape(str(entry.get("challenge_id", "")).strip() or "—")}</span>'
-                f'<span>'
-                f'{escape(str(entry.get("rationale", "")).strip() or "(no rationale)")}</span>'
+                f"{escape(str(entry.get('actor', '')).strip() or 'unknown')} "
+                f"challenge={escape(str(entry.get('challenge_id', '')).strip() or '—')}</span>"
+                f"<span>"
+                f"{escape(str(entry.get('rationale', '')).strip() or '(no rationale)')}</span>"
                 "</div>"
                 "</li>"
             )
@@ -402,6 +392,7 @@ def render_trace_dashboard_html(
 
 def render_trace_site_index_html(runs: list[dict[str, Any]]) -> str:
     if runs:
+
         def _run_metadata_suffix(run: dict[str, Any]) -> str:
             parts: list[str] = []
             verification_ok = run.get("verification_ok")
@@ -434,31 +425,31 @@ def render_trace_site_index_html(runs: list[dict[str, Any]]) -> str:
                 "<li>"
                 '<div class="stack">'
                 f'<a href="{escape(str(run.get("dashboard_href", "index.html")))}">'
-                f'{escape(str(run.get("request", "(empty request)")))}</a>'
-                 f'<span class="muted">run_id={escape(str(run.get("run_id", "")))} '
-                 f'· intent={escape(str(run.get("intent", "(pending)")))} '
-                 f'· events={int(run.get("events_count", 0) or 0)} '
-                 f'· tools={int(run.get("tool_results_count", 0) or 0)}'
-                 f'{escape(_run_metadata_suffix(run))}</span>'
-                 "</div>"
-                 '<span class="links">'
-                 f'<a href="{escape(str(run.get("dashboard_href", "index.html")))}">Dashboard</a>'
-                 " · "
-                 f'<a href="{escape(str(run.get("trace_href", "#")))}">Trace JSON</a>'
+                f"{escape(str(run.get('request', '(empty request)')))}</a>"
+                f'<span class="muted">run_id={escape(str(run.get("run_id", "")))} '
+                f"· intent={escape(str(run.get('intent', '(pending)')))} "
+                f"· events={int(run.get('events_count', 0) or 0)} "
+                f"· tools={int(run.get('tool_results_count', 0) or 0)}"
+                f"{escape(_run_metadata_suffix(run))}</span>"
+                "</div>"
+                '<span class="links">'
+                f'<a href="{escape(str(run.get("dashboard_href", "index.html")))}">Dashboard</a>'
+                " · "
+                f'<a href="{escape(str(run.get("trace_href", "#")))}">Trace JSON</a>'
                 "</span>"
                 "</li>"
             )
             for run in runs
         )
     else:
-        items = '<li><span>No runs captured yet.</span></li>'
+        items = "<li><span>No runs captured yet.</span></li>"
 
     cards = [
         _html_card(
             "Lula Trace Site",
             (
                 "<p>Static dashboards generated from file-based run traces.</p>\n"
-                "<p class=\"muted\">Open a dashboard for graph, timeline,"
+                '<p class="muted">Open a dashboard for graph, timeline,'
                 " tool results, and final output.</p>"
             ),
         ),

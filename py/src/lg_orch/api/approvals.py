@@ -5,6 +5,7 @@
 Exports the HMAC token generator and summary helpers used by the
 approval/rejection endpoints in the main dispatch function.
 """
+
 from __future__ import annotations
 
 import hashlib

@@ -478,7 +478,11 @@ def test_api_http_response_approves_suspended_run_and_resumes(
     assert payload["status"] == "running"
     assert payload["pending_approval"] is False
     assert spawn_calls[1]["argv"][-5:] == [
-        "--resume", "--thread-id", "thread-abc", "--checkpoint-id", "cp-123",
+        "--resume",
+        "--thread-id",
+        "thread-abc",
+        "--checkpoint-id",
+        "cp-123",
     ]
     approvals = json.loads(spawn_calls[1]["env"]["LG_RESUME_APPROVALS_JSON"])
     assert approvals["apply_patch"]["challenge_id"] == "approval:apply_patch"
@@ -769,7 +773,8 @@ def test_stream_completed_run_returns_events_and_done_sentinel(
 
     service = RemoteAPIService(repo_root=tmp_path)
     monkeypatch.setattr(
-        _ra, "_spawn_run_subprocess",
+        _ra,
+        "_spawn_run_subprocess",
         lambda *, argv, cwd, env=None: DummyProcess(output="", returncode=0),
     )
     monkeypatch.setattr(_ra, "_start_daemon_thread", lambda *, target, name: target())
@@ -807,9 +812,7 @@ def test_stream_completed_run_returns_events_and_done_sentinel(
 
     # All frames start with "data: "
     frames = [
-        line[len("data: "):].strip()
-        for line in output.splitlines()
-        if line.startswith("data: ")
+        line[len("data: ") :].strip() for line in output.splitlines() if line.startswith("data: ")
     ]
     parsed = [json.loads(f) for f in frames if f]
 
@@ -858,7 +861,8 @@ def test_push_run_event_sends_through_active_stream(
 
     service = RemoteAPIService(repo_root=tmp_path)
     monkeypatch.setattr(
-        _ra, "_spawn_run_subprocess",
+        _ra,
+        "_spawn_run_subprocess",
         lambda *, argv, cwd, env=None: RunningDummyProcess(),
     )
     # Don't start the capture thread — keep the run alive (poll() returns None).
@@ -919,9 +923,7 @@ def test_push_run_event_sends_through_active_stream(
 
     output = wfile.getvalue().decode("utf-8")
     frames = [
-        line[len("data: "):].strip()
-        for line in output.splitlines()
-        if line.startswith("data: ")
+        line[len("data: ") :].strip() for line in output.splitlines() if line.startswith("data: ")
     ]
     parsed = [json.loads(f) for f in frames if f]
 
@@ -1159,9 +1161,9 @@ def test_start_healing_loop_returns_loop_id(
         service,
         method="POST",
         request_path="/healing/start",
-        request_body=json.dumps(
-            {"repo_path": str(tmp_path), "poll_interval_seconds": 30.0}
-        ).encode("utf-8"),
+        request_body=json.dumps({"repo_path": str(tmp_path), "poll_interval_seconds": 30.0}).encode(
+            "utf-8"
+        ),
     )
     assert status == 201
     payload = json.loads(body.decode("utf-8"))

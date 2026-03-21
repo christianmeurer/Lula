@@ -96,9 +96,7 @@ def write_run_trace(*, repo_root: Path, out_dir: Path, state: Any) -> Path:
     approval = dict(approval_raw) if isinstance(approval_raw, dict) else {}
 
     recovery_packet_raw = _state_get(state, "recovery_packet", {})
-    recovery_packet = (
-        dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else None
-    )
+    recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else None
 
     correlation: dict[str, Any] = {}
     request_id_raw = _state_get(state, "_request_id")

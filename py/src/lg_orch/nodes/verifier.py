@@ -178,9 +178,7 @@ def _is_architecture_mismatch(
     if any(hint in joined for hint in _ARCH_MISMATCH_HINTS):
         return True
 
-    return bool(
-        re.search(r"\bmissing\b", joined) and re.search(r"\bmodule\b|\bfile\b", joined)
-    )
+    return bool(re.search(r"\bmissing\b", joined) and re.search(r"\bmodule\b|\bfile\b", joined))
 
 
 def _is_test_failure_post_change(
@@ -199,13 +197,12 @@ def _is_test_failure_post_change(
     """
     tool_lower = tool.strip().lower()
     is_test_tool = (
-        tool_lower in {"run_tests", "pytest", "cargo_test", "test_runner"}
-        or "test" in tool_lower
+        tool_lower in {"run_tests", "pytest", "cargo_test", "test_runner"} or "test" in tool_lower
     )
     if not is_test_tool:
-        all_text = " ".join([
-            _diagnostic_summary(d) for d in diagnostics
-        ] + [stderr, stdout]).lower()
+        all_text = " ".join(
+            [_diagnostic_summary(d) for d in diagnostics] + [stderr, stdout]
+        ).lower()
         is_test_tool = any(hint in all_text for hint in _TEST_FAILURE_HINTS)
 
     if not is_test_tool:
@@ -244,9 +241,7 @@ def _requires_formal_verification(
 
 
 def _run_formal_verification(
-    state: dict[str, Any],
-    files_to_verify: list[str],
-    route_metadata: dict[str, Any]
+    state: dict[str, Any], files_to_verify: list[str], route_metadata: dict[str, Any]
 ) -> dict[str, Any] | None:
     if not files_to_verify:
         return None
@@ -269,6 +264,7 @@ def _run_formal_verification(
     request_id_s = str(request_id).strip() if request_id is not None else None
 
     from lg_orch.tools import RunnerClient
+
     client = RunnerClient(base_url=runner_base_url, api_key=api_key_s, request_id=request_id_s)
 
     try:
@@ -276,40 +272,35 @@ def _run_formal_verification(
 
         call: dict[str, Any] = {
             "tool": "exec",
-            "input": {
-                "cmd": "cargo",
-                "args": args,
-                "timeout_s": 120,
-                "_route": route_metadata
-            }
+            "input": {"cmd": "cargo", "args": args, "timeout_s": 120, "_route": route_metadata},
         }
 
         results = client.batch_execute_tools(calls=[call])
         if results:
-             result = results[0]
-             if not result.get("ok"):
-                 return {
-                     "tool": "formal_verification",
-                     "ok": False,
-                     "exit_code": result.get("exit_code", 1),
-                     "stdout": result.get("stdout", ""),
-                     "stderr": f"Formal Verification Failed:\n{result.get('stderr', '')}",
-                     "diagnostics": result.get("diagnostics", []),
-                     "artifacts": {"error": "formal_verification_failed", "files": files_to_verify},
-                     "route": route_metadata
-                 }
+            result = results[0]
+            if not result.get("ok"):
+                return {
+                    "tool": "formal_verification",
+                    "ok": False,
+                    "exit_code": result.get("exit_code", 1),
+                    "stdout": result.get("stdout", ""),
+                    "stderr": f"Formal Verification Failed:\n{result.get('stderr', '')}",
+                    "diagnostics": result.get("diagnostics", []),
+                    "artifacts": {"error": "formal_verification_failed", "files": files_to_verify},
+                    "route": route_metadata,
+                }
         return None
     except Exception as e:
-         return {
-             "tool": "formal_verification",
-             "ok": False,
-             "exit_code": 1,
-             "stdout": "",
-             "stderr": f"Failed to execute formal verification: {e!s}",
-             "diagnostics": [],
-             "artifacts": {"error": "formal_verification_execution_error"},
-             "route": route_metadata
-         }
+        return {
+            "tool": "formal_verification",
+            "ok": False,
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": f"Failed to execute formal verification: {e!s}",
+            "diagnostics": [],
+            "artifacts": {"error": "formal_verification_execution_error"},
+            "route": route_metadata,
+        }
     finally:
         client.close()
 
@@ -350,20 +341,20 @@ def _classify_retry(
         error_tag = str(artifacts.get("error", "")).strip().lower()
 
         if error_tag == "formal_verification_failed":
-             return (
-                 {
-                     "failure_class": "formal_verification_failed",
-                     "failure_fingerprint": fingerprint,
-                     "rationale": (
-                         "Symbolic proof checker rejected the implementation."
-                         " The logic must be mathematically verified."
-                     ),
-                     "retry_target": "planner",
-                     "context_scope": "working_set",
-                     "plan_action": "amend",
-                 },
-                 "formal_verification_failed",
-             )
+            return (
+                {
+                    "failure_class": "formal_verification_failed",
+                    "failure_fingerprint": fingerprint,
+                    "rationale": (
+                        "Symbolic proof checker rejected the implementation."
+                        " The logic must be mathematically verified."
+                    ),
+                    "retry_target": "planner",
+                    "context_scope": "working_set",
+                    "plan_action": "amend",
+                },
+                "formal_verification_failed",
+            )
 
         if error_tag in {"tool_call_budget_exceeded", "patch_size_budget_exceeded"}:
             return (
@@ -664,8 +655,7 @@ def _updated_recovery_facts(
 
     fingerprint = str(next_fact.get("failure_fingerprint", "")).strip()
     updated = [
-        entry for entry in facts
-        if str(entry.get("failure_fingerprint", "")).strip() != fingerprint
+        entry for entry in facts if str(entry.get("failure_fingerprint", "")).strip() != fingerprint
     ]
     updated.append(next_fact)
     updated.sort(
@@ -685,9 +675,7 @@ def _evaluate_acceptance_checks(
     plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
     criteria_raw = plan.get("acceptance_criteria", [])
     criteria = [
-        str(entry).strip()
-        for entry in criteria_raw
-        if isinstance(entry, str) and entry.strip()
+        str(entry).strip() for entry in criteria_raw if isinstance(entry, str) and entry.strip()
     ]
     if not criteria:
         return []
@@ -695,9 +683,12 @@ def _evaluate_acceptance_checks(
     repo_context_raw = state.get("repo_context", {})
     repo_context = dict(repo_context_raw) if isinstance(repo_context_raw, dict) else {}
     top_level = repo_context.get("top_level", [])
-    has_repo_context = bool(repo_context.get("repo_map")) or bool(
-        isinstance(top_level, list) and top_level
-    ) or bool(repo_context.get("structural_ast_map")) or bool(repo_context.get("semantic_hits"))
+    has_repo_context = (
+        bool(repo_context.get("repo_map"))
+        or bool(isinstance(top_level, list) and top_level)
+        or bool(repo_context.get("structural_ast_map"))
+        or bool(repo_context.get("semantic_hits"))
+    )
     plan_steps_raw = plan.get("steps", [])
     has_plan_steps = bool(isinstance(plan_steps_raw, list) and plan_steps_raw)
     successful_tool_results = any(bool(result.get("ok", False)) for result in tool_results)
@@ -722,7 +713,8 @@ def _evaluate_acceptance_checks(
 
 def _acceptance_failure(acceptance_checks: list[dict[str, Any]]) -> tuple[dict[str, Any], str, str]:
     unmet = [
-        entry for entry in acceptance_checks
+        entry
+        for entry in acceptance_checks
         if isinstance(entry, dict) and not bool(entry.get("ok", False))
     ]
     if not unmet:
@@ -933,10 +925,10 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
             state, files_to_verify, tool_routing_metadata(state, stage="verifier")
         )
         if verification_failure:
-             tool_results.append(verification_failure)
-             log.info("formal_verification_failed", files=files_to_verify)
+            tool_results.append(verification_failure)
+            log.info("formal_verification_failed", files=files_to_verify)
         else:
-             log.info("formal_verification_passed", files=files_to_verify)
+            log.info("formal_verification_passed", files=files_to_verify)
 
     checks = _build_checks(tool_results)
     has_failures = len(checks) > 0
@@ -1062,8 +1054,7 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
             # are kept even when null because the schema allows null for those.
             _nullable_ref_keys = {"recovery", "recovery_packet", "next_handoff"}
             report_for_validation = {
-                k: v for k, v in report.items()
-                if not (k in _nullable_ref_keys and v is None)
+                k: v for k, v in report.items() if not (k in _nullable_ref_keys and v is None)
             }
             jsonschema.validate(instance=report_for_validation, schema=VERIFIER_SCHEMA)
         except jsonschema.ValidationError as ve:

@@ -166,6 +166,7 @@ def test_db_created_on_disk(tmp_path: Path) -> None:
 # recovery_facts / episodic memory
 # ---------------------------------------------------------------------------
 
+
 def _make_fact(
     fingerprint: str = "fp1",
     failure_class: str = "lint",
@@ -212,10 +213,13 @@ def test_get_recent_recovery_facts_by_fingerprint(tmp_path: Path) -> None:
 def test_get_recent_recovery_facts_by_class(tmp_path: Path) -> None:
     store = RunStore(db_path=tmp_path / "runs.sqlite")
     try:
-        store.upsert_recovery_facts("run-C", [
-            _make_fact("fp3", failure_class="mypy"),
-            _make_fact("fp4", failure_class="lint"),
-        ])
+        store.upsert_recovery_facts(
+            "run-C",
+            [
+                _make_fact("fp3", failure_class="mypy"),
+                _make_fact("fp4", failure_class="lint"),
+            ],
+        )
         # fingerprint lookup yields nothing for "fp_nope", falls back to failure_class
         rows = store.get_recent_recovery_facts(fingerprint="fp_nope", failure_class="mypy")
         assert len(rows) == 1

@@ -1,4 +1,5 @@
 """Tests for Wave 12 — streaming completeness in coder and reporter nodes."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
@@ -9,8 +10,10 @@ from unittest.mock import MagicMock, call, patch
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_stream(*tokens: str) -> AsyncGenerator[str, None]:
     """Return an async generator that yields each token then stops."""
+
     async def _gen() -> AsyncGenerator[str, None]:
         for token in tokens:
             yield token

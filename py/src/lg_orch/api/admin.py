@@ -12,6 +12,7 @@ Public entry point
 :func:`register_admin_routes` is called by :func:`lg_orch.remote_api._api_http_dispatch`
 to handle any ``/healing/*`` or ``/admin/*`` path prefixes.
 """
+
 from __future__ import annotations
 
 import json

@@ -184,9 +184,7 @@ def test_executor_blocks_apply_patch_without_approval(mock_cls: MagicMock) -> No
                         {
                             "tool": "apply_patch",
                             "input": {
-                                "changes": [
-                                    {"path": "py/new.txt", "op": "add", "content": "hello"}
-                                ]
+                                "changes": [{"path": "py/new.txt", "op": "add", "content": "hello"}]
                             },
                         }
                     ],
@@ -276,9 +274,7 @@ def test_executor_injects_apply_patch_approval_when_present(mock_cls: MagicMock)
                         {
                             "tool": "apply_patch",
                             "input": {
-                                "changes": [
-                                    {"path": "py/new.txt", "op": "add", "content": "hello"}
-                                ]
+                                "changes": [{"path": "py/new.txt", "op": "add", "content": "hello"}]
                             },
                         }
                     ],
@@ -389,18 +385,14 @@ def test_coerce_approval_token_accepts_hmac_format() -> None:
         "approval:apply_patch|1700000000|abcdef1234567890abcdef1234567890"
         "|deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     )
-    result = _coerce_approval_token(
-        {"challenge_id": "approval:apply_patch", "token": hmac_token}
-    )
+    result = _coerce_approval_token({"challenge_id": "approval:apply_patch", "token": hmac_token})
     assert result is not None
     parts = result["token"].split("|")
     assert len(parts) == 4
 
 
 def test_coerce_approval_token_rejects_malformed_pipe_count() -> None:
-    result = _coerce_approval_token(
-        {"challenge_id": "approval:apply_patch", "token": "a|b|c"}
-    )
+    result = _coerce_approval_token({"challenge_id": "approval:apply_patch", "token": "a|b|c"})
     assert result is None
 
 

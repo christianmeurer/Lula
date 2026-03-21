@@ -53,7 +53,7 @@ def ingest(state: OrchState | dict[str, Any]) -> dict[str, Any]:
     # --- Normalise input to a raw dict so the rest of the node is uniform ----
     if isinstance(state, OrchState):
         raw: dict[str, Any] = state.model_dump()
-        raw.update(state.model_extra)          # re-attach _run_id, _lane, etc.
+        raw.update(state.model_extra)  # re-attach _run_id, _lane, etc.
     else:
         raw = dict(state)
 

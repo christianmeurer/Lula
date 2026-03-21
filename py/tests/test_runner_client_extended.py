@@ -94,8 +94,7 @@ def test_search_codebase_parses_hit_list(mock_execute: MagicMock) -> None:
         "tool": "search_codebase",
         "ok": True,
         "stdout": (
-            '[{"path":"py/a.py","language":"python","symbols":["a"],'
-            '"snippet":"def a","score":0.1}]'
+            '[{"path":"py/a.py","language":"python","symbols":["a"],"snippet":"def a","score":0.1}]'
         ),
     }
     client = RunnerClient(base_url="http://127.0.0.1:8088")

@@ -7,6 +7,7 @@ Provides:
 - ``extract_json_block`` — unified JSON extraction from LLM output used by router and planner.
 - ``resolve_inference_client`` — model provider resolution block used by router and planner.
 """
+
 from __future__ import annotations
 
 import re
@@ -50,13 +51,13 @@ def extract_json_block(text: str) -> str | None:
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end >= start:
-        return text[start: end + 1].strip()
+        return text[start : end + 1].strip()
 
     # Try raw array
     start = text.find("[")
     end = text.rfind("]")
     if start != -1 and end != -1 and end >= start:
-        return text[start: end + 1].strip()
+        return text[start : end + 1].strip()
 
     return None
 

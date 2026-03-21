@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 """Pure memory-ranking helpers: semantic memory scoring and procedural memory recall."""
+
 from __future__ import annotations
 
 import json
@@ -182,9 +183,7 @@ def _semantic_memory_constraints(repo_context: dict[str, Any], *, request: str) 
                 " change in approach."
             )
         else:
-            acceptance_criteria.append(
-                "Relevant recalled run knowledge is reflected in the plan."
-            )
+            acceptance_criteria.append("Relevant recalled run knowledge is reflected in the plan.")
 
         handoff_evidence.append(
             {

@@ -1,4 +1,5 @@
 """Tests for py/src/lg_orch/scip_index.py (Wave 9)."""
+
 from __future__ import annotations
 
 import json
@@ -96,10 +97,20 @@ def test_load_scip_index_parses_sidecar_json() -> None:
 def test_find_symbol_by_name() -> None:
     data = _minimal_sidecar(
         symbols=[
-            {"name": "validate_token", "kind": "function",
-             "start_line": 1, "end_line": 10, "references": []},
-            {"name": "TokenError", "kind": "class",
-             "start_line": 15, "end_line": 20, "references": []},
+            {
+                "name": "validate_token",
+                "kind": "function",
+                "start_line": 1,
+                "end_line": 10,
+                "references": [],
+            },
+            {
+                "name": "TokenError",
+                "kind": "class",
+                "start_line": 15,
+                "end_line": 20,
+                "references": [],
+            },
         ]
     )
 
@@ -174,17 +185,32 @@ def test_symbols_in_file() -> None:
             {
                 "relative_path": "api/views.py",
                 "symbols": [
-                    {"name": "index", "kind": "function",
-                     "start_line": 1, "end_line": 5, "references": []},
-                    {"name": "detail", "kind": "function",
-                     "start_line": 7, "end_line": 12, "references": []},
+                    {
+                        "name": "index",
+                        "kind": "function",
+                        "start_line": 1,
+                        "end_line": 5,
+                        "references": [],
+                    },
+                    {
+                        "name": "detail",
+                        "kind": "function",
+                        "start_line": 7,
+                        "end_line": 12,
+                        "references": [],
+                    },
                 ],
             },
             {
                 "relative_path": "api/models.py",
                 "symbols": [
-                    {"name": "User", "kind": "class",
-                     "start_line": 1, "end_line": 30, "references": []},
+                    {
+                        "name": "User",
+                        "kind": "class",
+                        "start_line": 1,
+                        "end_line": 30,
+                        "references": [],
+                    },
                 ],
             },
         ]
@@ -237,8 +263,7 @@ def test_cross_repo_deps_finds_matching_references() -> None:
         ],
     )
 
-    with tempfile.TemporaryDirectory() as local_dir, \
-         tempfile.TemporaryDirectory() as remote_dir:
+    with tempfile.TemporaryDirectory() as local_dir, tempfile.TemporaryDirectory() as remote_dir:
         _write_sidecar(local_dir, local_data)
         _write_sidecar(remote_dir, remote_data)
 
@@ -277,8 +302,7 @@ def test_cross_repo_deps_returns_empty_when_no_overlap() -> None:
         ]
     )
 
-    with tempfile.TemporaryDirectory() as local_dir, \
-         tempfile.TemporaryDirectory() as remote_dir:
+    with tempfile.TemporaryDirectory() as local_dir, tempfile.TemporaryDirectory() as remote_dir:
         _write_sidecar(local_dir, local_data)
         _write_sidecar(remote_dir, remote_data)
 

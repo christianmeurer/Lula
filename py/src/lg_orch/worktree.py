@@ -6,6 +6,7 @@ Public surface:
     WorktreeContext, WorktreeError, WorktreeLease,
     create_worktree, remove_worktree, merge_worktree
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,9 +41,9 @@ class WorktreeContext:
     """Describes a live git worktree created for one agent run."""
 
     run_id: str
-    branch: str        # "lg-orch/{run_id}"
+    branch: str  # "lg-orch/{run_id}"
     worktree_path: str  # absolute path to the worktree directory
-    base_branch: str   # e.g. "main" or the HEAD branch at creation time
+    base_branch: str  # e.g. "main" or the HEAD branch at creation time
 
 
 # ---------------------------------------------------------------------------
@@ -106,24 +107,22 @@ async def create_worktree(run_id: str, base_path: str) -> WorktreeContext:
     worktree_path = os.path.join(worktrees_root, run_id)
 
     # Discover the current branch so we know where to merge back later.
-    rc, current_branch, err = await _run_git(
-        "rev-parse", "--abbrev-ref", "HEAD", cwd=base_path
-    )
+    rc, current_branch, err = await _run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=base_path)
     if rc != 0:
-        raise WorktreeError(
-            f"git rev-parse --abbrev-ref HEAD failed (rc={rc}): {err}"
-        )
+        raise WorktreeError(f"git rev-parse --abbrev-ref HEAD failed (rc={rc}): {err}")
     base_branch = current_branch or "main"
 
     # Create the worktree with a new branch.
     rc, _out, err = await _run_git(
-        "worktree", "add", "-b", branch, worktree_path,
+        "worktree",
+        "add",
+        "-b",
+        branch,
+        worktree_path,
         cwd=base_path,
     )
     if rc != 0:
-        raise WorktreeError(
-            f"git worktree add failed for run_id={run_id!r} (rc={rc}): {err}"
-        )
+        raise WorktreeError(f"git worktree add failed for run_id={run_id!r} (rc={rc}): {err}")
 
     _log.debug("worktree.created", branch=branch, path=str(worktree_path))
     return WorktreeContext(
@@ -144,7 +143,10 @@ async def remove_worktree(ctx: WorktreeContext) -> None:
         ctx: The :class:`WorktreeContext` to clean up.
     """
     rc, _, err = await _run_git(
-        "worktree", "remove", "--force", ctx.worktree_path,
+        "worktree",
+        "remove",
+        "--force",
+        ctx.worktree_path,
     )
     if rc != 0:
         _log.warning(
@@ -181,9 +183,7 @@ async def merge_worktree(ctx: WorktreeContext, strategy: str = "ours") -> None:
     """
     rc, _, err = await _run_git("checkout", ctx.base_branch)
     if rc != 0:
-        raise WorktreeError(
-            f"git checkout {ctx.base_branch!r} failed (rc={rc}): {err}"
-        )
+        raise WorktreeError(f"git checkout {ctx.base_branch!r} failed (rc={rc}): {err}")
 
     rc, _, err = await _run_git(
         "merge",
@@ -193,8 +193,7 @@ async def merge_worktree(ctx: WorktreeContext, strategy: str = "ours") -> None:
     )
     if rc != 0:
         raise WorktreeError(
-            f"git merge of {ctx.branch!r} into {ctx.base_branch!r} failed "
-            f"(rc={rc}): {err}"
+            f"git merge of {ctx.branch!r} into {ctx.base_branch!r} failed (rc={rc}): {err}"
         )
 
     _log.debug(

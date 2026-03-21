@@ -343,9 +343,7 @@ def build_context_layers(
             lt_content = long_term.retrieve_for_context(task_text, max_tokens=1000)
             if lt_content.strip():
                 # Prepend to stable_segments before any other segment
-                stable_segments_pre: list[tuple[str, str]] = [
-                    ("long_term_memories", lt_content)
-                ]
+                stable_segments_pre: list[tuple[str, str]] = [("long_term_memories", lt_content)]
             else:
                 stable_segments_pre = []
         else:
@@ -381,10 +379,15 @@ def build_context_layers(
                 loop_summary_text = str(entry.get("loop_summary", entry.get("summary", ""))).strip()
                 outcome_text = str(entry.get("outcome", entry.get("status", ""))).strip()
                 if loop_summary_text:
-                    long_term.store_episode(run_id, loop_summary_text, outcome_text, metadata={
-                        "loop": entry.get("loop", 0),
-                        "failure_class": entry.get("failure_class", ""),
-                    })
+                    long_term.store_episode(
+                        run_id,
+                        loop_summary_text,
+                        outcome_text,
+                        metadata={
+                            "loop": entry.get("loop", 0),
+                            "failure_class": entry.get("failure_class", ""),
+                        },
+                    )
 
     repo_map = str(repo_context.get("repo_map", "")).strip()
     if repo_map:
@@ -554,8 +557,8 @@ def build_context_layers(
             },
         },
     }
-    
-    
+
+
 def record_compression_provenance(
     state: dict[str, Any],
     *,
@@ -612,8 +615,8 @@ def record_compression_provenance(
         }
     )
     return {**state, "provenance": provenance[-20:]}
-    
-    
+
+
 def get_compression_summary(state: dict[str, Any]) -> dict[str, Any]:
     provenance = _provenance(state)
     compression_events = [
@@ -727,9 +730,7 @@ def prune_post_verification_history(state: dict[str, Any]) -> dict[str, Any]:
             path = str(path_value) if isinstance(path_value, str) else ""
 
             compact = dict(result)
-            compact["stdout"] = (
-                f"{_PRUNED_READ_FILE_PREFIX} chars={len(stdout)} sha256={digest}"
-            )
+            compact["stdout"] = f"{_PRUNED_READ_FILE_PREFIX} chars={len(stdout)} sha256={digest}"
             artifacts["pruned"] = {
                 "reason": "post_verify_after_apply_patch",
                 "stdout_chars": len(stdout),

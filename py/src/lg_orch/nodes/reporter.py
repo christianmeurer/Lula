@@ -198,11 +198,7 @@ def _llm_synthesis(state: dict[str, Any]) -> str | None:
     tool_results = tool_results_raw if isinstance(tool_results_raw, list) else []
     summarized = _summarize_tool_results(tool_results)
 
-    user_prompt = (
-        f"Request: {request}\n\n"
-        f"Tool results:\n{summarized}\n\n"
-        "Produce the final answer."
-    )
+    user_prompt = f"Request: {request}\n\nTool results:\n{summarized}\n\nProduce the final answer."
 
     run_id_raw = state.get("run_id")
     run_id = str(run_id_raw).strip() if isinstance(run_id_raw, str) and run_id_raw.strip() else None

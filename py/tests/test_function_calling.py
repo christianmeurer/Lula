@@ -1,4 +1,5 @@
 """Tests for Wave 13 (Part B): InferenceClient function calling + JSON schema enforcement."""
+
 from __future__ import annotations
 
 import importlib

@@ -47,6 +47,7 @@ def reset_default_sla_policy() -> None:
     global _DEFAULT_SLA_POLICY
     _DEFAULT_SLA_POLICY = None
 
+
 # ---------------------------------------------------------------------------
 # Circuit-breaker
 # ---------------------------------------------------------------------------
@@ -411,7 +412,6 @@ class InferenceClient:
             tool_calls=parsed_tool_calls,
         )
 
-
     def chat_completion_stream_sync(
         self,
         *,
@@ -519,6 +519,7 @@ class InferenceClient:
             timeout=httpx.Timeout(float(self.timeout_s)),
         )
         try:
+
             @retry(
                 reraise=True,
                 stop=stop_after_attempt(3),
@@ -540,7 +541,7 @@ class InferenceClient:
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
                         continue
-                    data = line[len("data: "):]
+                    data = line[len("data: ") :]
                     if data == "[DONE]":
                         continue
                     chunk = json.loads(data)
@@ -556,9 +557,7 @@ class InferenceClient:
                         provider="unknown", model=effective_model, status="ok"
                     ).inc()
                 if _LLM_DURATION_SECONDS is not None:
-                    _LLM_DURATION_SECONDS.labels(model=effective_model).observe(
-                        _stream_elapsed_s
-                    )
+                    _LLM_DURATION_SECONDS.labels(model=effective_model).observe(_stream_elapsed_s)
             except Exception:
                 breaker.record_failure()
                 if _LLM_REQUESTS_TOTAL is not None:
@@ -588,6 +587,6 @@ def _retry_wait_for_http(exc: httpx.HTTPStatusError, attempt: int) -> float:
         except (ValueError, AttributeError):
             pass
         # fallback exponential
-        return min(2.0 ** attempt, 30.0)
+        return min(2.0**attempt, 30.0)
     # 5xx exponential
-    return min(1.0 * (2.0 ** attempt), 30.0)
+    return min(1.0 * (2.0**attempt), 30.0)

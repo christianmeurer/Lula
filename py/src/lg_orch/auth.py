@@ -121,9 +121,7 @@ def _clear_jwks_cache() -> None:
         _jwks_cache.clear()
 
 
-def start_jwks_background_refresh(
-    jwks_url: str, interval_seconds: int = 240
-) -> None:
+def start_jwks_background_refresh(jwks_url: str, interval_seconds: int = 240) -> None:
     """Start a daemon thread that refreshes the JWKS cache every *interval_seconds*.
 
     The default interval of 240 s (4 min) keeps the cache warm before the
@@ -209,11 +207,7 @@ def verify_token(token: str, settings: JWTSettings) -> TokenClaims:
         raise AuthError(401, "missing_sub_claim")
 
     roles_raw = payload.get("roles", [])
-    roles = (
-        [str(r) for r in roles_raw if isinstance(r, str)]
-        if isinstance(roles_raw, list)
-        else []
-    )
+    roles = [str(r) for r in roles_raw if isinstance(r, str)] if isinstance(roles_raw, list) else []
 
     exp_raw = payload.get("exp")
     iat_raw = payload.get("iat")

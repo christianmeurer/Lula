@@ -103,10 +103,7 @@ class PythonInvariantChecker:
         except ValueError:
             raise InvariantViolation(
                 invariant="PathConfinementInvariant",
-                message=(
-                    f"path '{path}' escapes allowed root "
-                    f"'{self._allowed_root}'"
-                ),
+                message=(f"path '{path}' escapes allowed root '{self._allowed_root}'"),
             ) from None
 
     def check_command_allowlist(self, command: str) -> None:
@@ -131,10 +128,7 @@ class PythonInvariantChecker:
                 if ch in arg:
                     raise InvariantViolation(
                         invariant="NoShellMetacharInvariant",
-                        message=(
-                            f"argument contains shell metacharacter "
-                            f"{ch!r}"
-                        ),
+                        message=(f"argument contains shell metacharacter {ch!r}"),
                     )
 
     def check_tool_name_known(self, tool_name: str) -> None:

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 """Shared base types, helpers, and _parse_config for all checkpoint backends."""
+
 from __future__ import annotations
 
 import hashlib

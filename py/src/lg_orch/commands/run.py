@@ -5,6 +5,7 @@
 Extracted from ``lg_orch.main.cli`` so the monolithic CLI dispatcher stays
 under 200 lines.  All heavy state-construction logic lives here.
 """
+
 from __future__ import annotations
 
 import json

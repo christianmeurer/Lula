@@ -94,9 +94,7 @@ def init_telemetry(
     from lg_orch import __version__
 
     resolved_endpoint = (
-        otlp_endpoint
-        or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-        or "http://localhost:4317"
+        otlp_endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or "http://localhost:4317"
     )
     lula_env = os.environ.get("LULA_ENV", "dev")
 

@@ -72,9 +72,7 @@ def _coerce_handoff(raw: object) -> dict[str, Any] | None:
     )
     retry_budget_raw = raw.get("retry_budget", 1)
     retry_budget = (
-        retry_budget_raw
-        if isinstance(retry_budget_raw, int) and retry_budget_raw >= 0
-        else 1
+        retry_budget_raw if isinstance(retry_budget_raw, int) and retry_budget_raw >= 0 else 1
     )
 
     return {

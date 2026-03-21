@@ -24,9 +24,7 @@ def test_route_after_policy_gate_stops_on_plan_iteration_exhaustion() -> None:
 
 
 def test_route_after_policy_gate_prefers_context_reset() -> None:
-    out = route_after_policy_gate(
-        _state(context_reset_requested=True, retry_target="planner")
-    )
+    out = route_after_policy_gate(_state(context_reset_requested=True, retry_target="planner"))
     assert out == "context_builder"
 
 
