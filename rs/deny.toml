@@ -2,7 +2,9 @@
 version = 2
 # All advisories without an explicit ignore entry are denied by default in v2.
 # Add RUSTSEC IDs here only to suppress known false-positives.
-ignore = []
+ignore = [
+    "RUSTSEC-2026-0009", # CVSS 4.0 advisory; cargo-deny parser does not support CVSS 4.0
+]
 
 [licenses]
 allow = [
