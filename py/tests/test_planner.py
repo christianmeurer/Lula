@@ -270,10 +270,12 @@ def test_planner_remote_model_prompt_includes_procedural_memory_recall(
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     out = planner(
         _base_state(
             request="implement fix and run the tests and verify",
@@ -465,10 +467,12 @@ def test_planner_uses_remote_model_when_configured(monkeypatch: pytest.MonkeyPat
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     out = planner(
         _base_state(
             request="inspect repository",
@@ -534,10 +538,12 @@ def test_planner_injects_mcp_context_into_remote_prompt(monkeypatch: pytest.Monk
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     out = planner(
         _base_state(
             request="inspect available MCP tools",
@@ -607,10 +613,12 @@ def test_planner_remote_model_prompt_includes_mcp_recovery_hints(
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     out = planner(
         _base_state(
             request="inspect available MCP tools",
@@ -679,10 +687,12 @@ def test_planner_remote_model_prompt_includes_ranked_semantic_memories(
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     out = planner(
         _base_state(
             request="resume the approved patch flow",
@@ -747,7 +757,7 @@ def test_planner_remote_failure_falls_back_to_deterministic(
         ) -> str:
             raise RuntimeError("remote failed")
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _RaisingInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _RaisingInferenceClient)
     out = planner(
         _base_state(
             request="inspect repository",
@@ -906,10 +916,12 @@ def test_planner_injects_mcp_tool_catalog_from_mcp_tools_state(
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     out = planner(
         _base_state(
             request="apply a patch using available tools",
@@ -996,10 +1008,12 @@ def test_planner_omits_mcp_tool_catalog_block_when_mcp_tools_empty(
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     planner(
         _base_state(
             request="inspect repository",
@@ -1063,10 +1077,12 @@ def test_planner_mcp_tool_catalog_uses_runtime_tools_not_hardcoded_names(
                     ],
                     "verification": [],
                     "rollback": "No rollback needed.",
+                    "acceptance_criteria": ["Plan executed successfully."],
+                    "max_iterations": 1,
                 }
             )
 
-    monkeypatch.setattr(planner_module, "InferenceClient", _FakeInferenceClient)
+    monkeypatch.setattr("lg_orch.tools.InferenceClient", _FakeInferenceClient)
     # Provide unusual tool names that could not be hard-coded
     custom_tool_name = "xYz_custom_runtime_tool_99"
     planner(
