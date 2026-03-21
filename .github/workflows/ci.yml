@@ -139,7 +139,7 @@ jobs:
 
       - name: pip-audit
         working-directory: py
-        run: uv run pip-audit
+        run: uv run pip-audit --skip-editable
 
   build-guest-rootfs:
     name: "Build Firecracker Guest Rootfs"
