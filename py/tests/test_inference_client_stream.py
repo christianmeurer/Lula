@@ -9,7 +9,6 @@ import pytest
 
 from lg_orch.tools.inference_client import InferenceClient, _breakers, collect_stream
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

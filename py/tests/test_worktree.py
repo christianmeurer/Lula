@@ -6,7 +6,6 @@ without a real git repository.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,7 +18,6 @@ from lg_orch.worktree import (
     merge_worktree,
     remove_worktree,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,9 +85,8 @@ class TestCreateWorktree:
             "lg_orch.worktree.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
             side_effect=[rev_parse_proc, add_proc],
-        ):
-            with pytest.raises(WorktreeError, match="git worktree add failed"):
-                asyncio.run(create_worktree(run_id, "/repo"))
+        ), pytest.raises(WorktreeError, match="git worktree add failed"):
+            asyncio.run(create_worktree(run_id, "/repo"))
 
     def test_create_worktree_raises_when_rev_parse_fails(self) -> None:
         """WorktreeError raised when rev-parse itself fails."""
@@ -99,9 +96,8 @@ class TestCreateWorktree:
             "lg_orch.worktree.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
             return_value=rev_parse_proc,
-        ):
-            with pytest.raises(WorktreeError, match="git rev-parse"):
-                asyncio.run(create_worktree("x", "/no-repo"))
+        ), pytest.raises(WorktreeError, match="git rev-parse"):
+            asyncio.run(create_worktree("x", "/no-repo"))
 
 
 # ---------------------------------------------------------------------------
@@ -164,9 +160,8 @@ class TestMergeWorktree:
             "lg_orch.worktree.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
             side_effect=[checkout_proc, merge_proc],
-        ):
-            with pytest.raises(WorktreeError, match="git merge"):
-                asyncio.run(merge_worktree(ctx))
+        ), pytest.raises(WorktreeError, match="git merge"):
+            asyncio.run(merge_worktree(ctx))
 
     def test_merge_worktree_raises_on_checkout_failure(self) -> None:
         """WorktreeError raised when git checkout fails before the merge."""
@@ -177,9 +172,8 @@ class TestMergeWorktree:
             "lg_orch.worktree.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
             return_value=bad_checkout,
-        ):
-            with pytest.raises(WorktreeError, match="git checkout"):
-                asyncio.run(merge_worktree(ctx))
+        ), pytest.raises(WorktreeError, match="git checkout"):
+            asyncio.run(merge_worktree(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -254,10 +248,10 @@ class TestWorktreeLease:
                 patch("lg_orch.worktree.create_worktree", create_mock),
                 patch("lg_orch.worktree.remove_worktree", remove_mock),
                 patch("lg_orch.worktree.merge_worktree", merge_mock),
+                pytest.raises(RuntimeError, match="body error"),
             ):
-                with pytest.raises(RuntimeError, match="body error"):
-                    async with WorktreeLease("r3", "/repo", merge=True):
-                        raise RuntimeError("body error")
+                async with WorktreeLease("r3", "/repo", merge=True):
+                    raise RuntimeError("body error")
 
         asyncio.run(_run())
         merge_mock.assert_not_awaited()

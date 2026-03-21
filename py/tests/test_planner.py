@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -111,13 +112,19 @@ def test_planner_shapes_constraints_from_semantic_memory() -> None:
                     {
                         "kind": "approval_history",
                         "source": "approved",
-                        "summary": "approved apply patch for py/src/lg_orch/remote_api.py with checkpoint resume",
+                        "summary": (
+                            "approved apply patch for py/src/lg_orch/remote_api.py"
+                            " with checkpoint resume"
+                        ),
                         "created_at": "2026-03-18T00:00:00Z",
                     },
                     {
                         "kind": "loop_summary",
                         "source": "verification_failed",
-                        "summary": "previous retry failed in py/src/lg_orch/remote_api.py until checkpoint handling was added",
+                        "summary": (
+                            "previous retry failed in py/src/lg_orch/remote_api.py"
+                            " until checkpoint handling was added"
+                        ),
                         "created_at": "2026-03-17T00:00:00Z",
                     },
                 ]
@@ -127,12 +134,16 @@ def test_planner_shapes_constraints_from_semantic_memory() -> None:
     step = out["plan"]["steps"][0]
     assert "py/src/lg_orch/remote_api.py" in step["files_touched"]
     assert any(
-        criterion == "Approval-sensitive changes preserve checkpoint-backed resume and auditability."
+        criterion == (
+            "Approval-sensitive changes preserve checkpoint-backed resume and auditability."
+        )
         for criterion in out["plan"]["acceptance_criteria"]
     )
     handoff = step["handoff"]
     assert any(
-        constraint == "Preserve approval and checkpoint compatibility for approval-sensitive mutations."
+        constraint == (
+            "Preserve approval and checkpoint compatibility for approval-sensitive mutations."
+        )
         for constraint in handoff["constraints"]
     )
     assert any(entry["kind"] == "semantic_memory" for entry in handoff["evidence"])
@@ -159,13 +170,19 @@ def test_planner_uses_cached_procedure_to_shape_verification_and_handoff() -> No
     )
     assert out["plan"]["verification"][0]["tool"] == "exec"
     assert any(
-        criterion == "Validated procedure memory 'run_tests_check_output' is reused when compatible with current evidence."
+        criterion == (
+            "Validated procedure memory 'run_tests_check_output' is reused"
+            " when compatible with current evidence."
+        )
         for criterion in out["plan"]["acceptance_criteria"]
     )
     handoff = out["plan"]["steps"][0]["handoff"]
     assert any(entry["kind"] == "procedure_cache" for entry in handoff["evidence"])
     assert any(
-        constraint == "Prefer the validated cached procedure 'run_tests_check_output' when it remains compatible with current evidence."
+        constraint == (
+            "Prefer the validated cached procedure 'run_tests_check_output'"
+            " when it remains compatible with current evidence."
+        )
         for constraint in handoff["constraints"]
     )
 
@@ -826,7 +843,11 @@ def test_format_mcp_tool_catalog_includes_input_schema_properties() -> None:
 
 def test_format_mcp_tool_catalog_omits_schema_when_no_properties() -> None:
     tools: list[dict[str, Any]] = [
-        {"name": "ping", "description": "Pings the server.", "inputSchema": {"type": "object", "properties": {}}},
+        {
+            "name": "ping",
+            "description": "Pings the server.",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
     ]
     result = _format_mcp_tool_catalog(tools)
     assert "## Available MCP Tools" in result
@@ -1053,7 +1074,11 @@ def test_planner_mcp_tool_catalog_uses_runtime_tools_not_hardcoded_names(
             request="use custom tool",
             _repo_root=".",
             mcp_tools=[
-                {"name": custom_tool_name, "description": "A custom runtime tool.", "server_name": "custom"},
+                {
+                    "name": custom_tool_name,
+                    "description": "A custom runtime tool.",
+                    "server_name": "custom",
+                },
             ],
             _models={
                 "planner": {

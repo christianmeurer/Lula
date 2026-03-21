@@ -140,11 +140,11 @@ def start_jwks_background_refresh(
     _stop_refresh.clear()
 
     def _loop() -> None:
+        import contextlib
+
         while not _stop_refresh.wait(timeout=interval_seconds):
-            try:
+            with contextlib.suppress(Exception):
                 _fetch_jwks(jwks_url)
-            except Exception:  # noqa: BLE001
-                pass  # network hiccup — next tick will retry
 
     _jwks_refresh_task = threading.Thread(target=_loop, daemon=True, name="jwks-refresh")
     _jwks_refresh_task.start()
@@ -209,10 +209,11 @@ def verify_token(token: str, settings: JWTSettings) -> TokenClaims:
         raise AuthError(401, "missing_sub_claim")
 
     roles_raw = payload.get("roles", [])
-    if isinstance(roles_raw, list):
-        roles = [str(r) for r in roles_raw if isinstance(r, str)]
-    else:
-        roles = []
+    roles = (
+        [str(r) for r in roles_raw if isinstance(r, str)]
+        if isinstance(roles_raw, list)
+        else []
+    )
 
     exp_raw = payload.get("exp")
     iat_raw = payload.get("iat")
@@ -279,8 +280,8 @@ def get_current_user(settings: JWTSettings | None = None) -> Any:
     bearer_scheme = HTTPBearer(auto_error=False)
 
     async def _dependency(
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-        _settings: JWTSettings = Depends(lambda: settings or JWTSettings.from_env()),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),  # noqa: B008
+        _settings: JWTSettings = Depends(lambda: settings or JWTSettings.from_env()),  # noqa: B008
     ) -> TokenClaims:
         if not _settings.enabled:
             return TokenClaims(sub="anonymous", roles=[], exp=0, iat=0)
@@ -317,8 +318,8 @@ def require_roles(*roles: str, settings: JWTSettings | None = None) -> Any:
     bearer_scheme = HTTPBearer(auto_error=False)
 
     async def _dependency(
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-        _settings: JWTSettings = Depends(lambda: settings or JWTSettings.from_env()),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),  # noqa: B008
+        _settings: JWTSettings = Depends(lambda: settings or JWTSettings.from_env()),  # noqa: B008
     ) -> TokenClaims:
         if not _settings.enabled:
             return TokenClaims(sub="anonymous", roles=list(required), exp=0, iat=0)

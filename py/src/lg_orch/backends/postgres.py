@@ -275,12 +275,15 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
             conn.row_factory = _dict_row_factory  # type: ignore[attr-defined]
             if checkpoint_id is not None:
                 row = await conn.fetchrow(
-                    f"SELECT * FROM {tbl} WHERE thread_id = $1 AND checkpoint_ns = $2 AND checkpoint_id = $3",
+                    f"SELECT * FROM {tbl}"
+                    f" WHERE thread_id = $1 AND checkpoint_ns = $2 AND checkpoint_id = $3",
                     thread_id, checkpoint_ns, checkpoint_id,
                 )
             else:
                 row = await conn.fetchrow(
-                    f"SELECT * FROM {tbl} WHERE thread_id = $1 AND checkpoint_ns = $2 ORDER BY created_at DESC LIMIT 1",
+                    f"SELECT * FROM {tbl}"
+                    f" WHERE thread_id = $1 AND checkpoint_ns = $2"
+                    f" ORDER BY created_at DESC LIMIT 1",
                     thread_id, checkpoint_ns,
                 )
             if row is None:
@@ -321,18 +324,17 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
             f"{where_extra} ORDER BY created_at DESC{limit_clause}"
         )
 
-        async with pool.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(query, params)
-                cols = [desc[0] for desc in cur.description or []]
-                async for row_tuple in cur:
-                    row = dict(zip(cols, row_tuple))
-                    tup = self._row_to_tuple(row, requested_config=None)
-                    if filter is not None and any(
-                        tup.metadata.get(k) != v for k, v in filter.items()
-                    ):
-                        continue
-                    yield tup
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(query, params)
+            cols = [desc[0] for desc in cur.description or []]
+            async for row_tuple in cur:
+                row = dict(zip(cols, row_tuple, strict=False))
+                tup = self._row_to_tuple(row, requested_config=None)
+                if filter is not None and any(
+                    tup.metadata.get(k) != v for k, v in filter.items()
+                ):
+                    continue
+                yield tup
 
     async def aput(
         self,
@@ -405,7 +407,8 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    f"SELECT pending_writes FROM {tbl} WHERE thread_id = $1 AND checkpoint_ns = $2 AND checkpoint_id = $3",
+                    f"SELECT pending_writes FROM {tbl}"
+                    f" WHERE thread_id = $1 AND checkpoint_ns = $2 AND checkpoint_id = $3",
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 row = await cur.fetchone()
@@ -440,7 +443,8 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
                 )
 
             await conn.execute(
-                f"UPDATE {tbl} SET pending_writes = $1 WHERE thread_id = $2 AND checkpoint_ns = $3 AND checkpoint_id = $4",
+                f"UPDATE {tbl} SET pending_writes = $1"
+                f" WHERE thread_id = $2 AND checkpoint_ns = $3 AND checkpoint_id = $4",
                 json.dumps(existing_writes),
                 thread_id,
                 checkpoint_ns,

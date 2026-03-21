@@ -3,7 +3,9 @@ from __future__ import annotations
 from lg_orch.nodes.router import _default_route
 
 
-def test_default_route_prefers_deep_planning_when_semantic_memory_recalls_multiple_matches() -> None:
+def test_default_route_prefers_deep_planning_when_semantic_memory_recalls_multiple_matches() -> (
+    None
+):
     route = _default_route(
         {
             "request": "summarize the relevant fixes for approval and resume",

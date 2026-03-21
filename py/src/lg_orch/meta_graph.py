@@ -17,18 +17,19 @@ import asyncio
 import dataclasses
 import time
 from collections import deque
-from typing import Any, Awaitable, Callable, Literal
+from collections.abc import Awaitable, Callable
+from typing import Any, Literal
 
 import structlog
 
 from lg_orch.worktree import WorktreeLease
 
 __all__ = [
-    "SubAgentTask",
     "DependencyGraph",
     "DependencyPatch",
     "MetaGraphScheduler",
     "MetaRunResult",
+    "SubAgentTask",
     "run_meta_graph",
 ]
 
@@ -223,7 +224,7 @@ class DependencyGraph:
     def ready_tasks(
         self,
         completed_ids: set[str],
-        failed_ids: set[str],  # noqa: ARG002  — kept for API symmetry
+        failed_ids: set[str],
     ) -> list[SubAgentTask]:
         """Return pending tasks whose every dependency has completed."""
         ready: list[SubAgentTask] = []

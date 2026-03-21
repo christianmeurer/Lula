@@ -10,6 +10,25 @@ from typing import Any
 
 import jsonschema
 
+from lg_orch.logging import get_logger
+from lg_orch.memory import (
+    ensure_history_policy,
+    get_compression_summary,
+    prune_post_verification_history,
+)
+from lg_orch.model_routing import record_model_route, tool_routing_metadata
+from lg_orch.nodes._utils import validate_base_url as _validate_base_url_fn
+from lg_orch.state import (
+    AgentHandoff,
+    HandoffEvidence,
+    RecoveryAction,
+    RecoveryPacket,
+    VerificationCheck,
+    VerifierReport,
+)
+from lg_orch.tools import RunnerClient
+from lg_orch.trace import append_event
+
 _VERIFIER_SCHEMA_PATH = (
     Path(__file__).parent.parent.parent.parent.parent / "schemas" / "verifier_report.schema.json"
 )
@@ -23,24 +42,6 @@ def _load_verifier_schema() -> dict[str, Any]:
 
 
 VERIFIER_SCHEMA: dict[str, Any] = _load_verifier_schema()
-
-from lg_orch.logging import get_logger
-from lg_orch.memory import (
-    ensure_history_policy,
-    get_compression_summary,
-    prune_post_verification_history,
-)
-from lg_orch.model_routing import record_model_route, tool_routing_metadata
-from lg_orch.state import (
-    AgentHandoff,
-    HandoffEvidence,
-    RecoveryAction,
-    RecoveryPacket,
-    VerificationCheck,
-    VerifierReport,
-)
-from lg_orch.tools import RunnerClient
-from lg_orch.trace import append_event
 
 _TEST_FAILURE_HINTS = (
     "assert",
@@ -77,9 +78,6 @@ _ARCH_MISMATCH_HINTS = (
     "path escapes root",
     "read denied",
 )
-
-
-from lg_orch.nodes._utils import validate_base_url as _validate_base_url_fn
 
 
 def _validate_base_url(url: str) -> bool:
@@ -222,7 +220,9 @@ def _is_test_failure_post_change(
     return patch_applied
 
 
-def _requires_formal_verification(state: dict[str, Any], tool_results: list[dict[str, Any]]) -> list[str]:
+def _requires_formal_verification(
+    state: dict[str, Any], tool_results: list[dict[str, Any]]
+) -> list[str]:
     if not state.get("_vericoding_enabled", False):
         return []
 
@@ -354,7 +354,10 @@ def _classify_retry(
                  {
                      "failure_class": "formal_verification_failed",
                      "failure_fingerprint": fingerprint,
-                     "rationale": "Symbolic proof checker rejected the implementation. The logic must be mathematically verified.",
+                     "rationale": (
+                         "Symbolic proof checker rejected the implementation."
+                         " The logic must be mathematically verified."
+                     ),
                      "retry_target": "planner",
                      "context_scope": "working_set",
                      "plan_action": "amend",
@@ -388,7 +391,10 @@ def _classify_retry(
                 {
                     "failure_class": "test_failure_post_change",
                     "failure_fingerprint": fingerprint,
-                    "rationale": "test failed after a patch was applied; coder should attempt a localized repair before broader replanning",
+                    "rationale": (
+                        "test failed after a patch was applied; coder should attempt"
+                        " a localized repair before broader replanning"
+                    ),
                     "retry_target": "coder",
                     "context_scope": "working_set",
                     "plan_action": "amend",
@@ -406,7 +412,10 @@ def _classify_retry(
                 {
                     "failure_class": "localized_verification_failure",
                     "failure_fingerprint": fingerprint,
-                    "rationale": "verification failed after a bounded patch; coder should attempt a localized repair before broader replanning",
+                    "rationale": (
+                        "verification failed after a bounded patch; coder should attempt"
+                        " a localized repair before broader replanning"
+                    ),
                     "retry_target": "coder",
                     "context_scope": "working_set",
                     "plan_action": "amend",
@@ -522,27 +531,48 @@ def _next_handoff_payload(
 
     evidence: list[dict[str, Any]] = []
     if request:
-        evidence.append(HandoffEvidence(kind="request", ref="user_request", detail=request).model_dump())
+        evidence.append(
+            HandoffEvidence(kind="request", ref="user_request", detail=request).model_dump()
+        )
     if summary:
-        evidence.append(HandoffEvidence(kind="verification", ref=failure_class or "verification_failed", detail=summary).model_dump())
+        evidence.append(
+            HandoffEvidence(
+                kind="verification",
+                ref=failure_class or "verification_failed",
+                detail=summary,
+            ).model_dump()
+        )
     prior_objective = str(active_handoff.get("objective", "")).strip()
     if prior_objective:
-        evidence.append(HandoffEvidence(kind="prior_handoff", ref=str(active_handoff.get("consumer", "")), detail=prior_objective).model_dump())
+        evidence.append(
+            HandoffEvidence(
+                kind="prior_handoff",
+                ref=str(active_handoff.get("consumer", "")),
+                detail=prior_objective,
+            ).model_dump()
+        )
 
     objective = "Replan the next bounded iteration using the latest verifier evidence."
     constraints = ["Prefer a bounded next step."]
     acceptance_checks = ["The next action addresses the verifier evidence."]
     if consumer == "coder":
-        objective = "Prepare a localized repair using the current plan and the latest verifier evidence."
+        objective = (
+            "Prepare a localized repair using the current plan and the latest verifier evidence."
+        )
         constraints = [
-            "Stay within the current file scope unless evidence proves a broader change is required.",
+            "Stay within the current file scope unless evidence proves"
+            " a broader change is required.",
             "Prefer amending the existing bounded plan over broad replanning.",
         ]
-        acceptance_checks = ["The localized failure is addressed without broadening scope unnecessarily."]
+        acceptance_checks = [
+            "The localized failure is addressed without broadening scope unnecessarily."
+        ]
     elif consumer == "context_builder":
         objective = "Rebuild repository context before the next bounded planning iteration."
         constraints = ["Discard stale working-set assumptions before replanning."]
-        acceptance_checks = ["The next context snapshot resolves the detected architecture mismatch."]
+        acceptance_checks = [
+            "The next context snapshot resolves the detected architecture mismatch."
+        ]
     elif consumer == "router":
         objective = "Re-route the task after repeated verification failures."
         constraints = ["Choose a stronger recovery topology before executing again."]
@@ -557,7 +587,10 @@ def _next_handoff_payload(
         constraints=constraints,
         acceptance_checks=acceptance_checks,
         retry_budget=1,
-        provenance=[f"verifier:loop:{current_loop}", f"failure_class:{failure_class or 'verification_failed'}"],
+        provenance=[
+            f"verifier:loop:{current_loop}",
+            f"failure_class:{failure_class or 'verification_failed'}",
+        ],
     ).model_dump()
 
 
@@ -595,9 +628,15 @@ def _loop_summary_entry(
     }
 
 
-def _updated_recovery_facts(state: dict[str, Any], *, report: dict[str, Any], current_loop: int) -> list[dict[str, Any]]:
+def _updated_recovery_facts(
+    state: dict[str, Any], *, report: dict[str, Any], current_loop: int
+) -> list[dict[str, Any]]:
     facts_raw = state.get("facts", [])
-    facts = [dict(entry) for entry in facts_raw if isinstance(entry, dict)] if isinstance(facts_raw, list) else []
+    facts = (
+        [dict(entry) for entry in facts_raw if isinstance(entry, dict)]
+        if isinstance(facts_raw, list)
+        else []
+    )
     recovery_packet_raw = report.get("recovery_packet", {})
     recovery_packet = dict(recovery_packet_raw) if isinstance(recovery_packet_raw, dict) else {}
     if not recovery_packet:
@@ -624,7 +663,10 @@ def _updated_recovery_facts(state: dict[str, Any], *, report: dict[str, Any], cu
     }
 
     fingerprint = str(next_fact.get("failure_fingerprint", "")).strip()
-    updated = [entry for entry in facts if str(entry.get("failure_fingerprint", "")).strip() != fingerprint]
+    updated = [
+        entry for entry in facts
+        if str(entry.get("failure_fingerprint", "")).strip() != fingerprint
+    ]
     updated.append(next_fact)
     updated.sort(
         key=lambda entry: (
@@ -642,7 +684,11 @@ def _evaluate_acceptance_checks(
     plan_raw = state.get("plan", {})
     plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
     criteria_raw = plan.get("acceptance_criteria", [])
-    criteria = [str(entry).strip() for entry in criteria_raw if isinstance(entry, str) and entry.strip()]
+    criteria = [
+        str(entry).strip()
+        for entry in criteria_raw
+        if isinstance(entry, str) and entry.strip()
+    ]
     if not criteria:
         return []
 
@@ -675,11 +721,17 @@ def _evaluate_acceptance_checks(
 
 
 def _acceptance_failure(acceptance_checks: list[dict[str, Any]]) -> tuple[dict[str, Any], str, str]:
-    unmet = [entry for entry in acceptance_checks if isinstance(entry, dict) and not bool(entry.get("ok", False))]
+    unmet = [
+        entry for entry in acceptance_checks
+        if isinstance(entry, dict) and not bool(entry.get("ok", False))
+    ]
     if not unmet:
         return {}, "", ""
 
-    summary = str(unmet[0].get("criterion", "acceptance criteria unmet")).strip() or "acceptance criteria unmet"
+    summary = (
+        str(unmet[0].get("criterion", "acceptance criteria unmet")).strip()
+        or "acceptance criteria unmet"
+    )
     fingerprint_seed = "|".join(str(entry.get("criterion", "")).strip() for entry in unmet)
     fingerprint = sha256(fingerprint_seed.encode("utf-8", errors="replace")).hexdigest()[:16]
     recovery = {
@@ -756,9 +808,15 @@ def _build_checks(tool_results: list[dict[str, Any]]) -> list[VerificationCheck]
     return checks
 
 
-def _run_verification_calls(state: dict[str, Any], tool_results: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _run_verification_calls(
+    state: dict[str, Any], tool_results: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if bool(state.get("_runner_enabled", True)) is False:
-        return tool_results, dict(state.get("budgets", {})) if isinstance(state.get("budgets", {}), dict) else {}
+        budgets_raw = state.get("budgets", {})
+        return (
+            tool_results,
+            dict(budgets_raw) if isinstance(budgets_raw, dict) else {},
+        )
 
     plan_raw = state.get("plan", {})
     plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
@@ -771,7 +829,8 @@ def _run_verification_calls(state: dict[str, Any], tool_results: list[dict[str, 
 
     runner_base_url = str(state.get("_runner_base_url", "http://127.0.0.1:8088"))
     if not _validate_base_url(runner_base_url):
-        return tool_results + [
+        return [
+            *tool_results,
             {
                 "tool": "verification_batch",
                 "ok": False,
@@ -782,14 +841,15 @@ def _run_verification_calls(state: dict[str, Any], tool_results: list[dict[str, 
                 "timing_ms": 0,
                 "artifacts": {"error": "invalid_base_url"},
                 "route": tool_routing_metadata(state, stage="verifier"),
-            }
+            },
         ], budgets
 
     tool_calls_limit = int(state.get("_budget_max_tool_calls_per_loop", 0) or 0)
     tool_calls_used = int(budgets.get("tool_calls_used", 0) or 0)
     route_metadata = tool_routing_metadata(state, stage="verifier")
     if tool_calls_limit > 0 and tool_calls_used + len(verification_calls) > tool_calls_limit:
-        return tool_results + [
+        return [
+            *tool_results,
             {
                 "tool": "verification_batch",
                 "ok": False,
@@ -803,7 +863,7 @@ def _run_verification_calls(state: dict[str, Any], tool_results: list[dict[str, 
                 "timing_ms": 0,
                 "artifacts": {"error": "tool_call_budget_exceeded"},
                 "route": route_metadata,
-            }
+            },
         ], budgets
 
     checkpoint_state_raw = state.get("_checkpoint", {})
@@ -826,7 +886,7 @@ def _run_verification_calls(state: dict[str, Any], tool_results: list[dict[str, 
     finally:
         client.close()
     budgets["tool_calls_used"] = tool_calls_used + len(calls)
-    return tool_results + batch_results, budgets
+    return [*tool_results, *batch_results], budgets
 
 
 def verifier(state: dict[str, Any]) -> dict[str, Any]:
@@ -869,7 +929,9 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
 
     files_to_verify = _requires_formal_verification(state, tool_results)
     if files_to_verify and bool(state.get("_runner_enabled", True)):
-        verification_failure = _run_formal_verification(state, files_to_verify, tool_routing_metadata(state, stage="verifier"))
+        verification_failure = _run_formal_verification(
+            state, files_to_verify, tool_routing_metadata(state, stage="verifier")
+        )
         if verification_failure:
              tool_results.append(verification_failure)
              log.info("formal_verification_failed", files=files_to_verify)
@@ -884,7 +946,9 @@ def verifier(state: dict[str, Any]) -> dict[str, Any]:
     current_loop = int(current_loop_state.get("current_loop", 0) or 0)
 
     try:
-        acceptance_checks = _evaluate_acceptance_checks(state, tool_results=tool_results, checks=checks)
+        acceptance_checks = _evaluate_acceptance_checks(
+            state, tool_results=tool_results, checks=checks
+        )
         acceptance_ok = all(bool(entry.get("ok", False)) for entry in acceptance_checks)
         if has_failures:
             recovery, discard_reason = _classify_retry(tool_results, current_loop=current_loop)

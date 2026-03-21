@@ -28,9 +28,7 @@ static REPO_LOCKS: LazyLock<Mutex<HashMap<PathBuf, Arc<TokioMutex<()>>>>> =
 
 fn repo_lock(repo: &Path) -> Arc<TokioMutex<()>> {
     let mut map = REPO_LOCKS.lock().unwrap();
-    map.entry(repo.to_path_buf())
-        .or_insert_with(|| Arc::new(TokioMutex::new(())))
-        .clone()
+    map.entry(repo.to_path_buf()).or_insert_with(|| Arc::new(TokioMutex::new(()))).clone()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,11 +86,8 @@ async fn git_dir(root_dir: &Path) -> anyhow::Result<String> {
 async fn metadata_dir(root_dir: &Path) -> anyhow::Result<PathBuf> {
     let git_dir_raw = git_dir(root_dir).await?;
     let git_path = Path::new(&git_dir_raw);
-    let absolute_git = if git_path.is_absolute() {
-        git_path.to_path_buf()
-    } else {
-        root_dir.join(git_path)
-    };
+    let absolute_git =
+        if git_path.is_absolute() { git_path.to_path_buf() } else { root_dir.join(git_path) };
     Ok(absolute_git.join("lg_orch").join("snapshots"))
 }
 
@@ -112,9 +107,7 @@ pub async fn create_snapshot(
 
     let (ok, head, stderr) = run_git(root_dir, &["rev-parse", "HEAD"]).await?;
     if !ok || head.is_empty() {
-        return Err(SnapshotError::Other(anyhow!(
-            "failed to resolve HEAD: {stderr}"
-        )));
+        return Err(SnapshotError::Other(anyhow!("failed to resolve HEAD: {stderr}")));
     }
 
     let now = chrono::Utc::now().timestamp();
@@ -131,9 +124,7 @@ pub async fn create_snapshot(
 
     let (ok_ref, _, stderr_ref) = run_git(root_dir, &["update-ref", &ref_name, &head]).await?;
     if !ok_ref {
-        return Err(SnapshotError::Other(anyhow!(
-            "failed to create snapshot ref: {stderr_ref}"
-        )));
+        return Err(SnapshotError::Other(anyhow!("failed to create snapshot ref: {stderr_ref}")));
     }
 
     let meta_dir = metadata_dir(root_dir).await?;
@@ -199,24 +190,18 @@ pub async fn undo_to_snapshot(
 
     let (ok_reset, _, stderr_reset) = run_git(root_dir, &["reset", "--hard", &commit]).await?;
     if !ok_reset {
-        return Err(SnapshotError::Other(anyhow!(
-            "failed git reset --hard: {stderr_reset}"
-        )));
+        return Err(SnapshotError::Other(anyhow!("failed git reset --hard: {stderr_reset}")));
     }
     let (ok_clean, _, stderr_clean) = run_git(root_dir, &["clean", "-fd"]).await?;
     if !ok_clean {
-        return Err(SnapshotError::Other(anyhow!(
-            "failed git clean -fd: {stderr_clean}"
-        )));
+        return Err(SnapshotError::Other(anyhow!("failed git clean -fd: {stderr_clean}")));
     }
 
-    let meta_path = metadata_dir(root_dir)
-        .await?
-        .join(format!("{resolved_snapshot}.json"));
+    let meta_path = metadata_dir(root_dir).await?.join(format!("{resolved_snapshot}.json"));
     let checkpoint = match fs::read_to_string(meta_path).await {
-        Ok(payload) => serde_json::from_str::<SnapshotRecord>(&payload)
-            .ok()
-            .and_then(|r| r.checkpoint),
+        Ok(payload) => {
+            serde_json::from_str::<SnapshotRecord>(&payload).ok().and_then(|r| r.checkpoint)
+        }
         Err(_) => None,
     };
 

@@ -4,11 +4,10 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import jwt as pyjwt
 import pytest
 from fastapi import Depends, FastAPI
-from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-import jwt as pyjwt
 
 from lg_orch.auth import (
     AuthError,
@@ -69,24 +68,28 @@ def _make_app(*, settings: JWTSettings) -> FastAPI:
         return {"ok": "true"}
 
     @app.get("/me")
-    async def me(claims: TokenClaims = Depends(get_current_user(settings=settings))) -> dict[str, Any]:
+    async def me(
+        claims: TokenClaims = Depends(get_current_user(settings=settings)),  # noqa: B008
+    ) -> dict[str, Any]:
         return {"sub": claims.sub, "roles": claims.roles}
 
     @app.get("/reader")
     async def reader(
-        claims: TokenClaims = Depends(require_roles("viewer", "operator", "admin", settings=settings)),
+        claims: TokenClaims = Depends(  # noqa: B008
+            require_roles("viewer", "operator", "admin", settings=settings)  # noqa: B008
+        ),
     ) -> dict[str, Any]:
         return {"sub": claims.sub}
 
     @app.post("/operator")
     async def operator_route(
-        claims: TokenClaims = Depends(require_roles("operator", "admin", settings=settings)),
+        claims: TokenClaims = Depends(require_roles("operator", "admin", settings=settings)),  # noqa: B008
     ) -> dict[str, Any]:
         return {"sub": claims.sub}
 
     @app.delete("/admin-only")
     async def admin_only(
-        claims: TokenClaims = Depends(require_roles("admin", settings=settings)),
+        claims: TokenClaims = Depends(require_roles("admin", settings=settings)),  # noqa: B008
     ) -> dict[str, Any]:
         return {"sub": claims.sub}
 
@@ -381,7 +384,7 @@ class TestJwksBackgroundRefresh:
                 def read(self) -> bytes:
                     return b'{"keys": []}'
 
-                def __enter__(self) -> "_FakeResp":
+                def __enter__(self) -> _FakeResp:
                     return self
 
                 def __exit__(self, *args: object) -> None:
@@ -391,7 +394,9 @@ class TestJwksBackgroundRefresh:
 
         monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
 
-        start_jwks_background_refresh("https://example.com/.well-known/jwks.json", interval_seconds=60)
+        start_jwks_background_refresh(
+            "https://example.com/.well-known/jwks.json", interval_seconds=60
+        )
 
         import lg_orch.auth as auth_mod
 
@@ -408,7 +413,7 @@ class TestJwksBackgroundRefresh:
                 def read(self) -> bytes:
                     return b'{"keys": []}'
 
-                def __enter__(self) -> "_FakeResp":
+                def __enter__(self) -> _FakeResp:
                     return self
 
                 def __exit__(self, *args: object) -> None:
@@ -418,12 +423,16 @@ class TestJwksBackgroundRefresh:
 
         monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
 
-        start_jwks_background_refresh("https://example.com/.well-known/jwks.json", interval_seconds=120)
+        start_jwks_background_refresh(
+            "https://example.com/.well-known/jwks.json", interval_seconds=120
+        )
 
         import lg_orch.auth as auth_mod
 
         first_thread = auth_mod._jwks_refresh_task
-        start_jwks_background_refresh("https://example.com/.well-known/jwks.json", interval_seconds=120)
+        start_jwks_background_refresh(
+            "https://example.com/.well-known/jwks.json", interval_seconds=120
+        )
         assert auth_mod._jwks_refresh_task is first_thread
 
     def test_stop_terminates_thread(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -435,7 +444,7 @@ class TestJwksBackgroundRefresh:
                 def read(self) -> bytes:
                     return b'{"keys": []}'
 
-                def __enter__(self) -> "_FakeResp":
+                def __enter__(self) -> _FakeResp:
                     return self
 
                 def __exit__(self, *args: object) -> None:
@@ -445,7 +454,9 @@ class TestJwksBackgroundRefresh:
 
         monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
 
-        start_jwks_background_refresh("https://example.com/.well-known/jwks.json", interval_seconds=300)
+        start_jwks_background_refresh(
+            "https://example.com/.well-known/jwks.json", interval_seconds=300
+        )
 
         import lg_orch.auth as auth_mod
 

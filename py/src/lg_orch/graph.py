@@ -46,7 +46,7 @@ def _make_traced_node(node_fn: Any, node_name: str) -> Any:
                 },
             ):
                 return node_fn(state)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # OTel must never break graph execution.
             return node_fn(state)
 

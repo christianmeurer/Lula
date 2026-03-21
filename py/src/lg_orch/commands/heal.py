@@ -45,9 +45,9 @@ def heal_command(args: Any, *, repo_root: Path) -> int:
     healing = HealingLoop(repo_path=repo_path, poll_interval_seconds=poll_interval)
     log.info("heal_daemon_starting", repo_path=repo_path, poll_interval=poll_interval)
 
-    try:
+    import contextlib
+
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(healing.run_until_cancelled())
-    except KeyboardInterrupt:
-        pass
 
     return 0

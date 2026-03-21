@@ -86,13 +86,15 @@ def test_record_model_route_appends_telemetry_marker() -> None:
 
 
 def test_record_inference_telemetry_captures_route_metadata() -> None:
+    from typing import ClassVar
+
     class _Response:
         latency_ms = 42
         provider = "remote_openai"
         model = "gpt-4.1"
-        usage = {"input_tokens": 120, "output_tokens": 12}
-        cache_metadata = {"x-cache-hit": "true"}
-        headers = {"x-request-id": "req-123"}
+        usage: ClassVar[dict[str, int]] = {"input_tokens": 120, "output_tokens": 12}
+        cache_metadata: ClassVar[dict[str, str]] = {"x-cache-hit": "true"}
+        headers: ClassVar[dict[str, str]] = {"x-request-id": "req-123"}
 
     state = {
         "route": {

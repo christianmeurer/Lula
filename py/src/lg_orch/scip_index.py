@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
-"""SCIP symbol-index reader (Wave 9 – Cross-Repository Microservice Orchestration).
+"""SCIP symbol-index reader (Wave 9 - Cross-Repository Microservice Orchestration).
 
 Reads a ``scip_index.json`` sidecar file from a repository root.  No protobuf
 dependency is required; the module works entirely with the stdlib ``json`` and
@@ -37,8 +37,8 @@ import os
 from dataclasses import dataclass, field
 
 __all__ = [
-    "ScipSymbol",
     "ScipIndex",
+    "ScipSymbol",
     "load_scip_index",
 ]
 
@@ -92,7 +92,7 @@ class ScipIndex:
         return [s for s in self.symbols if s.file_path == relative_path]
 
     def cross_repo_deps(
-        self, other: "ScipIndex"
+        self, other: ScipIndex
     ) -> list[tuple[ScipSymbol, ScipSymbol]]:
         """Return pairs ``(local_symbol, remote_symbol)`` where ``local_symbol``
         references a symbol that exists in ``other``.

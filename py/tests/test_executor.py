@@ -385,7 +385,10 @@ def test_coerce_approval_token_accepts_legacy_format() -> None:
 
 
 def test_coerce_approval_token_accepts_hmac_format() -> None:
-    hmac_token = "approval:apply_patch|1700000000|abcdef1234567890abcdef1234567890|deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    hmac_token = (
+        "approval:apply_patch|1700000000|abcdef1234567890abcdef1234567890"
+        "|deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    )
     result = _coerce_approval_token(
         {"challenge_id": "approval:apply_patch", "token": hmac_token}
     )

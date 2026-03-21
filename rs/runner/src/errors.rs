@@ -25,14 +25,12 @@ impl IntoResponse for ApiError {
         let (status, msg) = match &self {
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             ApiError::Forbidden(m) => (StatusCode::FORBIDDEN, m.clone()),
-            ApiError::ApprovalRequired(_) => (
-                StatusCode::PRECONDITION_REQUIRED,
-                "approval_required".to_string(),
-            ),
-            ApiError::RateLimitExceeded => (
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate limit exceeded".to_string(),
-            ),
+            ApiError::ApprovalRequired(_) => {
+                (StatusCode::PRECONDITION_REQUIRED, "approval_required".to_string())
+            }
+            ApiError::RateLimitExceeded => {
+                (StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded".to_string())
+            }
             ApiError::Other(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         };
         let body = match &self {

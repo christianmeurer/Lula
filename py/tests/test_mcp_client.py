@@ -124,7 +124,9 @@ def test_discover_tools_accepts_correct_hash() -> None:
     with patch.object(RunnerClient, "execute_tool", return_value=_mock_discover_response()):
         client = MCPClient(
             runner_client=runner,
-            server_configs={"mock": {"command": "python", "args": [], "schema_hash": _CORRECT_HASH}},
+            server_configs={
+                "mock": {"command": "python", "args": [], "schema_hash": _CORRECT_HASH}
+            },
         )
         tools = client.discover_tools()
     valid = [t for t in tools if not t.get("_schema_hash_mismatch")]

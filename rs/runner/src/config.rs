@@ -77,12 +77,7 @@ impl SandboxConfig {
 
         let enforce_read_only_root = std::env::var("LG_SANDBOX_ENFORCE_READONLY")
             .ok()
-            .map(|v| {
-                matches!(
-                    v.trim().to_ascii_lowercase().as_str(),
-                    "1" | "true" | "yes" | "on"
-                )
-            })
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
             .unwrap_or(true);
 
         let rootfs_image_path = std::env::var("LG_RUNNER_ROOTFS_IMAGE")
@@ -139,9 +134,8 @@ impl RateLimiter {
 /// This is the **single source of truth** for allowed commands.
 /// [`crate::tools::exec`] and [`crate::invariants`] both reference this
 /// constant so there is no risk of the two lists diverging.
-pub const ALLOWED_EXEC_COMMANDS: &[&str] = &[
-    "uv", "python", "pytest", "ruff", "mypy", "cargo", "git",
-];
+pub const ALLOWED_EXEC_COMMANDS: &[&str] =
+    &["uv", "python", "pytest", "ruff", "mypy", "cargo", "git"];
 
 /// Opaque per-process pool of live MCP subprocess clients.
 ///
@@ -218,10 +212,8 @@ impl RunnerConfig {
 
         let sandbox_policy = SandboxPolicy::from_env();
         let sandbox = SandboxConfig::from_env();
-        let allowed_commands: Vec<String> = ALLOWED_EXEC_COMMANDS
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect();
+        let allowed_commands: Vec<String> =
+            ALLOWED_EXEC_COMMANDS.iter().map(|s| (*s).to_string()).collect();
         let invariant_checker = build_checker(&root_dir, &allowed_commands);
 
         tracing::info!(

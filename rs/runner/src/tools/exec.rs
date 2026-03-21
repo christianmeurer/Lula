@@ -53,10 +53,7 @@ fn truncate_chars(input: &str, max_chars: usize) -> (String, bool) {
 
 fn diagnostics_to_artifact_value(diagnostics: &[Diagnostic]) -> Value {
     Value::Array(
-        diagnostics
-            .iter()
-            .map(|d| serde_json::to_value(d).unwrap_or(Value::Null))
-            .collect(),
+        diagnostics.iter().map(|d| serde_json::to_value(d).unwrap_or(Value::Null)).collect(),
     )
 }
 
@@ -64,7 +61,11 @@ fn diagnostics_to_artifact_value(diagnostics: &[Diagnostic]) -> Value {
     skip_all,
     fields(tool = "exec", challenge_id = tracing::field::Empty)
 )]
-pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Result<ToolEnvelope, ApiError> {
+pub async fn exec(
+    cfg: &RunnerConfig,
+    ctx: &mut ToolContext,
+    input: Value,
+) -> Result<ToolEnvelope, ApiError> {
     let inp: ExecIn =
         serde_json::from_value(input).map_err(|e| ApiError::BadRequest(e.to_string()))?;
     let cmd = inp.cmd.trim();
@@ -76,10 +77,8 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
     // Invariant pre-validation layer (neurosymbolic vericoding check).
     // Runs before the existing per-tool checks; does NOT replace them.
     {
-        let allowed_commands: Vec<String> = ALLOWED_EXEC_COMMANDS
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect();
+        let allowed_commands: Vec<String> =
+            ALLOWED_EXEC_COMMANDS.iter().map(|s| (*s).to_string()).collect();
         pre_validate_exec(
             &cfg.invariant_checker,
             "exec",
@@ -135,11 +134,8 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
 
     // Destructure to obtain the VMM handle separately so it stays alive for
     // the entire lifetime of the child process (dropping it kills the VM).
-    let crate::sandbox::SandboxResolution {
-        backend: resolved_backend,
-        vmm: vmm_handle,
-        ..
-    } = sandbox_resolution;
+    let crate::sandbox::SandboxResolution { backend: resolved_backend, vmm: vmm_handle, .. } =
+        sandbox_resolution;
 
     // When the MicroVmEphemeral backend is active and a live VMM handle is
     // present, configure and start the VM via the socket REST API before
@@ -148,31 +144,39 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
         if let Some(ref vmm) = vmm_handle {
             let kernel_path = cfg.sandbox.kernel_image_path.to_string_lossy();
             let rootfs_path = cfg.sandbox.rootfs_image_path.to_string_lossy();
-            vmm.configure_and_start(&kernel_path, &rootfs_path)
-                .await
-                .map_err(|e| {
-                    tracing::warn!(error = %e, "firecracker configure_and_start failed");
-                    e
-                })?;
+            vmm.configure_and_start(&kernel_path, &rootfs_path).await.map_err(|e| {
+                tracing::warn!(error = %e, "firecracker configure_and_start failed");
+                e
+            })?;
         }
     }
 
-    let cwd = inp
-        .cwd
-        .as_deref()
-        .map(|p| super::fs::resolve_under_root(cfg, p))
-        .transpose()?;
+    let cwd = inp.cwd.as_deref().map(|p| super::fs::resolve_under_root(cfg, p)).transpose()?;
 
     // Build the minimal safe environment that would be passed to any command.
     // Shared between the vsock guest path and the host-command paths below.
     let mut filtered_env: HashMap<String, String> = HashMap::new();
-    if let Ok(path) = std::env::var("PATH") { filtered_env.insert("PATH".to_string(), path); }
-    if let Ok(home) = std::env::var("HOME") { filtered_env.insert("HOME".to_string(), home); }
-    if let Ok(v) = std::env::var("CARGO_HOME") { filtered_env.insert("CARGO_HOME".to_string(), v); }
-    if let Ok(v) = std::env::var("RUSTUP_HOME") { filtered_env.insert("RUSTUP_HOME".to_string(), v); }
-    if let Ok(v) = std::env::var("UV_CACHE_DIR") { filtered_env.insert("UV_CACHE_DIR".to_string(), v); }
-    if let Ok(v) = std::env::var("VIRTUAL_ENV") { filtered_env.insert("VIRTUAL_ENV".to_string(), v); }
-    if let Ok(v) = std::env::var("PYTHONPATH") { filtered_env.insert("PYTHONPATH".to_string(), v); }
+    if let Ok(path) = std::env::var("PATH") {
+        filtered_env.insert("PATH".to_string(), path);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        filtered_env.insert("HOME".to_string(), home);
+    }
+    if let Ok(v) = std::env::var("CARGO_HOME") {
+        filtered_env.insert("CARGO_HOME".to_string(), v);
+    }
+    if let Ok(v) = std::env::var("RUSTUP_HOME") {
+        filtered_env.insert("RUSTUP_HOME".to_string(), v);
+    }
+    if let Ok(v) = std::env::var("UV_CACHE_DIR") {
+        filtered_env.insert("UV_CACHE_DIR".to_string(), v);
+    }
+    if let Ok(v) = std::env::var("VIRTUAL_ENV") {
+        filtered_env.insert("VIRTUAL_ENV".to_string(), v);
+    }
+    if let Ok(v) = std::env::var("PYTHONPATH") {
+        filtered_env.insert("PYTHONPATH".to_string(), v);
+    }
 
     // -----------------------------------------------------------------------
     // MicroVmEphemeral path — dispatch command to the guest agent via vsock.
@@ -212,7 +216,8 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
                 "runner_tool_calls_total",
                 "tool" => "exec",
                 "status" => if resp.ok { "ok" } else { "error" }
-            ).increment(1);
+            )
+            .increment(1);
 
             let env_out = if resp.ok {
                 let mut e = ToolEnvelope::ok(
@@ -231,8 +236,12 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
                     }),
                 )
                 .with_isolation(isolation);
-                if let Some(approval) = approval_metadata { e = e.with_approval(approval); }
-                if let Some(snapshot) = snapshot_metadata { e = e.with_snapshot(snapshot); }
+                if let Some(approval) = approval_metadata {
+                    e = e.with_approval(approval);
+                }
+                if let Some(snapshot) = snapshot_metadata {
+                    e = e.with_snapshot(snapshot);
+                }
                 e
             } else {
                 let diagnostics = parse_structured_diagnostics(&resp.stderr);
@@ -263,8 +272,12 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
                 )
                 .with_diagnostics(diagnostics)
                 .with_isolation(isolation);
-                if let Some(approval) = approval_metadata { e = e.with_approval(approval); }
-                if let Some(snapshot) = snapshot_metadata { e = e.with_snapshot(snapshot); }
+                if let Some(approval) = approval_metadata {
+                    e = e.with_approval(approval);
+                }
+                if let Some(snapshot) = snapshot_metadata {
+                    e = e.with_snapshot(snapshot);
+                }
                 e
             };
             return Ok(env_out);
@@ -291,9 +304,7 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "/usr/bin/unshare".to_string());
             let mut cmd_obj = Command::new(&unshare_path);
-            cmd_obj.args(["--pid", "--mount", "--net", "--fork", "--"])
-                .arg(cmd)
-                .args(&inp.args);
+            cmd_obj.args(["--pid", "--mount", "--net", "--fork", "--"]).arg(cmd).args(&inp.args);
             cmd_obj
         }
         _ => {
@@ -302,9 +313,7 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
             cmd_obj
         }
     };
-    c.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     // Strip the parent environment to prevent secret leakage via env vars.
     // Re-inject only the minimal safe set built above.
     c.env_clear();
@@ -325,9 +334,7 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
     let cgroup_name = if resolved_backend == SandboxBackend::LinuxNamespace {
         if let Some(pid) = child.id() {
             let name = format!("run-{pid}");
-            if let Err(e) =
-                apply_cgroup_v2_limits(&name, &CgroupLimits::default(), pid)
-            {
+            if let Err(e) = apply_cgroup_v2_limits(&name, &CgroupLimits::default(), pid) {
                 tracing::warn!(error = %e, "cgroup v2 limit application failed; continuing without limits");
             }
             Some(name)
@@ -418,20 +425,11 @@ pub async fn exec(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Re
 fn is_state_modifying_command(cmd: &str, args: &[String]) -> bool {
     let normalized_cmd = cmd.trim().to_ascii_lowercase();
     if normalized_cmd == "git" {
-        let sub = args
-            .first()
-            .map(|s| s.trim().to_ascii_lowercase())
-            .unwrap_or_default();
-        return matches!(
-            sub.as_str(),
-            "commit" | "push" | "apply" | "cherry-pick" | "revert"
-        );
+        let sub = args.first().map(|s| s.trim().to_ascii_lowercase()).unwrap_or_default();
+        return matches!(sub.as_str(), "commit" | "push" | "apply" | "cherry-pick" | "revert");
     }
     if normalized_cmd == "cargo" {
-        let sub = args
-            .first()
-            .map(|s| s.trim().to_ascii_lowercase())
-            .unwrap_or_default();
+        let sub = args.first().map(|s| s.trim().to_ascii_lowercase()).unwrap_or_default();
         return matches!(sub.as_str(), "fix" | "install");
     }
     if normalized_cmd == "python" || normalized_cmd == "uv" {
@@ -543,12 +541,8 @@ mod tests {
         let cfg = RunnerConfig::new(td.path(), Some("dev"), None).unwrap();
         let mut ctx = ToolContext::default();
         // U+202E right-to-left override triggers detect_prompt_injection
-        let result = exec(
-            &cfg,
-            &mut ctx,
-            json!({"cmd": "git", "args": ["log", "safe\u{202E}evil"]}),
-        )
-        .await;
+        let result =
+            exec(&cfg, &mut ctx, json!({"cmd": "git", "args": ["log", "safe\u{202E}evil"]})).await;
         assert!(
             matches!(result, Err(ApiError::Forbidden(ref msg)) if msg.contains("prompt_injection_detected")),
             "expected Forbidden(prompt_injection_detected), got: {result:?}"
@@ -619,13 +613,14 @@ mod tests {
         std::env::remove_var("LG_RUNNER_MICROVM_ROOTFS_IMAGE");
 
         if let Ok(env) = result {
-             let artifacts = env.artifacts;
-             let isolation_backend = artifacts.get("isolation_backend").and_then(|v| v.as_str()).unwrap_or("");
-             assert_eq!(isolation_backend, "microvm_ephemeral");
+            let artifacts = env.artifacts;
+            let isolation_backend =
+                artifacts.get("isolation_backend").and_then(|v| v.as_str()).unwrap_or("");
+            assert_eq!(isolation_backend, "microvm_ephemeral");
         } else if let Err(ApiError::Other(_)) = result {
-             // If spawn fails, that's fine too, as long as it tried.
+            // If spawn fails, that's fine too, as long as it tried.
         } else if let Err(e) = result {
-             panic!("unexpected error: {e:?}");
+            panic!("unexpected error: {e:?}");
         }
     }
 }

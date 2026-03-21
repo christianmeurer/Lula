@@ -34,10 +34,7 @@ impl opentelemetry::propagation::Extractor for HeaderMapCarrier<'_> {
     }
 
     fn keys(&self) -> Vec<&str> {
-        self.0
-            .keys()
-            .map(|k| k.as_str())
-            .collect()
+        self.0.keys().map(|k| k.as_str()).collect()
     }
 }
 
@@ -159,9 +156,7 @@ mod tests {
         let mut headers = axum::http::HeaderMap::new();
         headers.insert(
             "traceparent",
-            "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
-                .parse()
-                .unwrap(),
+            "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".parse().unwrap(),
         );
         // Should not panic with a well-formed traceparent.
         propagate_trace_context(&headers);

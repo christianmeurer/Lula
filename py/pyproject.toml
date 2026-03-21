@@ -85,6 +85,10 @@ select = [
   "RUF",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# visualize.py embeds HTML/CSS/JS template strings that cannot be split
+"src/lg_orch/visualize.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

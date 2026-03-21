@@ -68,7 +68,7 @@ def _otel_trace_context_processor(
         if ctx is not None and ctx.is_valid:
             event_dict["trace_id"] = format(ctx.trace_id, "032x")
             event_dict["span_id"] = format(ctx.span_id, "016x")
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return event_dict
 
@@ -86,7 +86,7 @@ def init_telemetry(
     The function is idempotent — calling it more than once (e.g. in tests)
     is safe and will not install a second provider.
     """
-    global _TELEMETRY_INITIALIZED  # noqa: PLW0603
+    global _TELEMETRY_INITIALIZED
     if _TELEMETRY_INITIALIZED:
         return
     _TELEMETRY_INITIALIZED = True
@@ -120,7 +120,7 @@ def init_telemetry(
         exporter = OTLPSpanExporter(endpoint=resolved_endpoint, insecure=True)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         otel_trace.set_tracer_provider(provider)
-    except Exception:  # noqa: BLE001
+    except Exception:
         # Fall back gracefully: install a no-op provider so downstream code
         # can still call opentelemetry.trace.get_tracer() without crashing.
         try:
@@ -128,7 +128,7 @@ def init_telemetry(
             from opentelemetry.trace import NoOpTracerProvider
 
             otel_trace.set_tracer_provider(NoOpTracerProvider())
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +52,9 @@ def test_api_http_response_creates_run_lists_runs_and_loads_trace(
     captured_cwd: list[Path] = []
     captured_env: dict[str, str] = {}
 
-    def fake_spawn(*, argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> DummyProcess:
+    def fake_spawn(
+        *, argv: list[str], cwd: Path, env: dict[str, str] | None = None
+    ) -> DummyProcess:
         captured_argv[:] = list(argv)
         captured_cwd[:] = [cwd]
         captured_env.clear()
@@ -320,7 +321,7 @@ def test_run_store_persists_on_create_and_finish(
     )
     monkeypatch.setattr(remote_api, "_start_daemon_thread", lambda *, target, name: target())
 
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs",
@@ -347,7 +348,9 @@ def test_api_http_response_marks_run_suspended_when_trace_requires_approval(
 ) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
 
-    def fake_spawn(*, argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> DummyProcess:
+    def fake_spawn(
+        *, argv: list[str], cwd: Path, env: dict[str, str] | None = None
+    ) -> DummyProcess:
         run_id = argv[argv.index("--run-id") + 1]
         trace_dir = Path(argv[argv.index("--trace-out-dir") + 1])
         trace_path = (cwd / trace_dir / f"run-{run_id}.json").resolve()
@@ -405,7 +408,9 @@ def test_api_http_response_approves_suspended_run_and_resumes(
     service = RemoteAPIService(repo_root=tmp_path)
     spawn_calls: list[dict[str, Any]] = []
 
-    def fake_spawn(*, argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> DummyProcess:
+    def fake_spawn(
+        *, argv: list[str], cwd: Path, env: dict[str, str] | None = None
+    ) -> DummyProcess:
         call_no = len(spawn_calls)
         spawn_calls.append({"argv": list(argv), "env": dict(env) if env is not None else {}})
         run_id = argv[argv.index("--run-id") + 1]
@@ -472,7 +477,9 @@ def test_api_http_response_approves_suspended_run_and_resumes(
     payload = json.loads(body.decode("utf-8"))
     assert payload["status"] == "running"
     assert payload["pending_approval"] is False
-    assert spawn_calls[1]["argv"][-5:] == ["--resume", "--thread-id", "thread-abc", "--checkpoint-id", "cp-123"]
+    assert spawn_calls[1]["argv"][-5:] == [
+        "--resume", "--thread-id", "thread-abc", "--checkpoint-id", "cp-123",
+    ]
     approvals = json.loads(spawn_calls[1]["env"]["LG_RESUME_APPROVALS_JSON"])
     assert approvals["apply_patch"]["challenge_id"] == "approval:apply_patch"
 
@@ -482,7 +489,9 @@ def test_api_http_response_rejects_suspended_run(
 ) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
 
-    def fake_spawn(*, argv: list[str], cwd: Path, env: dict[str, str] | None = None) -> DummyProcess:
+    def fake_spawn(
+        *, argv: list[str], cwd: Path, env: dict[str, str] | None = None
+    ) -> DummyProcess:
         run_id = argv[argv.index("--run-id") + 1]
         trace_dir = Path(argv[argv.index("--trace-out-dir") + 1])
         trace_path = (cwd / trace_dir / f"run-{run_id}.json").resolve()
@@ -563,13 +572,17 @@ def test_approval_token_uses_hmac_format_when_secret_set(monkeypatch: pytest.Mon
     assert len(signature) == 64
 
 
-def test_approval_token_falls_back_to_legacy_when_no_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_approval_token_falls_back_to_legacy_when_no_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("LG_RUNNER_APPROVAL_SECRET", raising=False)
     token = _approval_token_for_challenge("approval:apply_patch")
     assert token == "approve:approval:apply_patch"
 
 
-def test_approval_token_hmac_is_consistent_with_known_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_approval_token_hmac_is_consistent_with_known_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import hashlib
     import hmac as _hmac
 
@@ -579,7 +592,7 @@ def test_approval_token_hmac_is_consistent_with_known_secret(monkeypatch: pytest
     assert len(parts) == 4
     challenge_id, iat_str, nonce, signature = parts
     message = f"{challenge_id}|{iat_str}|{nonce}"
-    expected_sig = _hmac.new("known-secret".encode(), message.encode(), hashlib.sha256).hexdigest()
+    expected_sig = _hmac.new(b"known-secret", message.encode(), hashlib.sha256).hexdigest()
     assert signature == expected_sig
 
 
@@ -837,8 +850,8 @@ def test_push_run_event_sends_through_active_stream(
        sentinel, and return — all within 5 seconds.
     """
     import io as _io
-    import time as _time_mod
     import threading as _th
+    import time as _time_mod
 
     import lg_orch.remote_api as _ra
     from lg_orch.remote_api import _stream_new_sse, push_run_event
@@ -1128,7 +1141,9 @@ def test_vote_on_run_returns_404_without_policy(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_start_healing_loop_returns_loop_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_healing_loop_returns_loop_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import threading
 
     service = RemoteAPIService(repo_root=tmp_path)
@@ -1220,7 +1235,7 @@ def test_get_healing_jobs_returns_list(tmp_path: Path, monkeypatch: pytest.Monke
 
 def test_metrics_endpoint_returns_200(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, content_type, body = _api_http_response(
+    status, content_type, _body = _api_http_response(
         service,
         method="GET",
         request_path="/metrics",

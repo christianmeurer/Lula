@@ -113,7 +113,9 @@ class ApprovalEngine:
             if vote.action == "reject" and vote.role in required_set:
                 return "rejected"
 
-        approving_roles = {v.role for v in votes if v.action == "approve" and v.role in required_set}
+        approving_roles = {
+            v.role for v in votes if v.action == "approve" and v.role in required_set
+        }
 
         if policy.require_all_roles:
             if required_set and required_set.issubset(approving_roles):

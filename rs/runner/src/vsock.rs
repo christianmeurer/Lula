@@ -66,8 +66,8 @@ where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
-    let mut json_bytes =
-        serde_json::to_vec(req).map_err(|e| ApiError::Other(anyhow::anyhow!("vsock serialize: {e}")))?;
+    let mut json_bytes = serde_json::to_vec(req)
+        .map_err(|e| ApiError::Other(anyhow::anyhow!("vsock serialize: {e}")))?;
     json_bytes.push(b'\n');
 
     writer
@@ -75,10 +75,7 @@ where
         .await
         .map_err(|e| ApiError::Other(anyhow::anyhow!("vsock write: {e}")))?;
 
-    writer
-        .flush()
-        .await
-        .map_err(|e| ApiError::Other(anyhow::anyhow!("vsock flush: {e}")))?;
+    writer.flush().await.map_err(|e| ApiError::Other(anyhow::anyhow!("vsock flush: {e}")))?;
 
     let mut line = String::new();
     let mut buf_reader = BufReader::new(reader);
@@ -113,13 +110,7 @@ pub async fn send_guest_command(
     use std::os::unix::io::{AsRawFd, FromRawFd};
 
     // Create an AF_VSOCK stream socket.
-    let fd = unsafe {
-        libc::socket(
-            libc::AF_VSOCK,
-            libc::SOCK_STREAM | libc::SOCK_CLOEXEC,
-            0,
-        )
-    };
+    let fd = unsafe { libc::socket(libc::AF_VSOCK, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0) };
     if fd < 0 {
         return Err(ApiError::Other(anyhow::anyhow!(
             "vsock socket() failed: {}",
@@ -285,7 +276,8 @@ mod tests {
 
     #[test]
     fn test_guest_command_response_deserializes() {
-        let json = r#"{"ok":true,"exit_code":0,"stdout":"test output","stderr":"","timing_ms":1234}"#;
+        let json =
+            r#"{"ok":true,"exit_code":0,"stdout":"test output","stderr":"","timing_ms":1234}"#;
         let resp: GuestCommandResponse = serde_json::from_str(json).unwrap();
         assert!(resp.ok);
         assert_eq!(resp.exit_code, 0);
@@ -313,8 +305,7 @@ mod tests {
             env: HashMap::new(),
             timeout_ms: 5000,
         };
-        let result =
-            send_guest_command(3, 52525, &req, Duration::from_secs(5)).await;
+        let result = send_guest_command(3, 52525, &req, Duration::from_secs(5)).await;
         assert!(
             matches!(result, Err(ApiError::BadRequest(ref msg)) if msg.contains("Linux")),
             "expected BadRequest platform error, got: {result:?}"
@@ -346,7 +337,8 @@ mod tests {
                 // Verify we got a valid request.
                 let req: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
                 assert_eq!(req["cmd"], "echo");
-                let resp = r#"{"ok":true,"exit_code":0,"stdout":"hello\n","stderr":"","timing_ms":1}"#;
+                let resp =
+                    r#"{"ok":true,"exit_code":0,"stdout":"hello\n","stderr":"","timing_ms":1}"#;
                 w.write_all(resp.as_bytes()).await.unwrap();
                 w.write_all(b"\n").await.unwrap();
             }
@@ -362,8 +354,7 @@ mod tests {
             env: HashMap::new(),
             timeout_ms: 5000,
         };
-        let result =
-            send_guest_command_via_uds(&sock_path_str, &req, Duration::from_secs(5)).await;
+        let result = send_guest_command_via_uds(&sock_path_str, &req, Duration::from_secs(5)).await;
         server.await.unwrap();
 
         let resp = result.expect("uds roundtrip failed");

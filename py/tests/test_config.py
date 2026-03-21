@@ -463,7 +463,6 @@ def test_mcp_server_config_schema_hash_absent_is_none(monkeypatch: pytest.Monkey
 
 def test_mcp_server_config_schema_hash_valid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LG_PROFILE", "dev")
-    toml = _VALID_TOML + f'\nschema_hash = "{_VALID_HASH}"\n'
     # Insert schema_hash under [mcp.servers.mock]
     toml_with_hash = _VALID_TOML.replace(
         "[mcp.servers.mock.env]",
@@ -479,7 +478,8 @@ def test_procedure_cache_path_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LG_PROFILE", "dev")
     toml = _VALID_TOML.replace(
         "access_log_enabled = true\n",
-        'access_log_enabled = true\nprocedure_cache_path = "artifacts/remote-api/procedures.sqlite"\n',
+        "access_log_enabled = true\n"
+        'procedure_cache_path = "artifacts/remote-api/procedures.sqlite"\n',
         1,
     )
     with tempfile.TemporaryDirectory() as td:

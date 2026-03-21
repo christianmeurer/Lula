@@ -24,8 +24,8 @@ __all__ = [
     "WorktreeError",
     "WorktreeLease",
     "create_worktree",
-    "remove_worktree",
     "merge_worktree",
+    "remove_worktree",
 ]
 
 _log = structlog.get_logger(__name__)
@@ -116,7 +116,7 @@ async def create_worktree(run_id: str, base_path: str) -> WorktreeContext:
     base_branch = current_branch or "main"
 
     # Create the worktree with a new branch.
-    rc, out, err = await _run_git(
+    rc, _out, err = await _run_git(
         "worktree", "add", "-b", branch, worktree_path,
         cwd=base_path,
     )
@@ -252,6 +252,6 @@ class WorktreeLease:
             # worktree removal so we do not leave stale directories behind.
             try:
                 await merge_worktree(self._ctx)
-            except WorktreeError as exc:
+            except WorktreeError:
                 _log.warning("worktree.merge_failed", run_id=self._run_id, exc_info=True)
         await remove_worktree(self._ctx)

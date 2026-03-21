@@ -29,7 +29,11 @@ from typing import Any
 
 from lg_orch.api.approvals import (
     approval_summary_text as _approval_summary,
+)
+from lg_orch.api.approvals import (
     approval_token_for_challenge as _approval_token_for_challenge,
+)
+from lg_orch.api.approvals import (
     tool_name_for_approval as _tool_name_for_approval,
 )
 from lg_orch.api.metrics import LULA_ACTIVE_RUNS, LULA_RUN_DURATION_SECONDS, LULA_RUNS_TOTAL
@@ -42,7 +46,6 @@ from lg_orch.approval_policy import (
 from lg_orch.logging import get_logger
 from lg_orch.procedure_cache import ProcedureCache, _canonical_procedure_name
 from lg_orch.run_store import RunStore
-
 
 # ---------------------------------------------------------------------------
 # Constants and helpers
@@ -78,7 +81,9 @@ def _normalized_run_id(raw: object) -> str | None:
 
 def _trace_path_for_run(repo_root: Path, trace_out_dir: Path, run_id: str) -> Path:
     resolved_out_dir = trace_out_dir.expanduser()
-    trace_dir = resolved_out_dir if resolved_out_dir.is_absolute() else (repo_root / resolved_out_dir)
+    trace_dir = (
+        resolved_out_dir if resolved_out_dir.is_absolute() else (repo_root / resolved_out_dir)
+    )
     return trace_dir.resolve() / f"run-{run_id}.json"
 
 
@@ -106,13 +111,21 @@ def _approval_state_from_trace(trace_payload: dict[str, Any] | None) -> dict[str
     pending_details_raw = approval.get("pending_details", {})
     pending_details = dict(pending_details_raw) if isinstance(pending_details_raw, dict) else {}
     history_raw = approval.get("history", [])
-    history = [dict(entry) for entry in history_raw if isinstance(entry, dict)] if isinstance(history_raw, list) else []
+    history = (
+        [dict(entry) for entry in history_raw if isinstance(entry, dict)]
+        if isinstance(history_raw, list)
+        else []
+    )
     pending = bool(approval.get("pending", False))
     summary = str(approval.get("summary", "")).strip()
 
     if not has_explicit_pending and not pending_details:
         tool_results_raw = trace_payload.get("tool_results", [])
-        tool_results = [entry for entry in tool_results_raw if isinstance(entry, dict)] if isinstance(tool_results_raw, list) else []
+        tool_results = (
+            [entry for entry in tool_results_raw if isinstance(entry, dict)]
+            if isinstance(tool_results_raw, list)
+            else []
+        )
         for result in reversed(tool_results):
             artifacts_raw = result.get("artifacts", {})
             artifacts = dict(artifacts_raw) if isinstance(artifacts_raw, dict) else {}
@@ -170,9 +183,17 @@ def _apply_trace_state_to_payload(
     out["trace_ready"] = trace_payload is not None
     out["trace"] = trace_payload
     approval_state = _approval_state_from_trace(trace_payload)
-    out["thread_id"] = str(approval_state.get("thread_id", "")).strip() or str(out.get("thread_id", "")).strip()
-    out["checkpoint_id"] = str(approval_state.get("checkpoint_id", "")).strip() or str(out.get("checkpoint_id", "")).strip()
-    out["pending_approval"] = bool(approval_state.get("pending", out.get("pending_approval", False)))
+    out["thread_id"] = (
+        str(approval_state.get("thread_id", "")).strip()
+        or str(out.get("thread_id", "")).strip()
+    )
+    out["checkpoint_id"] = (
+        str(approval_state.get("checkpoint_id", "")).strip()
+        or str(out.get("checkpoint_id", "")).strip()
+    )
+    out["pending_approval"] = bool(
+        approval_state.get("pending", out.get("pending_approval", False))
+    )
     out["pending_approval_summary"] = str(
         approval_state.get("summary", out.get("pending_approval_summary", ""))
     ).strip()
@@ -183,7 +204,9 @@ def _apply_trace_state_to_payload(
         out["approval_history"] = [dict(entry) for entry in history_raw if isinstance(entry, dict)]
     else:
         out.setdefault("approval_history", [])
-    if out["pending_approval"] and str(out.get("status", "")).strip() not in {"cancelled", "rejected"}:
+    if out["pending_approval"] and str(out.get("status", "")).strip() not in {
+        "cancelled", "rejected"
+    }:
         out["status"] = "suspended"
     return out
 
@@ -219,7 +242,9 @@ def _write_trace_approval_state(
         approval["last_decision"] = last_decision
     payload_raw["approval"] = approval
     try:
-        trace_path.write_text(json.dumps(payload_raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        trace_path.write_text(
+            json.dumps(payload_raw, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     except OSError:
         return
 
@@ -263,7 +288,11 @@ def _semantic_memories_from_trace(
         memories.append({"kind": "final_output", "source": "reporter", "summary": final_text[:600]})
 
     loop_summaries_raw = trace_payload.get("loop_summaries", [])
-    loop_summaries = [entry for entry in loop_summaries_raw if isinstance(entry, dict)] if isinstance(loop_summaries_raw, list) else []
+    loop_summaries = (
+        [entry for entry in loop_summaries_raw if isinstance(entry, dict)]
+        if isinstance(loop_summaries_raw, list)
+        else []
+    )
     for entry in loop_summaries[-5:]:
         summary = str(entry.get("summary", "")).strip()
         if not summary:
@@ -279,11 +308,18 @@ def _semantic_memories_from_trace(
     if approval_summary_str:
         memories.append({
             "kind": "approval_summary",
-            "source": str(approval_state.get("details", {}).get("operation_class", "approval")).strip() or "approval",
+            "source": (
+                str(approval_state.get("details", {}).get("operation_class", "approval")).strip()
+                or "approval"
+            ),
             "summary": approval_summary_str,
         })
     history_raw = approval_state.get("history", [])
-    history = [entry for entry in history_raw if isinstance(entry, dict)] if isinstance(history_raw, list) else []
+    history = (
+        [entry for entry in history_raw if isinstance(entry, dict)]
+        if isinstance(history_raw, list)
+        else []
+    )
     for entry in history[-5:]:
         decision = str(entry.get("decision", "")).strip() or "approval"
         actor = str(entry.get("actor", "")).strip() or "operator"
@@ -575,15 +611,25 @@ class RemoteAPIService:
             try:
                 process.terminate()
             except OSError as exc:
-                self._log.warning("remote_api_run_cancel_terminate_failed", run_id=normalized_run_id, error=str(exc))
+                self._log.warning(
+                    "remote_api_run_cancel_terminate_failed",
+                    run_id=normalized_run_id,
+                    error=str(exc),
+                )
 
         payload = self.get_run(normalized_run_id)
         if payload is None:
             return None
-        self._log.info("remote_api_run_cancel_requested", run_id=normalized_run_id, request_id=str(payload.get("request_id", "")))
+        self._log.info(
+            "remote_api_run_cancel_requested",
+            run_id=normalized_run_id,
+            request_id=str(payload.get("request_id", "")),
+        )
         return payload
 
-    def approve_run(self, run_id: str, payload: dict[str, Any], *, auth_subject: str = "") -> dict[str, Any] | None:
+    def approve_run(
+        self, run_id: str, payload: dict[str, Any], *, auth_subject: str = ""
+    ) -> dict[str, Any] | None:
         normalized_run_id = _normalized_run_id(run_id)
         if normalized_run_id is None:
             return None
@@ -614,10 +660,21 @@ class RemoteAPIService:
                 "challenge_id": challenge_id,
                 "ts": _utc_now(),
             }
-            operation_class = _non_empty_str(record.pending_approval_details.get("operation_class")) or "apply_patch"
-            tool_name = _tool_name_for_approval(operation_class=operation_class, challenge_id=challenge_id)
-            approval_token = {"challenge_id": challenge_id, "token": _approval_token_for_challenge(challenge_id)}
-            approvals_payload = {tool_name: approval_token, "mutations": {tool_name: approval_token}}
+            operation_class = (
+                _non_empty_str(record.pending_approval_details.get("operation_class"))
+                or "apply_patch"
+            )
+            tool_name = _tool_name_for_approval(
+                operation_class=operation_class, challenge_id=challenge_id
+            )
+            approval_token = {
+                "challenge_id": challenge_id,
+                "token": _approval_token_for_challenge(challenge_id),
+            }
+            approvals_payload = {
+                tool_name: approval_token,
+                "mutations": {tool_name: approval_token},
+            }
             approval_history = list(record.approval_history)
             approval_history.append(approval_entry)
 
@@ -652,7 +709,11 @@ class RemoteAPIService:
             trace_path = record.trace_path
 
         _write_trace_approval_state(
-            trace_path, pending=False, pending_details=None, history=approval_history, last_decision=approval_entry,
+            trace_path,
+            pending=False,
+            pending_details=None,
+            history=approval_history,
+            last_decision=approval_entry,
         )
         if self._run_store is not None:
             self._run_store.upsert(payload_out)
@@ -667,7 +728,9 @@ class RemoteAPIService:
         self._log.info("remote_api_run_resumed", run_id=normalized_run_id, actor=actor)
         return resumed
 
-    def reject_run(self, run_id: str, payload: dict[str, Any], *, auth_subject: str = "") -> dict[str, Any] | None:
+    def reject_run(
+        self, run_id: str, payload: dict[str, Any], *, auth_subject: str = ""
+    ) -> dict[str, Any] | None:
         normalized_run_id = _normalized_run_id(run_id)
         if normalized_run_id is None:
             return None
@@ -705,7 +768,11 @@ class RemoteAPIService:
             trace_path = record.trace_path
 
         _write_trace_approval_state(
-            trace_path, pending=False, pending_details=None, history=approval_history, last_decision=approval_entry,
+            trace_path,
+            pending=False,
+            pending_details=None,
+            history=approval_history,
+            last_decision=approval_entry,
         )
         if self._run_store is not None:
             self._run_store.upsert(payload_out)
@@ -784,7 +851,12 @@ class RemoteAPIService:
             with self._lock:
                 record = self._runs.get(run_id)
                 request_id = record.request_id if record is not None else ""
-            self._log.info("remote_api_run_finished", run_id=run_id, request_id=request_id, exit_code=exit_code)
+            self._log.info(
+                "remote_api_run_finished",
+                run_id=run_id,
+                request_id=request_id,
+                exit_code=exit_code,
+            )
 
     def _append_log(self, run_id: str, line: str) -> None:
         with self._lock:
@@ -868,7 +940,10 @@ class RemoteAPIService:
                     steps = plan.get("steps", [])
                     verification = plan.get("verification", [])
                     req = str(state_raw.get("request", request_val)).strip()
-                    task_class = str(state_raw.get("route", {}).get("task_class", "")).strip() or "analysis"
+                    task_class = (
+                        str(state_raw.get("route", {}).get("task_class", "")).strip()
+                        or "analysis"
+                    )
                     if isinstance(steps, list) and steps:
                         canonical_name = _canonical_procedure_name(steps)
                         with self._lock:
@@ -989,7 +1064,9 @@ class RemoteAPIService:
             return None
         return payload_raw
 
-    def start_healing_loop(self, repo_path: str, poll_interval_seconds: float = 60.0) -> dict[str, Any]:
+    def start_healing_loop(
+        self, repo_path: str, poll_interval_seconds: float = 60.0
+    ) -> dict[str, Any]:
         from lg_orch.healing_loop import HealingLoop
 
         loop_id = uuid.uuid4().hex

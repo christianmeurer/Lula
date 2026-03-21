@@ -4,12 +4,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from pathlib import Path
 
-import pytest
-
-from lg_orch.scip_index import ScipIndex, ScipSymbol, load_scip_index
-
+from lg_orch.scip_index import ScipIndex, load_scip_index
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -100,8 +96,10 @@ def test_load_scip_index_parses_sidecar_json() -> None:
 def test_find_symbol_by_name() -> None:
     data = _minimal_sidecar(
         symbols=[
-            {"name": "validate_token", "kind": "function", "start_line": 1, "end_line": 10, "references": []},
-            {"name": "TokenError", "kind": "class", "start_line": 15, "end_line": 20, "references": []},
+            {"name": "validate_token", "kind": "function",
+             "start_line": 1, "end_line": 10, "references": []},
+            {"name": "TokenError", "kind": "class",
+             "start_line": 15, "end_line": 20, "references": []},
         ]
     )
 
@@ -176,14 +174,17 @@ def test_symbols_in_file() -> None:
             {
                 "relative_path": "api/views.py",
                 "symbols": [
-                    {"name": "index", "kind": "function", "start_line": 1, "end_line": 5, "references": []},
-                    {"name": "detail", "kind": "function", "start_line": 7, "end_line": 12, "references": []},
+                    {"name": "index", "kind": "function",
+                     "start_line": 1, "end_line": 5, "references": []},
+                    {"name": "detail", "kind": "function",
+                     "start_line": 7, "end_line": 12, "references": []},
                 ],
             },
             {
                 "relative_path": "api/models.py",
                 "symbols": [
-                    {"name": "User", "kind": "class", "start_line": 1, "end_line": 30, "references": []},
+                    {"name": "User", "kind": "class",
+                     "start_line": 1, "end_line": 30, "references": []},
                 ],
             },
         ]

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -21,7 +21,9 @@ from lg_orch.tools.inference_client import (
 # ---------------------------------------------------------------------------
 
 
-def _mock_response(*, status: int, headers: dict[str, str] | None = None, body: dict[str, Any] | None = None) -> MagicMock:
+def _mock_response(
+    *, status: int, headers: dict[str, str] | None = None, body: dict[str, Any] | None = None
+) -> MagicMock:
     resp = MagicMock(spec=httpx.Response)
     resp.status_code = status
     resp.headers = httpx.Headers(headers or {})

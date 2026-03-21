@@ -63,7 +63,10 @@ def test_record_use_increments_count(tmp_path: Path) -> None:
 def test_store_upsert_updates_steps(tmp_path: Path) -> None:
     cache = _make_cache(tmp_path)
     old_steps = [{"id": "s1", "tools": [{"tool": "run_tests"}]}]
-    new_steps = [{"id": "s1", "tools": [{"tool": "run_tests"}]}, {"id": "s2", "tools": [{"tool": "check_output"}]}]
+    new_steps = [
+        {"id": "s1", "tools": [{"tool": "run_tests"}]},
+        {"id": "s2", "tools": [{"tool": "check_output"}]},
+    ]
     cache.store_procedure(
         canonical_name="run_tests",
         request="run the tests",
@@ -97,7 +100,7 @@ def test_canonical_name_from_steps() -> None:
 
 def test_list_procedures(tmp_path: Path) -> None:
     cache = _make_cache(tmp_path)
-    pid1 = cache.store_procedure(
+    cache.store_procedure(
         canonical_name="proc_a",
         request="request alpha",
         task_class="analysis",

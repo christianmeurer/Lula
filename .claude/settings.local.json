@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo fmt:*)",
+      "Bash(ruff check:*)",
+      "Bash(python -m ruff check .)",
+      "Bash(uv run:*)"
+    ]
+  }
+}

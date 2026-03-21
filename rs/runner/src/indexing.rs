@@ -9,10 +9,10 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
-use sha2::{Digest, Sha256};
 use globset::GlobSet;
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tree_sitter::{Language, Node, Parser};
 
 const INDEX_REFRESH_INTERVAL_MS: u64 = 1_250;
@@ -87,10 +87,7 @@ impl IndexingService {
         let semantic_db_path = semantic_db_path_for_root(&root_dir);
         if let Some(parent) = semantic_db_path.parent() {
             fs::create_dir_all(parent).with_context(|| {
-                format!(
-                    "failed to create semantic index directory: {}",
-                    parent.display()
-                )
+                format!("failed to create semantic index directory: {}", parent.display())
             })?;
         }
         let inner = Arc::new(IndexingServiceInner {
@@ -115,13 +112,11 @@ impl IndexingService {
         }
 
         let inner = Arc::clone(&self.inner);
-        let spawn = thread::Builder::new()
-            .name("lg-runner-indexer".to_string())
-            .spawn(move || {
-                if let Err(err) = run_indexer_loop(inner) {
-                    tracing::error!(error = %err, "indexer_loop_terminated");
-                }
-            });
+        let spawn = thread::Builder::new().name("lg-runner-indexer".to_string()).spawn(move || {
+            if let Err(err) = run_indexer_loop(inner) {
+                tracing::error!(error = %err, "indexer_loop_terminated");
+            }
+        });
 
         if let Err(err) = spawn {
             self.inner.started.store(false, Ordering::Release);
@@ -150,10 +145,8 @@ impl IndexingService {
         if fts_query.is_empty() {
             return Ok(Vec::new());
         }
-        let normalized_prefix = path_prefix
-            .map(str::trim)
-            .filter(|prefix| !prefix.is_empty())
-            .map(normalize_rel_path);
+        let normalized_prefix =
+            path_prefix.map(str::trim).filter(|prefix| !prefix.is_empty()).map(normalize_rel_path);
         let limit_i64 = i64::try_from(limit.clamp(1, 50)).unwrap_or(50);
 
         let conn = Connection::open(&self.inner.semantic_db_path)
@@ -240,10 +233,7 @@ impl FileFingerprint {
             .and_then(|ts| ts.duration_since(UNIX_EPOCH).ok())
             .map(|dur| dur.as_nanos())
             .unwrap_or(0);
-        Some(Self {
-            bytes: metadata.len(),
-            modified_ns,
-        })
+        Some(Self { bytes: metadata.len(), modified_ns })
     }
 }
 
@@ -252,11 +242,7 @@ impl RuntimeState {
         let conn = Connection::open(db_path)
             .with_context(|| format!("failed to open semantic sqlite db: {}", db_path.display()))?;
         initialize_connection(&conn)?;
-        Ok(Self {
-            fingerprints: HashMap::new(),
-            files: BTreeMap::new(),
-            conn,
-        })
+        Ok(Self { fingerprints: HashMap::new(), files: BTreeMap::new(), conn })
     }
 
     fn refresh(&mut self, inner: &IndexingServiceInner) -> anyhow::Result<()> {
@@ -331,10 +317,7 @@ fn parse_indexed_file(full_path: &Path, rel_path: &str) -> anyhow::Result<Parsed
         symbols,
     };
     let semantic_body = build_semantic_body(&source, &summary.symbols);
-    Ok(ParsedIndexedFile {
-        summary,
-        semantic_body,
-    })
+    Ok(ParsedIndexedFile { summary, semantic_body })
 }
 
 fn snapshot_from_files(version: u64, mut files: Vec<StructuralFileSummary>) -> StructuralSnapshot {
@@ -361,10 +344,7 @@ fn is_excluded_path(path: &std::path::Path) -> bool {
 
 fn collect_candidate_files(root_dir: &Path, allow_read: &GlobSet) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    for entry in walkdir::WalkDir::new(root_dir)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
+    for entry in walkdir::WalkDir::new(root_dir).into_iter().filter_map(Result::ok) {
         let full_path = entry.path();
         if !full_path.is_file() {
             continue;
@@ -525,18 +505,10 @@ fn upsert_semantic_row(
         .map(|symbol| format!("{} {}", symbol.kind, symbol.name))
         .collect::<Vec<String>>()
         .join("\n");
-    conn.execute(
-        "DELETE FROM code_fts WHERE path = ?1",
-        params![summary.path.as_str()],
-    )?;
+    conn.execute("DELETE FROM code_fts WHERE path = ?1", params![summary.path.as_str()])?;
     conn.execute(
         "INSERT INTO code_fts(path, language, symbols, body) VALUES(?1, ?2, ?3, ?4)",
-        params![
-            summary.path.as_str(),
-            summary.language.as_str(),
-            symbol_blob,
-            semantic_body
-        ],
+        params![summary.path.as_str(), summary.language.as_str(), symbol_blob, semantic_body],
     )?;
     Ok(())
 }
@@ -571,10 +543,7 @@ fn build_fts_query(query: &str) -> String {
 }
 
 fn normalize_fts_token(raw: &str) -> String {
-    raw.chars()
-        .filter(|ch| ch.is_alphanumeric() || *ch == '_')
-        .collect::<String>()
-        .to_lowercase()
+    raw.chars().filter(|ch| ch.is_alphanumeric() || *ch == '_').collect::<String>().to_lowercase()
 }
 
 fn map_row_to_hit(row: &rusqlite::Row<'_>) -> rusqlite::Result<SemanticSearchHit> {
@@ -599,9 +568,7 @@ fn semantic_db_path_for_root(root_dir: &Path) -> PathBuf {
     // DefaultHasher is NOT stable across Rust versions — it would orphan the index after upgrades.
     let digest = Sha256::digest(root_dir.to_string_lossy().as_bytes());
     let h: String = digest[..8].iter().map(|b| format!("{b:02x}")).collect();
-    std::env::temp_dir()
-        .join("lg-runner")
-        .join(format!("semantic-index-{h}.sqlite3"))
+    std::env::temp_dir().join("lg-runner").join(format!("semantic-index-{h}.sqlite3"))
 }
 
 fn normalize_rel_path(path: &str) -> String {
@@ -648,14 +615,8 @@ mod tests {
 
         assert_eq!(first.schema_version, SNAPSHOT_SCHEMA_VERSION);
         assert_eq!(first.files, second.files);
-        assert!(first
-            .files
-            .iter()
-            .any(|entry| entry.path.ends_with("py/app.py")));
-        assert!(first
-            .files
-            .iter()
-            .any(|entry| entry.path.ends_with("rs/lib.rs")));
+        assert!(first.files.iter().any(|entry| entry.path.ends_with("py/app.py")));
+        assert!(first.files.iter().any(|entry| entry.path.ends_with("rs/lib.rs")));
     }
 
     #[test]
@@ -670,19 +631,11 @@ mod tests {
         assert!(service.wait_for_version_at_least(1, Duration::from_secs(3)));
 
         let before = service.snapshot();
-        std::fs::write(
-            &file_path,
-            "fn alpha() -> i32 { 1 }\nfn beta() -> i32 { 2 }\n",
-        )
-        .unwrap();
+        std::fs::write(&file_path, "fn alpha() -> i32 { 1 }\nfn beta() -> i32 { 2 }\n").unwrap();
         assert!(service.wait_for_version_at_least(before.version + 1, Duration::from_secs(3)));
 
         let after = service.snapshot();
-        let entry = after
-            .files
-            .iter()
-            .find(|f| f.path.ends_with("rs/main.rs"))
-            .unwrap();
+        let entry = after.files.iter().find(|f| f.path.ends_with("rs/main.rs")).unwrap();
         assert!(entry.symbols.iter().any(|symbol| symbol.name == "beta"));
     }
 
@@ -700,12 +653,8 @@ mod tests {
         service.ensure_started();
         assert!(service.wait_for_version_at_least(1, Duration::from_secs(3)));
 
-        let hits = service
-            .semantic_search("orchestrate memory context", 5, Some("py/"))
-            .unwrap();
+        let hits = service.semantic_search("orchestrate memory context", 5, Some("py/")).unwrap();
         assert!(!hits.is_empty());
-        assert!(hits
-            .iter()
-            .any(|hit| hit.path.ends_with("py/search_target.py")));
+        assert!(hits.iter().any(|hit| hit.path.ends_with("py/search_target.py")));
     }
 }

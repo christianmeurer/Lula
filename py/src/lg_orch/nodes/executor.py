@@ -104,9 +104,8 @@ def _coerce_approval_token(raw: object) -> dict[str, str] | None:
     parts = token_s.split("|")
     if len(parts) != 1 and len(parts) != 4:
         return None
-    if len(parts) == 4:
-        if not all(parts):
-            return None
+    if len(parts) == 4 and not all(parts):
+        return None
     return {"challenge_id": challenge_id.strip(), "token": token_s}
 
 
@@ -138,7 +137,11 @@ def _configured_write_allowlist(guards: dict[str, Any]) -> tuple[str, ...]:
     raw = guards.get("allowed_write_paths", [])
     if not isinstance(raw, list):
         return ()
-    patterns = [_normalize_rel_path(entry) for entry in raw if isinstance(entry, str) and entry.strip()]
+    patterns = [
+        _normalize_rel_path(entry)
+        for entry in raw
+        if isinstance(entry, str) and entry.strip()
+    ]
     return tuple(patterns)
 
 
@@ -256,7 +259,9 @@ def executor(state: dict[str, Any]) -> dict[str, Any]:
                             tool_results.append(
                                 _budget_failure_result(
                                     tool=tool_name,
-                                    message="mutation approval required before apply_patch execution",
+                                    message=(
+                                        "mutation approval required before apply_patch execution"
+                                    ),
                                     error_tag="approval_required",
                                     route_metadata=route_metadata,
                                     artifacts_extra={
@@ -281,7 +286,10 @@ def executor(state: dict[str, Any]) -> dict[str, Any]:
                             tool_results.append(
                                 _budget_failure_result(
                                     tool=tool_name,
-                                    message="apply_patch requires explicit change paths for write allowlist enforcement",
+                                    message=(
+                                        "apply_patch requires explicit change paths"
+                                        " for write allowlist enforcement"
+                                    ),
                                     error_tag="write_path_not_allowed",
                                     route_metadata=route_metadata,
                                     artifacts_extra={
@@ -414,6 +422,11 @@ def executor(state: dict[str, Any]) -> dict[str, Any]:
     budgets["tool_calls_used"] = tool_calls_used
     budgets["tool_calls_limit"] = max_tool_calls
     budgets["patch_bytes_limit"] = max_patch_bytes
-    out = {**state, "tool_results": tool_results, "_checkpoint": checkpoint_state, "budgets": budgets}
+    out = {
+        **state,
+        "tool_results": tool_results,
+        "_checkpoint": checkpoint_state,
+        "budgets": budgets,
+    }
     out = append_event(out, kind="node", data={"name": "executor", "phase": "end"})
     return prune_pre_verification_history(out)

@@ -43,23 +43,39 @@ def _coerce_handoff(raw: object) -> dict[str, Any] | None:
         if isinstance(file_scope_raw, list) and str(path).strip()
     ]
     evidence_raw = raw.get("evidence", [])
-    evidence = [dict(entry) for entry in evidence_raw if isinstance(entry, dict)] if isinstance(evidence_raw, list) else []
+    evidence = (
+        [dict(entry) for entry in evidence_raw if isinstance(entry, dict)]
+        if isinstance(evidence_raw, list)
+        else []
+    )
     constraints_raw = raw.get("constraints", [])
-    constraints = [
-        str(item).strip() for item in constraints_raw if isinstance(item, str) and item.strip()
-    ] if isinstance(constraints_raw, list) else []
+    constraints = (
+        [str(item).strip() for item in constraints_raw if isinstance(item, str) and item.strip()]
+        if isinstance(constraints_raw, list)
+        else []
+    )
     acceptance_checks_raw = raw.get("acceptance_checks", [])
-    acceptance_checks = [
-        str(item).strip()
-        for item in acceptance_checks_raw
-        if isinstance(item, str) and item.strip()
-    ] if isinstance(acceptance_checks_raw, list) else []
+    acceptance_checks = (
+        [
+            str(item).strip()
+            for item in acceptance_checks_raw
+            if isinstance(item, str) and item.strip()
+        ]
+        if isinstance(acceptance_checks_raw, list)
+        else []
+    )
     provenance_raw = raw.get("provenance", [])
-    provenance = [
-        str(item).strip() for item in provenance_raw if isinstance(item, str) and item.strip()
-    ] if isinstance(provenance_raw, list) else []
+    provenance = (
+        [str(item).strip() for item in provenance_raw if isinstance(item, str) and item.strip()]
+        if isinstance(provenance_raw, list)
+        else []
+    )
     retry_budget_raw = raw.get("retry_budget", 1)
-    retry_budget = retry_budget_raw if isinstance(retry_budget_raw, int) and retry_budget_raw >= 0 else 1
+    retry_budget = (
+        retry_budget_raw
+        if isinstance(retry_budget_raw, int) and retry_budget_raw >= 0
+        else 1
+    )
 
     return {
         "producer": producer,
@@ -211,7 +227,9 @@ def _llm_code_synthesis(state: dict[str, Any], *, handoff: dict[str, Any]) -> st
 
     objective = str(handoff.get("objective", "")).strip()
     file_scope = handoff.get("file_scope", [])
-    file_scope_str = ", ".join(str(p) for p in file_scope if p) if isinstance(file_scope, list) else ""
+    file_scope_str = (
+        ", ".join(str(p) for p in file_scope if p) if isinstance(file_scope, list) else ""
+    )
     evidence_raw = handoff.get("evidence", [])
     evidence_parts: list[str] = []
     if isinstance(evidence_raw, list):
@@ -281,21 +299,33 @@ def coder(state: dict[str, Any]) -> dict[str, Any]:
     plan = dict(plan_raw) if isinstance(plan_raw, dict) else {}
     step = _first_step(plan)
     if step is None:
-        return append_event(state, kind="node", data={"name": "coder", "phase": "end", "handoff": "none"})
+        return append_event(
+            state, kind="node", data={"name": "coder", "phase": "end", "handoff": "none"}
+        )
 
     active_handoff = _coerce_handoff(state.get("active_handoff"))
     step_handoff = _coerce_handoff(step.get("handoff"))
-    source_handoff = active_handoff if active_handoff and active_handoff.get("consumer") == "coder" else step_handoff
+    source_handoff = (
+        active_handoff
+        if active_handoff and active_handoff.get("consumer") == "coder"
+        else step_handoff
+    )
 
     if source_handoff is None or source_handoff.get("consumer") != "coder":
-        return append_event(state, kind="node", data={"name": "coder", "phase": "end", "handoff": "pass_through"})
+        return append_event(
+            state,
+            kind="node",
+            data={"name": "coder", "phase": "end", "handoff": "pass_through"},
+        )
 
     step_id = str(step.get("id", "step")).strip() or "step"
     step_description = str(step.get("description", "")).strip()
     expected_outcome = str(step.get("expected_outcome", "")).strip()
     files_touched_raw = step.get("files_touched", [])
     files_touched = [
-        str(path).strip() for path in files_touched_raw if isinstance(files_touched_raw, list) and str(path).strip()
+        str(path).strip()
+        for path in files_touched_raw
+        if isinstance(files_touched_raw, list) and str(path).strip()
     ]
 
     evidence = list(source_handoff.get("evidence", []))
@@ -314,13 +344,15 @@ def coder(state: dict[str, Any]) -> dict[str, Any]:
     next_handoff = {
         "producer": "coder",
         "consumer": "executor",
-        "objective": "Execute the bounded tool sequence prepared by the coder for the current step.",
-        "file_scope": _dedupe(list(source_handoff.get("file_scope", [])) + files_touched),
+        "objective": (
+            "Execute the bounded tool sequence prepared by the coder for the current step."
+        ),
+        "file_scope": _dedupe([*list(source_handoff.get("file_scope", [])), *files_touched]),
         "evidence": evidence,
         "constraints": _dedupe(constraints),
         "acceptance_checks": _dedupe(acceptance_checks),
         "retry_budget": int(source_handoff.get("retry_budget", 1) or 0),
-        "provenance": _dedupe(list(source_handoff.get("provenance", [])) + [f"coder:{step_id}"]),
+        "provenance": _dedupe([*list(source_handoff.get("provenance", [])), f"coder:{step_id}"]),
     }
 
     # Optional LLM synthesis: generate patch guidance when a model is configured.
@@ -332,8 +364,9 @@ def coder(state: dict[str, Any]) -> dict[str, Any]:
 
     if llm_guidance:
         _evidence: list[Any] = list(cast(list[Any], next_handoff["evidence"]))
-        next_handoff["evidence"] = _evidence + [
-            {"kind": "llm_guidance", "ref": step_id, "detail": llm_guidance[:600]}
+        next_handoff["evidence"] = [
+            *_evidence,
+            {"kind": "llm_guidance", "ref": step_id, "detail": llm_guidance[:600]},
         ]
 
     log.info("coder_handoff_prepared", step_id=step_id, file_scope=next_handoff["file_scope"])
@@ -341,5 +374,10 @@ def coder(state: dict[str, Any]) -> dict[str, Any]:
     return append_event(
         out,
         kind="node",
-        data={"name": "coder", "phase": "end", "handoff_consumer": "executor", "step_id": step_id},
+        data={
+            "name": "coder",
+            "phase": "end",
+            "handoff_consumer": "executor",
+            "step_id": step_id,
+        },
     )
