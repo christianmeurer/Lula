@@ -42,7 +42,7 @@ jobs:
 
       - name: mypy
         working-directory: py
-        run: uv run mypy src/
+        run: uv run python -m mypy src/
 
   test-python:
     name: "Python Tests"
