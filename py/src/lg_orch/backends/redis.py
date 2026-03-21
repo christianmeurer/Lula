@@ -71,7 +71,7 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
         ttl_seconds: int = 86400,
     ) -> None:
         try:
-            import redis.asyncio as aioredis  # type: ignore[import-untyped]
+            import redis.asyncio as aioredis
         except ImportError as exc:
             raise ImportError(
                 "Install lula with the 'redis' extra: pip install lula[redis]"
@@ -393,8 +393,6 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
 
         data = _deserialize(cast(bytes, raw))
         existing_writes: list[dict[str, Any]] = data.get("pending_writes", [])
-        if not isinstance(existing_writes, list):
-            existing_writes = []
 
         existing_keys: set[tuple[str, int]] = set()
         for w in existing_writes:

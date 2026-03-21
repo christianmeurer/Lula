@@ -65,9 +65,7 @@ class ApprovalEngine:
             return self._evaluate_timed(policy, elapsed_seconds)
         if isinstance(policy, QuorumApprovalPolicy):
             return self._evaluate_quorum(policy, votes)
-        if isinstance(policy, RoleApprovalPolicy):
-            return self._evaluate_role(policy, votes)
-        return "pending"
+        return self._evaluate_role(policy, votes)
 
     def _evaluate_timed(
         self,

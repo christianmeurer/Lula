@@ -35,8 +35,8 @@ def _make_traced_node(node_fn: Any, node_name: str) -> Any:
             from opentelemetry import trace as _otel_trace
 
             tracer = _otel_trace.get_tracer("lg_orch.graph")
-            run_id = str(state.model_extra.get("_run_id", ""))
-            lane = str(state.model_extra.get("_lane", ""))
+            run_id = str((state.model_extra or {}).get("_run_id", ""))
+            lane = str((state.model_extra or {}).get("_lane", ""))
             with tracer.start_as_current_span(
                 f"node.{node_name}",
                 attributes={

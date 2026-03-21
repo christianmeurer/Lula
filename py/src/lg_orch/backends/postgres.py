@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_lula_ckpt_thread
 
 def _dict_row_factory(cursor: Any) -> Any:
     """psycopg3 row factory that returns dicts."""
-    from psycopg.rows import dict_row  # type: ignore[import-untyped]
+    from psycopg.rows import dict_row  # type: ignore[import-not-found]
 
     return dict_row(cursor)
 
@@ -72,7 +72,7 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
         table_name: str = "lula_checkpoints",
     ) -> None:
         try:
-            import psycopg_pool  # type: ignore[import-untyped]  # noqa: F401
+            import psycopg_pool  # type: ignore[import-not-found]  # noqa: F401
         except ImportError as exc:
             raise ImportError(
                 "Install lula with the 'postgres' extra: pip install lula[postgres]"
@@ -87,7 +87,7 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
     async def _get_pool(self) -> Any:
         if self._pool is None:
             try:
-                from psycopg_pool import AsyncConnectionPool  # type: ignore[import-untyped]
+                from psycopg_pool import AsyncConnectionPool
             except ImportError as exc:
                 raise ImportError(
                     "Install lula with the 'postgres' extra: pip install lula[postgres]"
@@ -273,7 +273,7 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
         pool = await self._get_pool()
         tbl = self._table_name
         async with pool.connection() as conn:
-            conn.row_factory = _dict_row_factory  # type: ignore[attr-defined]
+            conn.row_factory = _dict_row_factory  # type: ignore[attr-defined,unused-ignore]
             if checkpoint_id is not None:
                 row = await conn.fetchrow(
                     f"SELECT * FROM {tbl}"
@@ -416,8 +416,6 @@ class PostgresCheckpointSaver(BaseCheckpointSaver[Any]):
                 return
 
             existing_writes: list[dict[str, Any]] = row[0] if row[0] is not None else []
-            if not isinstance(existing_writes, list):
-                existing_writes = []
 
             existing_keys: set[tuple[str, int]] = {
                 (str(w.get("task_id", "")), int(w.get("idx", -999)))
