@@ -617,8 +617,7 @@ mod tests {
             let isolation_backend =
                 artifacts.get("isolation_backend").and_then(|v| v.as_str()).unwrap_or("");
             assert!(
-                isolation_backend == "microvm_ephemeral"
-                    || isolation_backend == "linux_namespace",
+                isolation_backend == "microvm_ephemeral" || isolation_backend == "linux_namespace",
                 "expected microvm_ephemeral or linux_namespace, got: {isolation_backend}"
             );
         } else if let Err(ApiError::Other(_)) = result {
