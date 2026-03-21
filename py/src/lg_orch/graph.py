@@ -85,7 +85,7 @@ def route_after_verifier(state: OrchState) -> str:
 
 
 def build_graph(*, checkpointer: BaseCheckpointSaver[Any] | None = None) -> Any:
-    g: StateGraph = StateGraph(OrchState)
+    g: StateGraph[OrchState] = StateGraph(OrchState)
     g.add_node("ingest", _make_traced_node(ingest, "ingest"))
     g.add_node("policy_gate", _make_traced_node(policy_gate, "policy_gate"))
     g.add_node("context_builder", _make_traced_node(context_builder, "context_builder"))
