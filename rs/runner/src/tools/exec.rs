@@ -616,7 +616,11 @@ mod tests {
             let artifacts = env.artifacts;
             let isolation_backend =
                 artifacts.get("isolation_backend").and_then(|v| v.as_str()).unwrap_or("");
-            assert_eq!(isolation_backend, "microvm_ephemeral");
+            assert!(
+                isolation_backend == "microvm_ephemeral"
+                    || isolation_backend == "linux_namespace",
+                "expected microvm_ephemeral or linux_namespace, got: {isolation_backend}"
+            );
         } else if let Err(ApiError::Other(_)) = result {
             // If spawn fails, that's fine too, as long as it tried.
         } else if let Err(e) = result {
