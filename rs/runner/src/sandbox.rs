@@ -124,8 +124,6 @@ pub fn cleanup_cgroup(cgroup_name: &str) -> Result<(), SandboxError> {
 // Verus specification annotations.
 // These are no-ops when compiled without `--features verify`.
 // With `verus` installed, run: verus rs/runner/src/sandbox.rs --features verify
-#[cfg(feature = "verify")]
-use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SandboxBackend {
@@ -823,6 +821,7 @@ mod verify {
     use super::*;
 
     /// Proof: resolve_backend always produces at least one policy constraint.
+    #[allow(dead_code)]
     pub fn proof_policy_constraints_nonempty(policy: &SandboxPolicy) {
         let resolution = policy.resolve_backend();
         // This will be caught by Verus if the assertion ever fails.
@@ -833,6 +832,7 @@ mod verify {
     }
 
     /// Proof: MicroVmEphemeral backend is never degraded.
+    #[allow(dead_code)]
     pub fn proof_microvm_not_degraded(policy: &SandboxPolicy) {
         let resolution = policy.resolve_backend();
         if resolution.backend == SandboxBackend::MicroVmEphemeral {
@@ -841,6 +841,7 @@ mod verify {
     }
 
     /// Proof: if degraded, reason must be Some.
+    #[allow(dead_code)]
     pub fn proof_degraded_has_reason(policy: &SandboxPolicy) {
         let resolution = policy.resolve_backend();
         if resolution.degraded {
@@ -1051,7 +1052,7 @@ mod tests {
 
     #[test]
     fn test_injection_bidi_ltr_isolate() {
-        let input = format!("text\u{2066}more");
+        let input = "text\u{2066}more".to_string();
         let result = detect_prompt_injection(&input);
         assert!(result.is_some());
         assert!(result.unwrap().contains("U+2066"));
@@ -1059,7 +1060,7 @@ mod tests {
 
     #[test]
     fn test_injection_bidi_rtl_mark() {
-        let input = format!("ok\u{200F}end");
+        let input = "ok\u{200F}end".to_string();
         let result = detect_prompt_injection(&input);
         assert!(result.is_some());
         assert!(result.unwrap().contains("U+200F"));

@@ -259,6 +259,7 @@ pub fn build_checker(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use proptest::prelude::*;
 
     // ---------------------------------------------------------------------------
@@ -307,16 +308,16 @@ mod tests {
 
     fn root() -> PathBuf {
         let td = tempfile::tempdir().unwrap();
-        td.into_path()
+        td.keep().expect("tempdir keep").1
     }
 
-    fn make_req(root: &PathBuf) -> InvariantRequest {
+    fn make_req(root: &Path) -> InvariantRequest {
         InvariantRequest {
             tool_name: "exec".to_string(),
             path: None,
             command: None,
             args: vec![],
-            allowed_root: root.clone(),
+            allowed_root: root.to_path_buf(),
             allowed_commands: vec!["git".to_string(), "cargo".to_string()],
         }
     }
