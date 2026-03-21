@@ -226,7 +226,10 @@ pub async fn send_guest_command(
 ///
 /// This is the testing transport used on macOS/Windows development machines.
 /// The guest agent must also be started with `GUEST_AGENT_SOCK=<socket_path>`.
+///
+/// Only called from `#[cfg(test)]` — suppress dead_code warning.
 #[cfg(unix)]
+#[allow(dead_code)]
 pub async fn send_guest_command_via_uds(
     socket_path: &str,
     req: &GuestCommandRequest,
