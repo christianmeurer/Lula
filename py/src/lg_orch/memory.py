@@ -365,9 +365,7 @@ def build_context_layers(
 
     # --- long-term memory injection ---
     if long_term is not None:
-        task_text = str(
-            _state_get(state, "task", _state_get(state, "request", ""))
-        ).strip()
+        task_text = str(_state_get(state, "task", _state_get(state, "request", ""))).strip()
         if task_text:
             lt_content = long_term.retrieve_for_context(task_text, max_tokens=1000)
             if lt_content.strip():
