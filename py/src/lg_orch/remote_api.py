@@ -56,6 +56,7 @@ from lg_orch.api.streaming import (
     stream_new_sse as _stream_new_sse,
 )
 from lg_orch.approval_policy import (
+    ApprovalPolicy,
     QuorumApprovalPolicy,
     RoleApprovalPolicy,
     TimedApprovalPolicy,
@@ -426,7 +427,7 @@ def _hdl_v1_run_stream(
     request_id: str,
     client_ip: str,
 ) -> tuple[int, str, bytes]:
-    return -1, "sse", path_parts[2].encode("utf-8")  # type: ignore[return-value]
+    return -1, "sse", path_parts[2].encode("utf-8")
 
 
 def _hdl_v1_run_get(
@@ -461,7 +462,7 @@ def _hdl_runs_stream(
     _sse_run_id = path_parts[1]
     if service.get_run(_sse_run_id) is None:
         return _json_response(404, {"error": "not_found", "run_id": _sse_run_id})
-    return -2, "sse_new", _sse_run_id.encode("utf-8")  # type: ignore[return-value]
+    return -2, "sse_new", _sse_run_id.encode("utf-8")
 
 
 def _hdl_runs_approve_reject(
@@ -514,6 +515,7 @@ def _hdl_runs_approval_policy(
     if not isinstance(policy_raw, dict):
         return _json_response(400, {"error": "missing_policy"})
     kind = policy_raw.get("kind")
+    policy: ApprovalPolicy
     if kind == "timed":
         from typing import cast as _cast
 
@@ -999,3 +1001,17 @@ def create_app(*, repo_root: Path, host: str = "127.0.0.1", port: int = 8001) ->
 
 
 build_app = create_app
+
+__all__ = [
+    "RemoteAPIService",
+    "RunRecord",
+    "_RateLimiter",
+    "_approval_token_for_challenge",
+    "_run_streams",
+    "_run_streams_lock",
+    "_stream_new_sse",
+    "create_app",
+    "build_app",
+    "push_run_event",
+    "serve_remote_api",
+]

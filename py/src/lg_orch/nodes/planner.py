@@ -24,7 +24,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import jsonschema
+import jsonschema  # type: ignore[import-untyped]
 from pydantic import ValidationError
 
 from lg_orch.logging import get_logger

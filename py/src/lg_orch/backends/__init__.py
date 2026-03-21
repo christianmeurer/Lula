@@ -7,6 +7,8 @@ Public API — import from here or from ``lg_orch.checkpointing`` (shim).
 
 from __future__ import annotations
 
+from typing import Any
+
 from lg_orch.backends._base import (
     BaseCheckpointSaver,
     CheckpointBackendError,
@@ -19,7 +21,7 @@ from lg_orch.backends.redis import RedisCheckpointSaver
 from lg_orch.backends.sqlite import SqliteCheckpointSaver
 
 
-def create_checkpoint_saver(backend: str, **kwargs: object) -> BaseCheckpointSaver[object]:
+def create_checkpoint_saver(backend: str, **kwargs: object) -> BaseCheckpointSaver[Any]:
     """Create a checkpoint saver for the given backend.
 
     Parameters

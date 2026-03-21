@@ -97,7 +97,7 @@ def _fetch_jwks(url: str) -> dict[str, Any]:
         if cached is not None:
             jwks_data, fetched_at = cached
             if time.monotonic() - fetched_at < _JWKS_CACHE_TTL_SECONDS:
-                return jwks_data  # type: ignore[return-value]
+                return jwks_data  # type: ignore[no-any-return]
 
     # --- Fetch without lock ---
     with urllib.request.urlopen(url, timeout=10) as resp:
@@ -109,7 +109,7 @@ def _fetch_jwks(url: str) -> dict[str, Any]:
         if cached is not None:
             _, fetched_at = cached
             if time.monotonic() - fetched_at < _JWKS_CACHE_TTL_SECONDS:
-                return cached[0]  # type: ignore[return-value]
+                return cached[0]  # type: ignore[no-any-return]
         _jwks_cache[url] = (data, time.monotonic())
 
     return data
@@ -180,7 +180,7 @@ def verify_token(token: str, settings: JWTSettings) -> TokenClaims:
             )
         elif settings.jwks_url:
             jwks_data = _fetch_jwks(settings.jwks_url)
-            jwks_obj = pyjwt.PyJWKSet(jwks_data)
+            jwks_obj = pyjwt.PyJWKSet(jwks_data.get("keys", []))
             unverified_header = pyjwt.get_unverified_header(token)
             kid = unverified_header.get("kid")
             signing_key: pyjwt.PyJWK | None = None

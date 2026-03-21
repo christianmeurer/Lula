@@ -79,7 +79,7 @@ class S3AuditSink(AuditSink):
 
     async def export(self, event: AuditEvent) -> None:
         try:
-            import aioboto3
+            import aioboto3  # type: ignore[import-not-found]
         except ImportError:
             return
 
@@ -135,7 +135,7 @@ class GCSAuditSink(AuditSink):
 
     async def export(self, event: AuditEvent) -> None:
         try:
-            from google.cloud import storage as gcs  # noqa: F401 — import-check only
+            from google.cloud import storage as gcs  # type: ignore[import-untyped]  # noqa: F401 — import-check only
         except ImportError:
             return
 

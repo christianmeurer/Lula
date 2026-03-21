@@ -161,7 +161,7 @@ def _opt_int_or_env(raw: dict[str, Any], key: str, env_var: str, default: int = 
         return default
     if isinstance(val, bool) or not isinstance(val, int):
         raise ConfigError(f"missing/invalid {key}")
-    return val
+    return int(val)
 
 
 def _env_bool(name: str, *, default: bool) -> bool:

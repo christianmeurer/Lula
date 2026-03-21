@@ -8,7 +8,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-import jsonschema
+import jsonschema  # type: ignore[import-untyped]
 
 from lg_orch.logging import get_logger
 from lg_orch.memory import (

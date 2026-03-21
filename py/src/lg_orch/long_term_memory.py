@@ -285,7 +285,7 @@ class LongTermMemoryStore:
                 sim = _cosine_similarity(query_vec, vec)
             except Exception:
                 sim = 0.0
-                vec = None  # type: ignore[assignment]
+                vec = None
             try:
                 meta: dict[str, Any] = json.loads(row["metadata"])
             except (json.JSONDecodeError, TypeError):
