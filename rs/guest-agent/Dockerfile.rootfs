@@ -48,9 +48,9 @@ RUN mkdir -p /rootfs/bin \
 COPY --from=builder /src/target/x86_64-unknown-linux-musl/release/lula-guest-agent /rootfs/sbin/lula-guest-agent
 RUN chmod +x /rootfs/sbin/lula-guest-agent
 
-# Copy busybox for a minimal shell environment
-RUN cp /bin/busybox /rootfs/bin/busybox
-RUN chroot /rootfs /bin/busybox --install /bin
+# Copy busybox for a minimal shell environment and install symlinks without chroot
+RUN cp /bin/busybox /rootfs/bin/busybox && \
+    /bin/busybox --list | xargs -I{} ln -sf /bin/busybox /rootfs/bin/{}
 
 # Init script that mounts essential filesystems then starts the guest agent
 RUN printf '%s\n' \
