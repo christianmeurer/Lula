@@ -689,7 +689,7 @@ def prune_pre_verification_history(state: object) -> dict[str, Any]:
     state_dict: dict[str, Any] = ensure_history_policy(state)
     policy = state_dict.get("history_policy", {})
     if not isinstance(policy, dict):
-        return state
+        return state_dict
 
     retain_recent = _as_int(
         policy.get("retain_recent_tool_results"),
