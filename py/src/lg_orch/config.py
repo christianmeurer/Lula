@@ -478,7 +478,8 @@ def _parse_model_routing(models_raw: dict[str, object]) -> ModelRouting:
         raise ConfigError("models.routing.interactive_context_limit must be >= 1")
     if deep_planning_context_limit < interactive_context_limit:
         raise ConfigError(
-            "models.routing.deep_planning_context_limit must be >= models.routing.interactive_context_limit"
+            "models.routing.deep_planning_context_limit must be"
+            " >= models.routing.interactive_context_limit"
         )
     if recovery_retry_threshold < 0:
         raise ConfigError("models.routing.recovery_retry_threshold must be >= 0")
@@ -526,7 +527,9 @@ def _parse_digitalocean_serverless(models_raw: dict[str, object]) -> DigitalOcea
     return DigitalOceanServerless(base_url=base_url, api_key=api_key, timeout_s=timeout_raw)
 
 
-def _parse_openai_compatible_serverless(models_raw: dict[str, object]) -> OpenAICompatibleServerless:
+def _parse_openai_compatible_serverless(
+    models_raw: dict[str, object],
+) -> OpenAICompatibleServerless:
     section = models_raw.get("openai_compatible")
     section_dict = section if isinstance(section, dict) else {}
 
@@ -657,7 +660,10 @@ def load_config(*, repo_root: Path) -> AppConfig:
     # Allow LG_RUNNER_BASE_URL to override the configured base_url so that
     # the runner can be an external k8s service without rebuilding the image.
     runner_base_url_env = os.environ.get("LG_RUNNER_BASE_URL", "").strip()
-    runner_base_url = runner_base_url_env if runner_base_url_env else _require_str(runner_raw, "base_url")
+    runner_base_url = (
+        runner_base_url_env if runner_base_url_env
+        else _require_str(runner_raw, "base_url")
+    )
 
     runner = Runner(
         base_url=runner_base_url,
@@ -727,7 +733,8 @@ def load_config(*, repo_root: Path) -> AppConfig:
             value = schema_hash_raw.strip().lower()
             if value and not _is_valid_sha256_hex(value):
                 raise ConfigError(
-                    f"mcp.servers.{server_name}.schema_hash must be a 64-char lowercase hex SHA-256 or absent"
+                    f"mcp.servers.{server_name}.schema_hash must be"
+                    " a 64-char lowercase hex SHA-256 or absent"
                 )
             schema_hash = value or None
         else:
@@ -750,7 +757,9 @@ def load_config(*, repo_root: Path) -> AppConfig:
         capture_model_metadata=bool(trace_raw.get("capture_model_metadata", True)),
     )
 
-    auth_mode_raw = remote_api_raw.get("auth_mode", os.environ.get("LG_REMOTE_API_AUTH_MODE", "off"))
+    auth_mode_raw = remote_api_raw.get(
+        "auth_mode", os.environ.get("LG_REMOTE_API_AUTH_MODE", "off")
+    )
     if not isinstance(auth_mode_raw, str):
         raise ConfigError("missing/invalid remote_api.auth_mode")
     auth_mode = auth_mode_raw.strip().lower() or "off"
@@ -761,12 +770,18 @@ def load_config(*, repo_root: Path) -> AppConfig:
     if auth_mode == "bearer" and bearer_token is None:
         raise ConfigError("remote_api.bearer_token is required when remote_api.auth_mode=bearer")
 
-    run_store_path = _opt_str_or_env(remote_api_raw, "run_store_path", "LG_REMOTE_API_RUN_STORE_PATH")
-    rate_limit_rps = _opt_int_or_env(remote_api_raw, "rate_limit_rps", "LG_REMOTE_API_RATE_LIMIT_RPS", default=0)
+    run_store_path = _opt_str_or_env(
+        remote_api_raw, "run_store_path", "LG_REMOTE_API_RUN_STORE_PATH"
+    )
+    rate_limit_rps = _opt_int_or_env(
+        remote_api_raw, "rate_limit_rps", "LG_REMOTE_API_RATE_LIMIT_RPS", default=0
+    )
     if rate_limit_rps != 0 and rate_limit_rps < 1:
         raise ConfigError("remote_api.rate_limit_rps must be 0 (disabled) or >= 1")
 
-    procedure_cache_path = _opt_str_or_env(remote_api_raw, "procedure_cache_path", "LG_REMOTE_API_PROCEDURE_CACHE_PATH")
+    procedure_cache_path = _opt_str_or_env(
+        remote_api_raw, "procedure_cache_path", "LG_REMOTE_API_PROCEDURE_CACHE_PATH"
+    )
 
     default_namespace_raw = remote_api_raw.get("default_namespace")
     default_namespace: str
@@ -808,7 +823,9 @@ def load_config(*, repo_root: Path) -> AppConfig:
 
     # Checkpoint section
     checkpoint_enabled = _opt_bool(checkpoint_raw, "enabled", default=True)
-    checkpoint_db_path = _opt_str(checkpoint_raw, "db_path", default="artifacts/checkpoints/langgraph.sqlite")
+    checkpoint_db_path = _opt_str(
+        checkpoint_raw, "db_path", default="artifacts/checkpoints/langgraph.sqlite"
+    )
     if not checkpoint_db_path:
         raise ConfigError("missing/invalid checkpoint.db_path")
     checkpoint_namespace = _opt_str(checkpoint_raw, "namespace", default="main")
@@ -817,10 +834,15 @@ def load_config(*, repo_root: Path) -> AppConfig:
     checkpoint_thread_prefix = _opt_str(checkpoint_raw, "thread_prefix", default="lg-orch")
     if not checkpoint_thread_prefix:
         raise ConfigError("missing/invalid checkpoint.thread_prefix")
-    checkpoint_backend_raw = _opt_str(checkpoint_raw, "backend", default="sqlite").lower() or "sqlite"
+    checkpoint_backend_raw = (
+        _opt_str(checkpoint_raw, "backend", default="sqlite").lower() or "sqlite"
+    )
     if checkpoint_backend_raw not in {"sqlite", "redis", "postgres"}:
         raise ConfigError("checkpoint.backend must be one of: sqlite, redis, postgres")
-    checkpoint_redis_url = _opt_str(checkpoint_raw, "redis_url", default="redis://localhost:6379/0") or "redis://localhost:6379/0"
+    checkpoint_redis_url = (
+        _opt_str(checkpoint_raw, "redis_url", default="redis://localhost:6379/0")
+        or "redis://localhost:6379/0"
+    )
     checkpoint_postgres_dsn = _opt_str(checkpoint_raw, "postgres_dsn", default="")
     checkpoint_redis_ttl = _opt_int(checkpoint_raw, "redis_ttl_seconds", default=86400)
     if checkpoint_redis_ttl < 1:
@@ -931,7 +953,11 @@ def load_config(*, repo_root: Path) -> AppConfig:
         _new_jwks_url = _auth_s.jwks_url
     if _auth_s.secret:
         _new_jwt_secret = _auth_s.secret
-    if _new_auth_mode != remote_api.auth_mode or _new_jwks_url != remote_api.jwks_url or _new_jwt_secret != remote_api.jwt_secret:
+    if (
+        _new_auth_mode != remote_api.auth_mode
+        or _new_jwks_url != remote_api.jwks_url
+        or _new_jwt_secret != remote_api.jwt_secret
+    ):
         remote_api = RemoteAPIConfig(
             auth_mode=_new_auth_mode,
             bearer_token=remote_api.bearer_token,

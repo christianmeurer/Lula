@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, call, patch
 
 # ---------------------------------------------------------------------------
 # Shared helpers

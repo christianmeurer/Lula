@@ -31,22 +31,27 @@ from urllib.parse import parse_qs, urlsplit
 # ---------------------------------------------------------------------------
 # Public re-exports from submodules (backward-compatible names)
 # ---------------------------------------------------------------------------
-from lg_orch.api.admin import register_admin_routes  # noqa: F401
-from lg_orch.api.approvals import approval_token_for_challenge as _approval_token_for_challenge  # noqa: F401
-from lg_orch.api.metrics import LULA_RUNS_TOTAL, handle_metrics as _handle_metrics  # noqa: F401
+from lg_orch.api.admin import register_admin_routes
+from lg_orch.api.approvals import (
+    approval_token_for_challenge as _approval_token_for_challenge,  # noqa: F401
+)
+from lg_orch.api.metrics import LULA_RUNS_TOTAL  # noqa: F401
+from lg_orch.api.metrics import handle_metrics as _handle_metrics
 from lg_orch.api.service import (  # noqa: F401
-    RunRecord,
     RemoteAPIService,
-    _RateLimiter,
+    RunRecord,
     _apply_trace_state_to_payload,
     _non_empty_str,
     _normalized_run_id,
+    _RateLimiter,
     _utc_now,
 )
 from lg_orch.api.streaming import (  # noqa: F401
     _run_streams,
     _run_streams_lock,
     push_run_event,
+)
+from lg_orch.api.streaming import (
     stream_new_sse as _stream_new_sse,
 )
 from lg_orch.approval_policy import (
@@ -98,7 +103,12 @@ def _request_id_from_value(raw: object) -> str:
     return value or uuid.uuid4().hex
 
 
-def _request_client_ip(*, client_address: tuple[str, int] | None, forwarded_for: str | None, trust_forwarded_headers: bool) -> str:
+def _request_client_ip(
+    *,
+    client_address: tuple[str, int] | None,
+    forwarded_for: str | None,
+    trust_forwarded_headers: bool,
+) -> str:
     if trust_forwarded_headers and forwarded_for:
         first = forwarded_for.split(",", 1)[0].strip()
         if first:
@@ -116,7 +126,14 @@ def _request_scheme(*, forwarded_proto: str | None, trust_forwarded_headers: boo
     return "http"
 
 
-def _authorize_request(*, route: str, auth_mode: str, expected_bearer_token: str | None, authorization_header: str | None, allow_unauthenticated_healthz: bool) -> tuple[str, tuple[int, str, bytes] | None]:
+def _authorize_request(
+    *,
+    route: str,
+    auth_mode: str,
+    expected_bearer_token: str | None,
+    authorization_header: str | None,
+    allow_unauthenticated_healthz: bool,
+) -> tuple[str, tuple[int, str, bytes] | None]:
     import hmac
     if route == "/healthz" and allow_unauthenticated_healthz:
         return "", None
@@ -137,7 +154,9 @@ def _authorize_request(*, route: str, auth_mode: str, expected_bearer_token: str
     return "bearer", None
 
 
-def _audit_action_and_resource(*, method: str, route: str, path_parts: list[str], status: int) -> tuple[str, str | None]:
+def _audit_action_and_resource(
+    *, method: str, route: str, path_parts: list[str], status: int
+) -> tuple[str, str | None]:
     if method == "POST" and route in {"/v1/runs", "/runs", "/runs/"}:
         return "run.create", None
     if method == "GET" and route in {"/v1/runs", "/runs", "/runs/"}:
@@ -150,11 +169,25 @@ def _audit_action_and_resource(*, method: str, route: str, path_parts: list[str]
         return "run.read", path_parts[1]
     if len(path_parts) == 4 and path_parts[:2] == ["v1", "runs"] and path_parts[3] == "cancel":
         return "run.cancel", path_parts[2]
-    if method == "POST" and len(path_parts) == 3 and path_parts[0] == "runs" and path_parts[2] == "cancel":
+    if (
+        method == "POST"
+        and len(path_parts) == 3
+        and path_parts[0] == "runs"
+        and path_parts[2] == "cancel"
+    ):
         return "run.cancel", path_parts[1]
-    if len(path_parts) == 4 and path_parts[:2] == ["v1", "runs"] and path_parts[3] in {"approve", "reject"}:
+    if (
+        len(path_parts) == 4
+        and path_parts[:2] == ["v1", "runs"]
+        and path_parts[3] in {"approve", "reject"}
+    ):
         return "run.approve", path_parts[2]
-    if method == "POST" and len(path_parts) == 3 and path_parts[0] == "runs" and path_parts[2] in {"approve", "reject"}:
+    if (
+        method == "POST"
+        and len(path_parts) == 3
+        and path_parts[0] == "runs"
+        and path_parts[2] in {"approve", "reject"}
+    ):
         return "run.approve", path_parts[1]
     if len(path_parts) >= 3 and path_parts[-1] in {"logs", "stream"}:
         rid = path_parts[-2] if len(path_parts) >= 3 else None
@@ -174,7 +207,7 @@ _audit_logger: AuditLogger | None = None
 
 
 def _hdl_metrics(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -182,7 +215,7 @@ def _hdl_metrics(
 
 
 def _hdl_root_ui(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -195,7 +228,7 @@ def _hdl_root_ui(
 
 
 def _hdl_healthz(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -205,7 +238,7 @@ def _hdl_healthz(
 
 
 def _hdl_v1_runs(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -220,7 +253,15 @@ def _hdl_v1_runs(
     if not isinstance(payload_raw, dict):
         return _json_response(400, {"error": "invalid_json"})
     try:
-        return _json_response(201, service.create_run(payload_raw, request_id=request_id, auth_subject=auth_subject, client_ip=client_ip))
+        return _json_response(
+            201,
+            service.create_run(
+                payload_raw,
+                request_id=request_id,
+                auth_subject=auth_subject,
+                client_ip=client_ip,
+            ),
+        )
     except ValueError as exc:
         error = str(exc)
         return _json_response(409 if error == "duplicate_run_id" else 400, {"error": error})
@@ -229,7 +270,7 @@ def _hdl_v1_runs(
 
 
 def _hdl_runs_list(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -239,7 +280,7 @@ def _hdl_runs_list(
 
 
 def _hdl_runs_search(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -265,7 +306,7 @@ def _hdl_runs_search(
 
 
 def _hdl_v1_run_logs(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -273,11 +314,13 @@ def _hdl_v1_run_logs(
         return _json_response(405, {"error": "method_not_allowed"})
     run_id = path_parts[2]
     payload = service.get_logs(run_id)
-    return _json_response(200, payload) if payload is not None else _json_response(404, {"error": "not_found", "run_id": run_id})
+    if payload is not None:
+        return _json_response(200, payload)
+    return _json_response(404, {"error": "not_found", "run_id": run_id})
 
 
 def _hdl_v1_run_cancel(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -285,11 +328,13 @@ def _hdl_v1_run_cancel(
         return _json_response(405, {"error": "method_not_allowed"})
     run_id = path_parts[2]
     payload = service.cancel_run(run_id)
-    return _json_response(202, payload) if payload is not None else _json_response(404, {"error": "not_found", "run_id": run_id})
+    if payload is not None:
+        return _json_response(202, payload)
+    return _json_response(404, {"error": "not_found", "run_id": run_id})
 
 
 def _hdl_v1_run_approve_reject(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -310,11 +355,13 @@ def _hdl_v1_run_approve_reject(
         )
     except ValueError as exc:
         return _json_response(409, {"error": str(exc), "run_id": run_id})
-    return _json_response(202, payload) if payload is not None else _json_response(404, {"error": "not_found", "run_id": run_id})
+    if payload is not None:
+        return _json_response(202, payload)
+    return _json_response(404, {"error": "not_found", "run_id": run_id})
 
 
 def _hdl_v1_run_stream(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -322,7 +369,7 @@ def _hdl_v1_run_stream(
 
 
 def _hdl_v1_run_get(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -330,11 +377,13 @@ def _hdl_v1_run_get(
         return _json_response(405, {"error": "method_not_allowed"})
     run_id = path_parts[2]
     payload = service.get_run(run_id)
-    return _json_response(200, payload) if payload is not None else _json_response(404, {"error": "not_found", "run_id": run_id})
+    if payload is not None:
+        return _json_response(200, payload)
+    return _json_response(404, {"error": "not_found", "run_id": run_id})
 
 
 def _hdl_runs_stream(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -345,7 +394,7 @@ def _hdl_runs_stream(
 
 
 def _hdl_runs_approve_reject(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -364,11 +413,13 @@ def _hdl_runs_approve_reject(
         )
     except ValueError as exc:
         return _json_response(409, {"error": str(exc), "run_id": run_id})
-    return _json_response(202, payload) if payload is not None else _json_response(404, {"error": "not_found", "run_id": run_id})
+    if payload is not None:
+        return _json_response(202, payload)
+    return _json_response(404, {"error": "not_found", "run_id": run_id})
 
 
 def _hdl_runs_approval_policy(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -386,7 +437,9 @@ def _hdl_runs_approval_policy(
         from typing import cast as _cast
         policy = TimedApprovalPolicy(
             timeout_seconds=float(policy_raw.get("timeout_seconds", 300.0)),
-            auto_action=_cast("Literal['approve', 'reject']", policy_raw.get("auto_action", "reject")),
+            auto_action=_cast(
+                "Literal['approve', 'reject']", policy_raw.get("auto_action", "reject")
+            ),
         )
     elif kind == "quorum":
         policy = QuorumApprovalPolicy(
@@ -406,7 +459,7 @@ def _hdl_runs_approval_policy(
 
 
 def _hdl_runs_vote(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -427,14 +480,16 @@ def _hdl_runs_vote(
     role = _non_empty_str(role_raw) if role_raw is not None else None
     comment = str(payload_raw.get("comment", ""))
     try:
-        result = service.cast_vote(run_id, reviewer_id=reviewer_id, role=role, action=action, comment=comment)
+        result = service.cast_vote(
+            run_id, reviewer_id=reviewer_id, role=role, action=action, comment=comment
+        )
     except KeyError:
         return _json_response(404, {"error": "policy_not_found", "run_id": run_id})
     return _json_response(200, result)
 
 
 def _hdl_spa(
-    service: "RemoteAPIService", method: str, request_path: str,
+    service: RemoteAPIService, method: str, request_path: str,
     request_body: bytes | None, auth_subject: str, path_parts: list[str],
     request_id: str, client_ip: str,
 ) -> tuple[int, str, bytes]:
@@ -493,13 +548,28 @@ def _match_parameterized(
     if method == "GET" and n == 3 and path_parts[0] == "runs" and path_parts[2] == "stream":
         return _hdl_runs_stream
     # /runs/{run_id}/approve|reject
-    if method == "POST" and n == 3 and path_parts[0] == "runs" and path_parts[2] in {"approve", "reject"}:
+    if (
+        method == "POST"
+        and n == 3
+        and path_parts[0] == "runs"
+        and path_parts[2] in {"approve", "reject"}
+    ):
         return _hdl_runs_approve_reject
     # /runs/{run_id}/approval-policy
-    if method == "POST" and n == 3 and path_parts[0] == "runs" and path_parts[2] == "approval-policy":
+    if (
+        method == "POST"
+        and n == 3
+        and path_parts[0] == "runs"
+        and path_parts[2] == "approval-policy"
+    ):
         return _hdl_runs_approval_policy
     # /runs/{run_id}/vote
-    if method == "POST" and n == 3 and path_parts[0] == "runs" and path_parts[2] == "vote":
+    if (
+        method == "POST"
+        and n == 3
+        and path_parts[0] == "runs"
+        and path_parts[2] == "vote"
+    ):
         return _hdl_runs_vote
     # /app/...
     if path_parts and path_parts[0] == "app":
@@ -529,9 +599,15 @@ def _api_http_dispatch(
     )
     if auth_error is not None:
         _pp = [p for p in route.split("/") if p]
-        _action, _rid = _audit_action_and_resource(method=method, route=route, path_parts=_pp, status=auth_error[0])
+        _action, _rid = _audit_action_and_resource(
+            method=method, route=route, path_parts=_pp, status=auth_error[0]
+        )
         if _audit_logger is not None:
-            _audit_logger.log(AuditEvent(ts=utc_now_iso(), subject="anonymous", roles=[], action=_action, resource_id=_rid, outcome="denied", detail="bearer_auth_failed"))
+            _audit_logger.log(AuditEvent(
+                ts=utc_now_iso(), subject="anonymous", roles=[],
+                action=_action, resource_id=_rid, outcome="denied",
+                detail="bearer_auth_failed",
+            ))
         return auth_error
 
     if service._rate_limiter is not None and not service._rate_limiter.acquire():
@@ -539,25 +615,43 @@ def _api_http_dispatch(
 
     _jwt = jwt_settings or JWTSettings(jwt_secret=None, jwks_url=None)
     path_parts = [p for p in route.split("/") if p]
-    _required_roles = _route_policy(route=route, method=method, path_parts=path_parts, jwt_enabled=_jwt.enabled)
+    _required_roles = _route_policy(
+        route=route, method=method, path_parts=path_parts, jwt_enabled=_jwt.enabled
+    )
     if _required_roles:
         try:
-            _claims = authorize_stdlib(authorization=authorization_header, settings=_jwt, required_roles=_required_roles)
+            _claims = authorize_stdlib(
+                authorization=authorization_header,
+                settings=_jwt,
+                required_roles=_required_roles,
+            )
             if _claims.sub and _claims.sub != "anonymous":
                 auth_subject = _claims.sub
         except AuthError as _auth_exc:
-            _action, _rid = _audit_action_and_resource(method=method, route=route, path_parts=path_parts, status=_auth_exc.status_code)
+            _action, _rid = _audit_action_and_resource(
+                method=method, route=route, path_parts=path_parts,
+                status=_auth_exc.status_code,
+            )
             if _audit_logger is not None:
-                _audit_logger.log(AuditEvent(ts=utc_now_iso(), subject="anonymous", roles=[], action=_action, resource_id=_rid, outcome="denied", detail=_auth_exc.detail))
+                _audit_logger.log(AuditEvent(
+                    ts=utc_now_iso(), subject="anonymous", roles=[],
+                    action=_action, resource_id=_rid, outcome="denied",
+                    detail=_auth_exc.detail,
+                ))
             return _json_response(_auth_exc.status_code, {"error": _auth_exc.detail})
 
     handler: _HandlerFn | None = _EXACT_ROUTE_TABLE.get(route)
     if handler is None:
         handler = _match_parameterized(route, method, path_parts)
     if handler is not None:
-        return handler(service, method, request_path, request_body, auth_subject, path_parts, request_id, client_ip)
+        return handler(
+            service, method, request_path, request_body,
+            auth_subject, path_parts, request_id, client_ip,
+        )
 
-    _admin_response = register_admin_routes(service, method=method, route=route, path_parts=path_parts, request_body=request_body)
+    _admin_response = register_admin_routes(
+        service, method=method, route=route, path_parts=path_parts, request_body=request_body
+    )
     if _admin_response is not None:
         return _admin_response
 
@@ -588,9 +682,19 @@ def _api_http_response(
     if _audit_logger is not None and status not in {401, 403}:
         _route = urlsplit(request_path).path.rstrip("/") or "/"
         _pp = [p for p in _route.split("/") if p]
-        _action, _rid = _audit_action_and_resource(method=method, route=_route, path_parts=_pp, status=status)
+        _action, _rid = _audit_action_and_resource(
+            method=method, route=_route, path_parts=_pp, status=status
+        )
         _outcome: Literal["ok", "denied", "error"] = "error" if status >= 500 else "ok"
-        _audit_logger.log(AuditEvent(ts=utc_now_iso(), subject=auth_mode if auth_mode != "off" else "anonymous", roles=[], action=_action, resource_id=_rid, outcome=_outcome, detail=None))
+        _audit_logger.log(AuditEvent(
+            ts=utc_now_iso(),
+            subject=auth_mode if auth_mode != "off" else "anonymous",
+            roles=[],
+            action=_action,
+            resource_id=_rid,
+            outcome=_outcome,
+            detail=None,
+        ))
     return status, content_type, body
 
 
@@ -603,7 +707,10 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
     from lg_orch.procedure_cache import ProcedureCache
     from lg_orch.run_store import RunStore
 
-    init_telemetry(service_name="lula-orchestrator", otlp_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
+    init_telemetry(
+        service_name="lula-orchestrator",
+        otlp_endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    )
     log = get_logger()
     try:
         cfg = load_config(repo_root=repo_root)
@@ -623,8 +730,16 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
     procedure_cache: ProcedureCache | None = None
     if remote_api_cfg.procedure_cache_path:
         procedure_cache = ProcedureCache(db_path=Path(remote_api_cfg.procedure_cache_path))
-    service = RemoteAPIService(repo_root=repo_root, run_store=run_store, rate_limiter=rate_limiter, procedure_cache=procedure_cache, namespace=_namespace)
-    _jwt_settings = jwt_settings_from_config(jwt_secret=remote_api_cfg.jwt_secret, jwks_url=remote_api_cfg.jwks_url)
+    service = RemoteAPIService(
+        repo_root=repo_root,
+        run_store=run_store,
+        rate_limiter=rate_limiter,
+        procedure_cache=procedure_cache,
+        namespace=_namespace,
+    )
+    _jwt_settings = jwt_settings_from_config(
+        jwt_secret=remote_api_cfg.jwt_secret, jwks_url=remote_api_cfg.jwks_url
+    )
 
     class RemoteAPIRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -636,8 +751,15 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
         def _handle_request(self, *, method: str) -> None:
             request_id = _request_id_from_value(self.headers.get(_REQUEST_ID_HEADER))
             route = urlsplit(self.path).path.rstrip("/") or "/"
-            client_ip = _request_client_ip(client_address=self.client_address, forwarded_for=_non_empty_str(self.headers.get("X-Forwarded-For")), trust_forwarded_headers=remote_api_cfg.trust_forwarded_headers)
-            scheme = _request_scheme(forwarded_proto=_non_empty_str(self.headers.get("X-Forwarded-Proto")), trust_forwarded_headers=remote_api_cfg.trust_forwarded_headers)
+            client_ip = _request_client_ip(
+                client_address=self.client_address,
+                forwarded_for=_non_empty_str(self.headers.get("X-Forwarded-For")),
+                trust_forwarded_headers=remote_api_cfg.trust_forwarded_headers,
+            )
+            scheme = _request_scheme(
+                forwarded_proto=_non_empty_str(self.headers.get("X-Forwarded-Proto")),
+                trust_forwarded_headers=remote_api_cfg.trust_forwarded_headers,
+            )
             started_at = time.perf_counter()
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -645,9 +767,28 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
                 content_length = 0
             try:
                 request_body = self.rfile.read(content_length) if content_length > 0 else None
-                status, content_type, body = _api_http_response(service, method=method, request_path=self.path, request_body=request_body, request_id=request_id, client_ip=client_ip, auth_mode=remote_api_cfg.auth_mode, expected_bearer_token=remote_api_cfg.bearer_token, authorization_header=self.headers.get("Authorization"), allow_unauthenticated_healthz=remote_api_cfg.allow_unauthenticated_healthz, jwt_settings=_jwt_settings)
+                status, content_type, body = _api_http_response(
+                    service,
+                    method=method,
+                    request_path=self.path,
+                    request_body=request_body,
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    auth_mode=remote_api_cfg.auth_mode,
+                    expected_bearer_token=remote_api_cfg.bearer_token,
+                    authorization_header=self.headers.get("Authorization"),
+                    allow_unauthenticated_healthz=remote_api_cfg.allow_unauthenticated_healthz,
+                    jwt_settings=_jwt_settings,
+                )
             except Exception as exc:
-                log.error("remote_api_request_failed", request_id=request_id, method=method, route=route, client_ip=client_ip, error=str(exc))
+                log.error(
+                    "remote_api_request_failed",
+                    request_id=request_id,
+                    method=method,
+                    route=route,
+                    client_ip=client_ip,
+                    error=str(exc),
+                )
                 status, content_type, body = _json_response(500, {"error": "internal_server_error"})
 
             if status == -1 and content_type == "sse":
@@ -682,7 +823,17 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
             self.wfile.write(body)
             if remote_api_cfg.access_log_enabled:
                 duration_ms = int((time.perf_counter() - started_at) * 1000)
-                log.info("remote_api_access", request_id=request_id, method=method, route=route, status=status, duration_ms=duration_ms, client_ip=client_ip, scheme=scheme, authenticated=bool(status < 400 and remote_api_cfg.auth_mode != "off"))
+                log.info(
+                    "remote_api_access",
+                    request_id=request_id,
+                    method=method,
+                    route=route,
+                    status=status,
+                    duration_ms=duration_ms,
+                    client_ip=client_ip,
+                    scheme=scheme,
+                    authenticated=bool(status < 400 and remote_api_cfg.auth_mode != "off"),
+                )
 
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -694,7 +845,14 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
 
     try:
         with ThreadingHTTPServer((host, port), RemoteAPIRequestHandler) as server:
-            log.info("remote_api_listening", host=host, port=port, repo_root=str(repo_root), auth_mode=remote_api_cfg.auth_mode, trust_forwarded_headers=remote_api_cfg.trust_forwarded_headers)
+            log.info(
+                "remote_api_listening",
+                host=host,
+                port=port,
+                repo_root=str(repo_root),
+                auth_mode=remote_api_cfg.auth_mode,
+                trust_forwarded_headers=remote_api_cfg.trust_forwarded_headers,
+            )
             print(f"Remote API listening on http://{host}:{port}")
             server.serve_forever()
     except OSError as exc:

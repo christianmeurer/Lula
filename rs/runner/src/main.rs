@@ -13,9 +13,9 @@ mod snapshots;
 mod tools;
 mod vsock;
 
-use axum::{routing::get, routing::post, Json, Router};
 use axum::http::header::CONTENT_TYPE;
 use axum::response::IntoResponse;
+use axum::{routing::get, routing::post, Json, Router};
 use clap::Parser;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -54,10 +54,7 @@ async fn metrics_handler(
         Option<Arc<metrics_exporter_prometheus::PrometheusHandle>>,
     >,
 ) -> impl IntoResponse {
-    let body = handle
-        .as_ref()
-        .map(|h| h.render())
-        .unwrap_or_default();
+    let body = handle.as_ref().map(|h| h.render()).unwrap_or_default();
     ([(CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)], body)
 }
 
@@ -129,28 +126,19 @@ async fn batch_execute_tool(
 /// Returns `Some(tracer)` on success or `None` if the exporter fails to
 /// build (e.g. the endpoint is unreachable at startup).  The caller logs a
 /// warning in the `None` case and continues without OTLP export.
-fn try_init_otlp(
-    endpoint: &str,
-    service_name: &str,
-) -> Option<opentelemetry_sdk::trace::Tracer> {
+fn try_init_otlp(endpoint: &str, service_name: &str) -> Option<opentelemetry_sdk::trace::Tracer> {
     use opentelemetry::KeyValue;
     use opentelemetry_otlp::WithExportConfig;
     use opentelemetry_sdk::runtime;
 
-    let resource = opentelemetry_sdk::Resource::new(vec![
-        KeyValue::new(
-            opentelemetry_semantic_conventions::resource::SERVICE_NAME,
-            service_name.to_string(),
-        ),
-    ]);
+    let resource = opentelemetry_sdk::Resource::new(vec![KeyValue::new(
+        opentelemetry_semantic_conventions::resource::SERVICE_NAME,
+        service_name.to_string(),
+    )]);
 
     let result = opentelemetry_otlp::new_pipeline()
         .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(endpoint),
-        )
+        .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint(endpoint))
         .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(resource))
         .install_batch(runtime::Tokio);
 
@@ -206,19 +194,11 @@ async fn main() -> anyhow::Result<()> {
 
     let maybe_tracer = try_init_otlp(&otlp_endpoint, "lula-runner");
 
-    let filter = EnvFilter::builder()
-        .with_default_directive(Level::INFO.into())
-        .from_env_lossy();
+    let filter = EnvFilter::builder().with_default_directive(Level::INFO.into()).from_env_lossy();
 
-    let otel_layer = maybe_tracer.map(|tracer| {
-        tracing_opentelemetry::layer().with_tracer(tracer)
-    });
+    let otel_layer = maybe_tracer.map(|tracer| tracing_opentelemetry::layer().with_tracer(tracer));
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt::layer().json())
-        .with(otel_layer)
-        .init();
+    tracing_subscriber::registry().with(filter).with(fmt::layer().json()).with(otel_layer).init();
 
     // Install W3C TraceContext propagator globally so that `traceparent`
     // headers injected by the Python orchestrator are extracted correctly.
@@ -226,11 +206,8 @@ async fn main() -> anyhow::Result<()> {
         opentelemetry_sdk::propagation::TraceContextPropagator::new(),
     );
 
-    let api_key = if args.api_key.trim().is_empty() {
-        None
-    } else {
-        Some(args.api_key.trim().to_string())
-    };
+    let api_key =
+        if args.api_key.trim().is_empty() { None } else { Some(args.api_key.trim().to_string()) };
 
     let cfg = RunnerConfig::with_rate_limit(
         args.root_dir,
@@ -261,10 +238,7 @@ async fn main() -> anyhow::Result<()> {
             cfg.clone(),
             crate::auth::require_api_key,
         ))
-        .route_layer(axum::middleware::from_fn_with_state(
-            cfg.clone(),
-            crate::auth::rate_limit,
-        ));
+        .route_layer(axum::middleware::from_fn_with_state(cfg.clone(), crate::auth::rate_limit));
 
     let app = Router::new()
         .route("/healthz", get(healthz))
@@ -279,9 +253,7 @@ async fn main() -> anyhow::Result<()> {
     let addr: SocketAddr = args.bind.parse()?;
     tracing::info!(%addr, rate_limit_rps = args.rate_limit_rps, "runner_listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
 
     opentelemetry::global::shutdown_tracer_provider();
     Ok(())
@@ -295,8 +267,7 @@ async fn main() -> anyhow::Result<()> {
 async fn shutdown_signal() {
     use tokio::signal::unix::{signal, SignalKind};
 
-    let mut sigterm = signal(SignalKind::terminate())
-        .expect("failed to install SIGTERM handler");
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
 
     tokio::select! {
         _ = sigterm.recv() => {
@@ -310,8 +281,6 @@ async fn shutdown_signal() {
 
 #[cfg(not(unix))]
 async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("failed to install ctrl-c handler");
+    tokio::signal::ctrl_c().await.expect("failed to install ctrl-c handler");
     tracing::info!("runner_shutdown: received ctrl-c");
 }

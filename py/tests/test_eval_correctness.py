@@ -5,7 +5,6 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 
 def _load_eval_run_module() -> Any:
@@ -320,9 +319,9 @@ def test_evaluate_golden_assertions_eq_fail() -> None:
     module = _load_eval_run_module()
     golden = {"assertions": [{"field": "status", "op": "eq", "value": "success"}]}
     result = {"status": "failure"}
-    passed, total, failures = module.evaluate_golden_assertions(result, golden)
+    passed, _total, failures = module.evaluate_golden_assertions(result, golden)
     assert passed == 0
-    assert total == 1
+    assert _total == 1
     assert len(failures) == 1
     assert "status" in failures[0]
 
@@ -331,10 +330,10 @@ def test_evaluate_golden_assertions_lte() -> None:
     module = _load_eval_run_module()
     golden = {"assertions": [{"field": "loop_count", "op": "lte", "value": 3}]}
     # passes when actual <= expected
-    passed, total, failures = module.evaluate_golden_assertions({"loop_count": 2}, golden)
+    passed, _total, failures = module.evaluate_golden_assertions({"loop_count": 2}, golden)
     assert passed == 1 and failures == []
     # fails when actual > expected
-    passed2, total2, failures2 = module.evaluate_golden_assertions({"loop_count": 5}, golden)
+    passed2, _total2, failures2 = module.evaluate_golden_assertions({"loop_count": 5}, golden)
     assert passed2 == 0 and len(failures2) == 1
 
 
@@ -345,7 +344,7 @@ def test_evaluate_golden_assertions_in() -> None:
             {"field": "approval_outcome", "op": "in", "value": ["approved", "rejected"]}
         ]
     }
-    passed, total, failures = module.evaluate_golden_assertions(
+    passed, _total, failures = module.evaluate_golden_assertions(
         {"approval_outcome": "approved"}, golden
     )
     assert passed == 1 and failures == []

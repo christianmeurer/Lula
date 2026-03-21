@@ -132,20 +132,14 @@ impl McpStdioClient {
     async fn connect(cfg: &RunnerConfig, server: &McpServerConfigIn) -> Result<Self, ApiError> {
         let command = server.command.trim();
         if command.is_empty() {
-            return Err(ApiError::BadRequest(
-                "mcp server command is required".to_string(),
-            ));
+            return Err(ApiError::BadRequest("mcp server command is required".to_string()));
         }
 
         // Security: MCP server commands must pass the same allowlist as exec tool calls.
-        let bin_name = std::path::Path::new(command)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(command);
+        let bin_name =
+            std::path::Path::new(command).file_name().and_then(|n| n.to_str()).unwrap_or(command);
         if !crate::config::ALLOWED_EXEC_COMMANDS.contains(&bin_name) {
-            return Err(ApiError::Forbidden(
-                "mcp server command not in allowlist".to_string(),
-            ));
+            return Err(ApiError::Forbidden("mcp server command not in allowlist".to_string()));
         }
 
         let mut cmd = Command::new(command);
@@ -167,10 +161,7 @@ impl McpStdioClient {
         }
 
         let mut child = cmd.spawn().map_err(|e| {
-            ApiError::Other(anyhow::anyhow!(
-                "failed to spawn MCP server '{}': {e}",
-                command
-            ))
+            ApiError::Other(anyhow::anyhow!("failed to spawn MCP server '{}': {e}", command))
         })?;
 
         let stdin = child
@@ -233,9 +224,7 @@ impl McpStdioClient {
                 return Ok(result.clone());
             }
 
-            return Err(ApiError::BadRequest(
-                "json-rpc response missing result/error".to_string(),
-            ));
+            return Err(ApiError::BadRequest("json-rpc response missing result/error".to_string()));
         }
     }
 
@@ -279,9 +268,7 @@ impl McpStdioClient {
                 .and_then(|r| r.map_err(|e| ApiError::Other(e.into())))?;
 
             if read == 0 {
-                return Err(ApiError::BadRequest(
-                    "unexpected EOF from MCP server".to_string(),
-                ));
+                return Err(ApiError::BadRequest("unexpected EOF from MCP server".to_string()));
             }
 
             let trimmed = line.trim_end_matches(['\r', '\n']);
@@ -368,13 +355,7 @@ async fn get_or_connect(
 async fn return_to_pool(pool: &McpPool, server: &McpServerConfigIn, client: McpStdioClient) {
     let key = pool_key(server);
     let mut guard = pool.lock().await;
-    guard.insert(
-        key,
-        Box::new(PoolEntry {
-            client,
-            last_used: Instant::now(),
-        }),
-    );
+    guard.insert(key, Box::new(PoolEntry { client, last_used: Instant::now() }));
 }
 
 /// Remove all idle pool entries whose `last_used` exceeds [`MCP_POOL_TTL_SECS`].
@@ -579,10 +560,8 @@ pub async fn mcp_discover(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelo
         Ok(result) => {
             return_to_pool(&cfg.mcp_pool, &inp.server, client).await;
             let tools_result_redacted = redact_value(&result, &mut inbound_stats);
-            let tools = tools_result_redacted
-                .get("tools")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![]));
+            let tools =
+                tools_result_redacted.get("tools").cloned().unwrap_or_else(|| Value::Array(vec![]));
             Ok(ToolEnvelope::ok(
                 "mcp_discover",
                 serde_json::to_string_pretty(&tools).unwrap_or_default(),
@@ -664,10 +643,8 @@ pub async fn mcp_execute(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelop
                     }
                 }),
             );
-            env.mcp = Some(McpMetadata {
-                inbound_redactions: inbound_stats.into_metadata(),
-                ..mcp_meta
-            });
+            env.mcp =
+                Some(McpMetadata { inbound_redactions: inbound_stats.into_metadata(), ..mcp_meta });
             Ok(env)
         }
         Err(err) => {
@@ -692,16 +669,17 @@ pub async fn mcp_execute(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelop
                     }
                 }),
             );
-            env.mcp = Some(McpMetadata {
-                inbound_redactions: inbound_stats.into_metadata(),
-                ..mcp_meta
-            });
+            env.mcp =
+                Some(McpMetadata { inbound_redactions: inbound_stats.into_metadata(), ..mcp_meta });
             Ok(env)
         }
     }
 }
 
-pub async fn mcp_resources_list(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiError> {
+pub async fn mcp_resources_list(
+    cfg: &RunnerConfig,
+    input: Value,
+) -> Result<ToolEnvelope, ApiError> {
     let inp: McpResourcesListIn =
         serde_json::from_value(input).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
@@ -723,10 +701,8 @@ pub async fn mcp_resources_list(cfg: &RunnerConfig, input: Value) -> Result<Tool
         Ok(result) => {
             return_to_pool(&cfg.mcp_pool, &inp.server, client).await;
             let result_redacted = redact_value(&result, &mut inbound_stats);
-            let resources = result_redacted
-                .get("resources")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![]));
+            let resources =
+                result_redacted.get("resources").cloned().unwrap_or_else(|| Value::Array(vec![]));
             Ok(ToolEnvelope::ok(
                 "mcp_resources_list",
                 serde_json::to_string_pretty(&resources).unwrap_or_default(),
@@ -775,9 +751,7 @@ pub async fn mcp_resource_read(cfg: &RunnerConfig, input: Value) -> Result<ToolE
     let uri_redacted = redact_string(&resource_uri, &mut outbound_stats);
 
     let mut client = get_or_connect(&cfg.mcp_pool, &inp.server, cfg).await?;
-    let result = client
-        .send_request("resources/read", json!({"uri": uri_redacted}))
-        .await;
+    let result = client.send_request("resources/read", json!({"uri": uri_redacted})).await;
 
     match result {
         Ok(result) => {
@@ -835,10 +809,8 @@ pub async fn mcp_prompts_list(cfg: &RunnerConfig, input: Value) -> Result<ToolEn
         Ok(result) => {
             return_to_pool(&cfg.mcp_pool, &inp.server, client).await;
             let result_redacted = redact_value(&result, &mut inbound_stats);
-            let prompts = result_redacted
-                .get("prompts")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![]));
+            let prompts =
+                result_redacted.get("prompts").cloned().unwrap_or_else(|| Value::Array(vec![]));
             Ok(ToolEnvelope::ok(
                 "mcp_prompts_list",
                 serde_json::to_string_pretty(&prompts).unwrap_or_default(),
@@ -888,10 +860,7 @@ pub async fn mcp_prompt_get(cfg: &RunnerConfig, input: Value) -> Result<ToolEnve
 
     let mut client = get_or_connect(&cfg.mcp_pool, &inp.server, cfg).await?;
     let result = client
-        .send_request(
-            "prompts/get",
-            json!({"name": prompt_name, "arguments": redacted_args}),
-        )
+        .send_request("prompts/get", json!({"name": prompt_name, "arguments": redacted_args}))
         .await;
 
     match result {
@@ -1440,8 +1409,6 @@ while True:
         .expect("mcp execute should return error envelope");
 
         assert!(!env.ok);
-        assert!(env
-            .stderr
-            .contains("jsonrpc_error:-32050:forced call error"));
+        assert!(env.stderr.contains("jsonrpc_error:-32050:forced call error"));
     }
 }

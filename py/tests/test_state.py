@@ -43,7 +43,9 @@ def _handoff() -> AgentHandoff:
         consumer="coder",
         objective="Prepare a minimal patch.",
         file_scope=["py/src/lg_orch/state.py"],
-        evidence=[HandoffEvidence(kind="request", detail="implement the change", ref="user_request")],
+        evidence=[
+            HandoffEvidence(kind="request", detail="implement the change", ref="user_request")
+        ],
         constraints=["Prefer the smallest correct diff."],
         acceptance_checks=["The patch addresses the request."],
         retry_budget=1,

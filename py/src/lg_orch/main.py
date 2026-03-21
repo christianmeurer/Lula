@@ -307,7 +307,7 @@ def _serve_trace_http(trace_dir: Path, *, host: str, port: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def cli(argv: list[str] | None = None) -> int:  # noqa: C901
+def cli(argv: list[str] | None = None) -> int:
     import os as _os
 
     init_telemetry(

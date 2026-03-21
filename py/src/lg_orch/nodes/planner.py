@@ -36,8 +36,6 @@ from lg_orch.model_routing import latest_model_route, record_inference_telemetry
 from lg_orch.nodes._planner_memory import (
     _apply_procedural_memory_constraints,
     _apply_semantic_memory_constraints,
-    _planner_procedural_memory_prompt,
-    _planner_semantic_memory_prompt,
     _record_selected_procedure_use,
 )
 from lg_orch.nodes._planner_prompt import (
@@ -46,15 +44,15 @@ from lg_orch.nodes._planner_prompt import (
     _default_plan,
     _extract_json_block,
     _first_step_handoff,
-    _format_mcp_tool_catalog,  # re-exported: tests import it from this module
     _recovery_action_from_packet,
 )
 from lg_orch.nodes._utils import resolve_inference_client
 from lg_orch.state import OrchState, PlannerOutput
-from lg_orch.tools import InferenceClient
 from lg_orch.trace import append_event
 
-_SCHEMA_PATH = Path(__file__).parent.parent.parent.parent.parent / "schemas" / "planner_output.schema.json"
+_SCHEMA_PATH = (
+    Path(__file__).parent.parent.parent.parent.parent / "schemas" / "planner_output.schema.json"
+)
 
 
 def _load_planner_schema() -> dict[str, Any]:

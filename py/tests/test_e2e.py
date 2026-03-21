@@ -157,8 +157,16 @@ class TestE2ESmoke:
         api_key = os.environ.get("MODEL_ACCESS_KEY", "").strip()
         if api_key:
             state["_models"] = {
-                "router": {"provider": "digitalocean", "model": "meta-llama/Meta-Llama-3.1-70B-Instruct", "temperature": 0.0},
-                "planner": {"provider": "digitalocean", "model": "meta-llama/Meta-Llama-3.1-70B-Instruct", "temperature": 0.0},
+                "router": {
+                    "provider": "digitalocean",
+                    "model": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+                    "temperature": 0.0,
+                },
+                "planner": {
+                    "provider": "digitalocean",
+                    "model": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+                    "temperature": 0.0,
+                },
             }
             state["_model_provider_runtime"] = {
                 "digitalocean": {

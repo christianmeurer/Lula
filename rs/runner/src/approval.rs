@@ -26,19 +26,17 @@ static APPROVAL_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
 /// A warning is emitted when falling back to the ephemeral random secret so that
 /// operators know to set a fixed secret in production.
 fn approval_secret() -> &'static [u8] {
-    APPROVAL_SECRET.get_or_init(|| {
-        match std::env::var("LG_RUNNER_APPROVAL_SECRET") {
-            Ok(v) if !v.trim().is_empty() => v.into_bytes(),
-            _ => {
-                tracing::warn!(
-                    "LG_RUNNER_APPROVAL_SECRET is not set; \
+    APPROVAL_SECRET.get_or_init(|| match std::env::var("LG_RUNNER_APPROVAL_SECRET") {
+        Ok(v) if !v.trim().is_empty() => v.into_bytes(),
+        _ => {
+            tracing::warn!(
+                "LG_RUNNER_APPROVAL_SECRET is not set; \
                      using a random ephemeral secret. \
                      Approval tokens will not survive process restarts. \
                      Set LG_RUNNER_APPROVAL_SECRET in production."
-                );
-                let random_bytes: [u8; 32] = rand::random();
-                random_bytes.to_vec()
-            }
+            );
+            let random_bytes: [u8; 32] = rand::random();
+            random_bytes.to_vec()
         }
     })
 }
@@ -56,10 +54,7 @@ fn approval_secret_previous() -> Option<Vec<u8>> {
 
 /// Returns the current Unix timestamp in seconds.
 fn unix_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 /// Constant-time byte-slice equality to prevent timing attacks during HMAC comparison.
@@ -79,8 +74,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 #[must_use]
 fn compute_hmac(challenge_id: &str, iat: u64, nonce: &str, secret: &[u8]) -> String {
     let message = format!("{challenge_id}|{iat}|{nonce}");
-    let mut mac = HmacSha256::new_from_slice(secret)
-        .expect("HMAC accepts keys of any length");
+    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC accepts keys of any length");
     mac.update(message.as_bytes());
     hex::encode(mac.finalize().into_bytes())
 }
@@ -234,10 +228,7 @@ mod tests {
         let challenge_id = "approval:apply_patch";
         let token = generate_token(challenge_id);
         let result = require_approval(
-            Some(ApprovalTokenInput {
-                challenge_id: challenge_id.to_string(),
-                token,
-            }),
+            Some(ApprovalTokenInput { challenge_id: challenge_id.to_string(), token }),
             "apply_patch",
             challenge_id,
             ttl(),
@@ -287,10 +278,7 @@ mod tests {
         tampered.push(replacement);
 
         let result = require_approval(
-            Some(ApprovalTokenInput {
-                challenge_id: challenge_id.to_string(),
-                token: tampered,
-            }),
+            Some(ApprovalTokenInput { challenge_id: challenge_id.to_string(), token: tampered }),
             "apply_patch",
             challenge_id,
             ttl(),
@@ -312,10 +300,7 @@ mod tests {
         let token = format!("{challenge_id}.{iat}.{nonce}.{hmac_hex}");
 
         let result = require_approval(
-            Some(ApprovalTokenInput {
-                challenge_id: challenge_id.to_string(),
-                token,
-            }),
+            Some(ApprovalTokenInput { challenge_id: challenge_id.to_string(), token }),
             "apply_patch",
             challenge_id,
             ttl(),
@@ -344,10 +329,7 @@ mod tests {
         );
 
         let result = require_approval(
-            Some(ApprovalTokenInput {
-                challenge_id: challenge_id.to_string(),
-                token,
-            }),
+            Some(ApprovalTokenInput { challenge_id: challenge_id.to_string(), token }),
             "apply_patch",
             challenge_id,
             ttl(),
@@ -356,10 +338,7 @@ mod tests {
         std::env::remove_var("LG_RUNNER_APPROVAL_SECRET_PREVIOUS");
 
         // The token was signed with the previous secret, so it must be accepted.
-        assert!(
-            result.is_ok(),
-            "expected rotation to succeed, got: {result:?}"
-        );
+        assert!(result.is_ok(), "expected rotation to succeed, got: {result:?}");
         assert_eq!(result.unwrap().status, "approved");
     }
 

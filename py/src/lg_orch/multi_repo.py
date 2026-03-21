@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
-"""Multi-repository orchestration (Wave 9 – Cross-Repository Microservice Orchestration).
+"""Multi-repository orchestration (Wave 9 - Cross-Repository Microservice Orchestration).
 
 Extends :class:`~lg_orch.meta_graph.MetaGraphScheduler` to fan out sub-agents
 across multiple repository roots, injecting repo-specific context and typed
@@ -25,9 +25,9 @@ from lg_orch.meta_graph import (
 from lg_orch.scip_index import ScipIndex, ScipSymbol, load_scip_index
 
 __all__ = [
-    "RepoConfig",
     "CrossRepoHandoff",
     "MultiRepoScheduler",
+    "RepoConfig",
 ]
 
 log: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)

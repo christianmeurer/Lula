@@ -9,9 +9,10 @@ import shlex
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+
 
 def detect_test_runner(root_dir: str | Path) -> str:
     """Detect the appropriate test runner based on project files present in root_dir."""

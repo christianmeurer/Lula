@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from lg_orch.approval_policy import ApprovalPolicy, ApprovalVote
 
-
 Intent = Literal["code_change", "analysis", "research", "question", "refactor", "debug"]
 RouteLane = Literal["interactive", "deep_planning", "recovery"]
 RetryTarget = Literal["planner", "coder", "context_builder", "router"]

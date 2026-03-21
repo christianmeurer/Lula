@@ -64,11 +64,8 @@ pub fn parse_structured_diagnostics(stderr: &str) -> Vec<Diagnostic> {
                 let line_no = parse_u32(caps.name("line").map(|m| m.as_str()));
                 let col_no = parse_u32(caps.name("col").map(|m| m.as_str()));
                 let mut code = caps.name("code").map(|m| m.as_str().trim().to_string());
-                let mut message = caps
-                    .name("message")
-                    .map_or("", |m| m.as_str())
-                    .trim()
-                    .to_string();
+                let mut message =
+                    caps.name("message").map_or("", |m| m.as_str()).trim().to_string();
 
                 if code.is_none() {
                     if let Some(bre) = &bracket_code_re {
@@ -82,13 +79,8 @@ pub fn parse_structured_diagnostics(stderr: &str) -> Vec<Diagnostic> {
                 }
 
                 if !file.is_empty() && !message.is_empty() {
-                    let fingerprint = diagnostic_fingerprint(
-                        &file,
-                        line_no,
-                        col_no,
-                        code.as_deref(),
-                        &message,
-                    );
+                    let fingerprint =
+                        diagnostic_fingerprint(&file, line_no, col_no, code.as_deref(), &message);
                     out.push(Diagnostic {
                         file: file.clone(),
                         line: line_no,
@@ -106,11 +98,7 @@ pub fn parse_structured_diagnostics(stderr: &str) -> Vec<Diagnostic> {
         if let Some(re) = &rust_re {
             if let Some(caps) = re.captures(line) {
                 let code = caps.name("code").map(|m| m.as_str().to_string());
-                let message = caps
-                    .name("message")
-                    .map_or("", |m| m.as_str())
-                    .trim()
-                    .to_string();
+                let message = caps.name("message").map_or("", |m| m.as_str()).trim().to_string();
 
                 let mut file = String::new();
                 let mut line_no: Option<u32> = None;
@@ -125,13 +113,8 @@ pub fn parse_structured_diagnostics(stderr: &str) -> Vec<Diagnostic> {
                     }
                 }
 
-                let fingerprint = diagnostic_fingerprint(
-                    &file,
-                    line_no,
-                    col_no,
-                    code.as_deref(),
-                    &message,
-                );
+                let fingerprint =
+                    diagnostic_fingerprint(&file, line_no, col_no, code.as_deref(), &message);
                 out.push(Diagnostic {
                     file: file.clone(),
                     line: line_no,

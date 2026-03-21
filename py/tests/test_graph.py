@@ -18,7 +18,9 @@ def test_route_after_policy_gate_stops_on_budget_exhaustion() -> None:
 
 
 def test_route_after_policy_gate_stops_on_plan_iteration_exhaustion() -> None:
-    assert route_after_policy_gate(_state(halt_reason="plan_max_iterations_exhausted")) == "reporter"
+    assert (
+        route_after_policy_gate(_state(halt_reason="plan_max_iterations_exhausted")) == "reporter"
+    )
 
 
 def test_route_after_policy_gate_prefers_context_reset() -> None:

@@ -152,7 +152,9 @@ def dedupe_semantic_hits(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
             best_by_key[key] = dict(hit)
     deduped = list(best_by_key.values())
     deduped.sort(
-        key=lambda item: float(item.get("score", 0)) if isinstance(item.get("score"), (int, float)) else 0.0,
+        key=lambda item: (
+            float(item.get("score", 0)) if isinstance(item.get("score"), (int, float)) else 0.0
+        ),
         reverse=True,
     )
     return deduped
@@ -176,7 +178,9 @@ def summarize_tool_result(result: dict[str, Any], *, max_chars: int) -> dict[str
     return {
         "tool": str(result.get("tool", "")).strip(),
         "ok": bool(result.get("ok", False)),
-        "exit_code": int(result.get("exit_code", 0)) if isinstance(result.get("exit_code"), int) else 0,
+        "exit_code": (
+            int(result.get("exit_code", 0)) if isinstance(result.get("exit_code"), int) else 0
+        ),
         "summary": detail,
         "error": str(artifacts.get("error", "")).strip(),
     }
@@ -278,15 +282,22 @@ def _fact_pack(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         salience_raw = entry.get("salience", 0)
         entry["kind"] = str(entry.get("kind", "fact")).strip() or "fact"
         entry["summary"] = summary
-        entry["loop"] = loop_raw if isinstance(loop_raw, int) and not isinstance(loop_raw, bool) else 0
+        entry["loop"] = (
+            loop_raw if isinstance(loop_raw, int) and not isinstance(loop_raw, bool) else 0
+        )
         entry["salience"] = (
-            salience_raw if isinstance(salience_raw, int) and not isinstance(salience_raw, bool) else 0
+            salience_raw
+            if isinstance(salience_raw, int) and not isinstance(salience_raw, bool)
+            else 0
         )
         normalized.append(entry)
 
     deduped: dict[str, dict[str, Any]] = {}
     for entry in normalized:
-        key = str(entry.get("failure_fingerprint", "")).strip() or str(entry.get("summary", "")).strip()
+        key = (
+            str(entry.get("failure_fingerprint", "")).strip()
+            or str(entry.get("summary", "")).strip()
+        )
         current = deduped.get(key)
         if current is None:
             deduped[key] = entry
@@ -312,7 +323,7 @@ def build_context_layers(
     *,
     state: dict[str, Any],
     repo_context: dict[str, Any],
-    long_term: "LongTermMemoryStore | None" = None,
+    long_term: LongTermMemoryStore | None = None,
 ) -> dict[str, Any]:
     budgets = context_budget_settings(state)
 
@@ -342,7 +353,8 @@ def build_context_layers(
     else:
         stable_segments_pre = []
 
-    stable_segments: list[tuple[str, str]] = stable_segments_pre + [
+    stable_segments: list[tuple[str, str]] = [
+        *stable_segments_pre,
         (
             "repo_summary",
             "\n".join(
@@ -353,7 +365,7 @@ def build_context_layers(
                     f"top_level: {', '.join(str(item) for item in top_level[:30])}",
                 ]
             ),
-        )
+        ),
     ]
 
     # Store episodes for any finalized loop summaries when long_term is provided
@@ -504,7 +516,9 @@ def build_context_layers(
         "score": max(stable_pressure["score"], working_pressure["score"]),
         "compressed_segments": stable_pressure["compressed_segments"]
         + working_pressure["compressed_segments"],
-        "dropped_segments": stable_pressure["dropped_segments"] + working_pressure["dropped_segments"],
+        "dropped_segments": (
+            stable_pressure["dropped_segments"] + working_pressure["dropped_segments"]
+        ),
     }
     semantic_memory_count = len(semantic_memories)
     combined_fact_count = len(fact_pack) + min(semantic_memory_count, 3)

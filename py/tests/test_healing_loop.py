@@ -7,10 +7,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from lg_orch.healing_loop import HealingJob, HealingLoop, TestSuiteResult, detect_test_runner
-
 
 # ---------------------------------------------------------------------------
 # poll_once tests
@@ -110,10 +107,10 @@ def test_healing_loop_creates_job_on_failure(tmp_path: Any) -> None:
     healing.poll_once = fake_poll_once  # type: ignore[method-assign]
 
     async def _run() -> None:
-        try:
+        import contextlib
+
+        with contextlib.suppress(TimeoutError, asyncio.CancelledError):
             await asyncio.wait_for(healing.run_until_cancelled(), timeout=2.0)
-        except (asyncio.CancelledError, asyncio.TimeoutError):
-            pass
 
     asyncio.run(_run())
 

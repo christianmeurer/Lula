@@ -74,11 +74,18 @@ def register_admin_routes(
             poll_interval = float(payload_raw.get("poll_interval_seconds", 60.0))
         except (TypeError, ValueError):
             poll_interval = 60.0
-        result = service.start_healing_loop(repo_path_raw.strip(), poll_interval_seconds=poll_interval)
+        result = service.start_healing_loop(
+            repo_path_raw.strip(), poll_interval_seconds=poll_interval
+        )
         return _json_response(201, result)
 
     # POST /healing/{loop_id}/stop
-    if method == "POST" and len(path_parts) == 3 and path_parts[0] == "healing" and path_parts[2] == "stop":
+    if (
+        method == "POST"
+        and len(path_parts) == 3
+        and path_parts[0] == "healing"
+        and path_parts[2] == "stop"
+    ):
         loop_id = path_parts[1]
         result_stop = service.stop_healing_loop(loop_id)
         return (
@@ -88,7 +95,12 @@ def register_admin_routes(
         )
 
     # GET /healing/{loop_id}/jobs
-    if method == "GET" and len(path_parts) == 3 and path_parts[0] == "healing" and path_parts[2] == "jobs":
+    if (
+        method == "GET"
+        and len(path_parts) == 3
+        and path_parts[0] == "healing"
+        and path_parts[2] == "jobs"
+    ):
         loop_id = path_parts[1]
         jobs_payload = service.get_healing_jobs(loop_id)
         return (

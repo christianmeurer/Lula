@@ -20,7 +20,6 @@ from lg_orch.audit import (
     utc_now_iso,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -174,7 +173,9 @@ def test_build_sink_returns_none_for_gcs_when_no_bucket() -> None:
 
 
 def test_build_sink_returns_s3_sink() -> None:
-    cfg = AuditConfig(sink_type="s3", s3_bucket="my-bucket", s3_prefix="logs", s3_region="eu-west-1")
+    cfg = AuditConfig(
+        sink_type="s3", s3_bucket="my-bucket", s3_prefix="logs", s3_region="eu-west-1"
+    )
     sink = build_sink(cfg)
     assert isinstance(sink, S3AuditSink)
 
@@ -198,7 +199,6 @@ def test_build_sink_returns_none_for_unknown_type() -> None:
 @pytest.mark.asyncio
 async def test_s3_sink_noop_when_aioboto3_missing() -> None:
     """S3AuditSink.export silently no-ops when aioboto3 is absent."""
-    import sys
 
     sink = S3AuditSink(bucket="b", prefix="p", region="us-east-1")
     # Setting sys.modules entry to None causes `import aioboto3` to raise ImportError.
@@ -235,7 +235,7 @@ async def test_gcs_sink_noop_when_gcs_missing() -> None:
     google_cloud_key = "google.cloud"
     original_gc = sys.modules.pop(google_cloud_key, unittest.mock.sentinel.absent)
     google_key = "google"
-    original_g = sys.modules.get(google_key, unittest.mock.sentinel.absent)
+    _original_g = sys.modules.get(google_key, unittest.mock.sentinel.absent)
 
     try:
         # Should silently no-op

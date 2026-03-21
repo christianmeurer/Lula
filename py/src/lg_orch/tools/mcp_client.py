@@ -196,7 +196,8 @@ class MCPClient:
                     "tools": tool_summaries,
                 }
             )
-            lines.append(f"{server_name}: {', '.join(name for name in names if name) or 'no tools'}")
+            tool_names = ', '.join(name for name in names if name) or 'no tools'
+            lines.append(f"{server_name}: {tool_names}")
 
         return {
             "server_count": len(servers),
@@ -242,7 +243,11 @@ class MCPClient:
 
         env = self.runner_client.execute_tool(tool="mcp_resources_list", input=payload)
         if not bool(env.get("ok", False)):
-            log.warning("mcp_list_resources_failed", server=server_name, error=str(env.get("stderr", "")))
+            log.warning(
+                "mcp_list_resources_failed",
+                server=server_name,
+                error=str(env.get("stderr", "")),
+            )
             return []
 
         stdout = env.get("stdout", "")
@@ -271,7 +276,12 @@ class MCPClient:
 
         env = self.runner_client.execute_tool(tool="mcp_resource_read", input=payload)
         if not bool(env.get("ok", False)):
-            log.warning("mcp_read_resource_failed", server=server_name, uri=resource_uri, error=str(env.get("stderr", "")))
+            log.warning(
+                "mcp_read_resource_failed",
+                server=server_name,
+                uri=resource_uri,
+                error=str(env.get("stderr", "")),
+            )
             return {}
 
         stdout = env.get("stdout", "")
@@ -297,7 +307,11 @@ class MCPClient:
 
         env = self.runner_client.execute_tool(tool="mcp_prompts_list", input=payload)
         if not bool(env.get("ok", False)):
-            log.warning("mcp_list_prompts_failed", server=server_name, error=str(env.get("stderr", "")))
+            log.warning(
+                "mcp_list_prompts_failed",
+                server=server_name,
+                error=str(env.get("stderr", "")),
+            )
             return []
 
         stdout = env.get("stdout", "")
@@ -332,7 +346,12 @@ class MCPClient:
 
         env = self.runner_client.execute_tool(tool="mcp_prompt_get", input=payload)
         if not bool(env.get("ok", False)):
-            log.warning("mcp_get_prompt_failed", server=server_name, prompt=prompt_name, error=str(env.get("stderr", "")))
+            log.warning(
+                "mcp_get_prompt_failed",
+                server=server_name,
+                prompt=prompt_name,
+                error=str(env.get("stderr", "")),
+            )
             return {}
 
         stdout = env.get("stdout", "")
@@ -364,7 +383,11 @@ class MCPClient:
                 continue
 
             tools_data = self.discover_tools()
-            server_tools = [t for t in tools_data if t.get("server_name") == server_name and not t.get("_schema_hash_mismatch")]
+            server_tools = [
+                t for t in tools_data
+                if t.get("server_name") == server_name
+                and not t.get("_schema_hash_mismatch")
+            ]
             resources = self.list_resources(server_name)
             prompts = self.list_prompts(server_name)
 

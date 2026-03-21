@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from lg_orch.logging import get_logger
-
 _WORD_RE = re.compile(r"[a-z0-9']+")
 _FILE_HINT_RE = re.compile(r"(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+")
 
@@ -24,7 +22,9 @@ def _dedupe_strings(values: list[str]) -> list[str]:
     return out
 
 
-def _rank_semantic_memories(request: str, repo_context: dict[str, Any], *, limit: int = 4) -> list[dict[str, Any]]:
+def _rank_semantic_memories(
+    request: str, repo_context: dict[str, Any], *, limit: int = 4
+) -> list[dict[str, Any]]:
     semantic_memories_raw = repo_context.get("semantic_memories", [])
     semantic_memories = (
         [dict(entry) for entry in semantic_memories_raw if isinstance(entry, dict)]
@@ -76,7 +76,9 @@ def _planner_semantic_memory_prompt(repo_context: dict[str, Any], *, request: st
     return "semantic_memory_recall: " + json.dumps(compact, ensure_ascii=False, sort_keys=True)
 
 
-def _rank_cached_procedures(request: str, repo_context: dict[str, Any], *, limit: int = 3) -> list[dict[str, Any]]:
+def _rank_cached_procedures(
+    request: str, repo_context: dict[str, Any], *, limit: int = 3
+) -> list[dict[str, Any]]:
     cached_raw = repo_context.get("cached_procedures", [])
     cached = (
         [dict(entry) for entry in cached_raw if isinstance(entry, dict)]
@@ -92,7 +94,11 @@ def _rank_cached_procedures(request: str, repo_context: dict[str, Any], *, limit
         canonical_name = str(procedure.get("canonical_name", "")).strip()
         task_class = str(procedure.get("task_class", "")).strip()
         steps_raw = procedure.get("steps", [])
-        steps = [dict(step) for step in steps_raw if isinstance(step, dict)] if isinstance(steps_raw, list) else []
+        steps = (
+            [dict(step) for step in steps_raw if isinstance(step, dict)]
+            if isinstance(steps_raw, list)
+            else []
+        )
         tool_names: list[str] = []
         for step in steps:
             tools_raw = step.get("tools", [])
@@ -140,7 +146,12 @@ def _planner_procedural_memory_prompt(repo_context: dict[str, Any], *, request: 
 def _semantic_memory_constraints(repo_context: dict[str, Any], *, request: str) -> dict[str, Any]:
     ranked = _rank_semantic_memories(request, repo_context, limit=4)
     if not ranked:
-        return {"files_touched": [], "acceptance_criteria": [], "handoff_constraints": [], "handoff_evidence": []}
+        return {
+            "files_touched": [],
+            "acceptance_criteria": [],
+            "handoff_constraints": [],
+            "handoff_evidence": [],
+        }
 
     acceptance_criteria: list[str] = []
     handoff_constraints: list[str] = []
@@ -163,10 +174,12 @@ def _semantic_memory_constraints(repo_context: dict[str, Any], *, request: str) 
             )
         elif kind == "loop_summary":
             acceptance_criteria.append(
-                "Cross-run lessons recalled from semantic memory are incorporated into the bounded plan."
+                "Cross-run lessons recalled from semantic memory are incorporated"
+                " into the bounded plan."
             )
             handoff_constraints.append(
-                "Do not repeat a previously failed repair pattern without a concrete change in approach."
+                "Do not repeat a previously failed repair pattern without a concrete"
+                " change in approach."
             )
         else:
             acceptance_criteria.append(
@@ -201,8 +214,14 @@ def _apply_semantic_memory_constraints(
         return plan_payload
 
     acceptance_raw = plan_payload.get("acceptance_criteria", [])
-    acceptance = [entry for entry in acceptance_raw if isinstance(entry, str)] if isinstance(acceptance_raw, list) else []
-    plan_payload["acceptance_criteria"] = _dedupe_strings(acceptance + list(constraints["acceptance_criteria"]))
+    acceptance = (
+        [entry for entry in acceptance_raw if isinstance(entry, str)]
+        if isinstance(acceptance_raw, list)
+        else []
+    )
+    plan_payload["acceptance_criteria"] = _dedupe_strings(
+        acceptance + list(constraints["acceptance_criteria"])
+    )
 
     steps_raw = plan_payload.get("steps", [])
     if not isinstance(steps_raw, list):
@@ -215,23 +234,45 @@ def _apply_semantic_memory_constraints(
             continue
         updated_step = dict(step)
         files_touched_raw = updated_step.get("files_touched", [])
-        files_touched = [entry for entry in files_touched_raw if isinstance(entry, str)] if isinstance(files_touched_raw, list) else []
-        updated_step["files_touched"] = _dedupe_strings(files_touched + list(constraints["files_touched"]))
+        files_touched = (
+            [entry for entry in files_touched_raw if isinstance(entry, str)]
+            if isinstance(files_touched_raw, list)
+            else []
+        )
+        updated_step["files_touched"] = _dedupe_strings(
+            files_touched + list(constraints["files_touched"])
+        )
 
         handoff_raw = updated_step.get("handoff")
         handoff = dict(handoff_raw) if isinstance(handoff_raw, dict) else None
         if handoff is not None and str(handoff.get("consumer", "")).strip() == "coder":
             file_scope_raw = handoff.get("file_scope", [])
-            file_scope = [entry for entry in file_scope_raw if isinstance(entry, str)] if isinstance(file_scope_raw, list) else []
+            file_scope = (
+                [entry for entry in file_scope_raw if isinstance(entry, str)]
+                if isinstance(file_scope_raw, list)
+                else []
+            )
             handoff["file_scope"] = _dedupe_strings(file_scope + updated_step["files_touched"])
 
             existing_constraints_raw = handoff.get("constraints", [])
-            existing_constraints = [entry for entry in existing_constraints_raw if isinstance(entry, str)] if isinstance(existing_constraints_raw, list) else []
-            handoff["constraints"] = _dedupe_strings(existing_constraints + list(constraints["handoff_constraints"]))
+            existing_constraints = (
+                [entry for entry in existing_constraints_raw if isinstance(entry, str)]
+                if isinstance(existing_constraints_raw, list)
+                else []
+            )
+            handoff["constraints"] = _dedupe_strings(
+                existing_constraints + list(constraints["handoff_constraints"])
+            )
 
             existing_evidence_raw = handoff.get("evidence", [])
-            existing_evidence = [dict(entry) for entry in existing_evidence_raw if isinstance(entry, dict)] if isinstance(existing_evidence_raw, list) else []
-            handoff["evidence"] = existing_evidence + [dict(entry) for entry in constraints["handoff_evidence"]]
+            existing_evidence = (
+                [dict(entry) for entry in existing_evidence_raw if isinstance(entry, dict)]
+                if isinstance(existing_evidence_raw, list)
+                else []
+            )
+            handoff["evidence"] = existing_evidence + [
+                dict(entry) for entry in constraints["handoff_evidence"]
+            ]
             updated_step["handoff"] = handoff
 
         updated_steps.append(updated_step)
@@ -254,14 +295,25 @@ def _apply_procedural_memory_constraints(
     procedure_id = str(procedure.get("procedure_id", "")).strip() or None
     canonical_name = str(procedure.get("canonical_name", "")).strip() or "cached_procedure"
     verification_raw = procedure.get("verification", [])
-    verification = [dict(entry) for entry in verification_raw if isinstance(entry, dict)] if isinstance(verification_raw, list) else []
+    verification = (
+        [dict(entry) for entry in verification_raw if isinstance(entry, dict)]
+        if isinstance(verification_raw, list)
+        else []
+    )
 
     if verification and not plan_payload.get("verification"):
         plan_payload["verification"] = verification
 
     acceptance_raw = plan_payload.get("acceptance_criteria", [])
-    acceptance = [entry for entry in acceptance_raw if isinstance(entry, str)] if isinstance(acceptance_raw, list) else []
-    acceptance.append(f"Validated procedure memory '{canonical_name}' is reused when compatible with current evidence.")
+    acceptance = (
+        [entry for entry in acceptance_raw if isinstance(entry, str)]
+        if isinstance(acceptance_raw, list)
+        else []
+    )
+    acceptance.append(
+        f"Validated procedure memory '{canonical_name}' is reused"
+        " when compatible with current evidence."
+    )
     plan_payload["acceptance_criteria"] = _dedupe_strings(acceptance)
 
     steps_raw = plan_payload.get("steps", [])
@@ -278,14 +330,23 @@ def _apply_procedural_memory_constraints(
         handoff = dict(handoff_raw) if isinstance(handoff_raw, dict) else None
         if handoff is not None and str(handoff.get("consumer", "")).strip() == "coder":
             constraints_raw = handoff.get("constraints", [])
-            constraints = [entry for entry in constraints_raw if isinstance(entry, str)] if isinstance(constraints_raw, list) else []
+            constraints = (
+                [entry for entry in constraints_raw if isinstance(entry, str)]
+                if isinstance(constraints_raw, list)
+                else []
+            )
             constraints.append(
-                f"Prefer the validated cached procedure '{canonical_name}' when it remains compatible with current evidence."
+                f"Prefer the validated cached procedure '{canonical_name}' when it remains"
+                " compatible with current evidence."
             )
             handoff["constraints"] = _dedupe_strings(constraints)
 
             evidence_raw = handoff.get("evidence", [])
-            evidence = [dict(entry) for entry in evidence_raw if isinstance(entry, dict)] if isinstance(evidence_raw, list) else []
+            evidence = (
+                [dict(entry) for entry in evidence_raw if isinstance(entry, dict)]
+                if isinstance(evidence_raw, list)
+                else []
+            )
             evidence.append(
                 {
                     "kind": "procedure_cache",
@@ -312,7 +373,10 @@ def _record_selected_procedure_use(state: dict[str, Any], *, procedure_id: str |
 
         cache = ProcedureCache(db_path=Path(procedure_cache_path))
         try:
-            cache.record_use(procedure_id, used_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"))
+            cache.record_use(
+                procedure_id,
+                used_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            )
         finally:
             cache.close()
     except Exception:

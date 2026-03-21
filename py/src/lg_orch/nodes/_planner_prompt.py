@@ -61,7 +61,8 @@ def _planner_mcp_prompt(repo_context: dict[str, Any]) -> str:
     mcp_capabilities_raw = repo_context.get("mcp_capabilities", {})
     if isinstance(mcp_capabilities_raw, dict) and mcp_capabilities_raw:
         parts.append(
-            "mcp_capabilities: " + json.dumps(mcp_capabilities_raw, ensure_ascii=False, sort_keys=True)
+            "mcp_capabilities: "
+            + json.dumps(mcp_capabilities_raw, ensure_ascii=False, sort_keys=True)
         )
 
     mcp_recovery_hints = str(repo_context.get("mcp_recovery_hints", "")).strip()
@@ -106,7 +107,9 @@ def _format_mcp_tool_catalog(mcp_tools: list[dict[str, Any]]) -> str:
     return "## Available MCP Tools\n" + "\n".join(lines)
 
 
-def _default_step_handoff(request: str, *, step_id: str, expected_outcome: str) -> AgentHandoff | None:
+def _default_step_handoff(
+    request: str, *, step_id: str, expected_outcome: str
+) -> AgentHandoff | None:
     intent = _classify_intent(request)
     if intent not in {"code_change", "refactor", "debug"}:
         return None
@@ -118,8 +121,13 @@ def _default_step_handoff(request: str, *, step_id: str, expected_outcome: str) 
         "Keep the change compatible with the planned verification steps.",
     ]
     if intent == "debug":
-        objective = "Prepare a minimal repair grounded in the gathered repository context and failing evidence."
-        constraints.append("Preserve the failing reproduction until the fix is ready for verification.")
+        objective = (
+            "Prepare a minimal repair grounded in the gathered repository context"
+            " and failing evidence."
+        )
+        constraints.append(
+            "Preserve the failing reproduction until the fix is ready for verification."
+        )
 
     return AgentHandoff(
         producer="planner",
@@ -240,7 +248,8 @@ def _build_planner_prompts(
             "REPAIR MODE: The task is to fix one or more failing tests. Focus exclusively on:\n"
             "1. Reading the failing test(s) and the code they test.\n"
             "2. Identifying the root cause (test expectation vs. implementation mismatch).\n"
-            "3. Generating a targeted patch to fix the implementation (not the test, unless the test itself is incorrect).\n"
+            "3. Generating a targeted patch to fix the implementation"
+            " (not the test, unless the test itself is incorrect).\n"
             "4. Verifying the fix by re-running only the affected test(s).\n"
             "Do not refactor unrelated code.\n\n"
         )

@@ -32,7 +32,6 @@ from lg_orch.model_routing import latest_model_route, record_inference_telemetry
 from lg_orch.nodes._utils import extract_json_block as _extract_json_block_fn
 from lg_orch.nodes._utils import resolve_inference_client
 from lg_orch.state import OrchState, RouterDecision
-from lg_orch.tools import InferenceClient
 from lg_orch.trace import append_event
 
 _WORD_RE = re.compile(r"[a-z0-9']+")
@@ -72,7 +71,9 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
     routing_raw = state.get("_model_routing_policy", {})
     routing = dict(routing_raw) if isinstance(routing_raw, dict) else {}
     interactive_limit = int(routing.get("interactive_context_limit", 1800) or 1800)
-    default_cache_affinity = str(routing.get("default_cache_affinity", "workspace")).strip() or "workspace"
+    default_cache_affinity = (
+        str(routing.get("default_cache_affinity", "workspace")).strip() or "workspace"
+    )
 
     repo_context_raw = state.get("repo_context", {})
     repo_context = dict(repo_context_raw) if isinstance(repo_context_raw, dict) else {}
@@ -97,7 +98,9 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
     pressure = dict(pressure_raw) if isinstance(pressure_raw, dict) else {}
     overall_pressure_raw = pressure.get("overall", {})
     overall_pressure = dict(overall_pressure_raw) if isinstance(overall_pressure_raw, dict) else {}
-    compression_score_raw = planner_context.get("compression_pressure", overall_pressure.get("score", 0))
+    compression_score_raw = planner_context.get(
+        "compression_pressure", overall_pressure.get("score", 0)
+    )
     compression_score = int(compression_score_raw) if isinstance(compression_score_raw, int) else 0
     facts_raw = state.get("facts", [])
     state_fact_count = len(facts_raw) if isinstance(facts_raw, list) else 0
@@ -123,9 +126,13 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
     current_loop = int(current_loop_state.get("current_loop", 0) or 0)
 
     if retry_target == "router" or recovery:
-        failure_class = str(recovery.get("failure_class", verification.get("failure_class", "verification_failed")))
+        failure_class = str(
+            recovery.get("failure_class", verification.get("failure_class", "verification_failed"))
+        )
         context_scope = str(recovery.get("context_scope", "working_set")) or "working_set"
-        prefix_segment = "recovery_working_set" if context_scope != "stable_prefix" else "stable_prefix"
+        prefix_segment = (
+            "recovery_working_set" if context_scope != "stable_prefix" else "stable_prefix"
+        )
         return RouterDecision(
             intent=intent,  # type: ignore[arg-type]
             task_class=failure_class or "recovery",
@@ -135,7 +142,9 @@ def _default_route(state: dict[str, Any]) -> RouterDecision:
             else "verification requested recovery and compression pressure favors a stronger lane",
             context_scope=context_scope,  # type: ignore[arg-type]
             latency_sensitive=False,
-            cache_affinity=f"{default_cache_affinity}:recovery:{failure_fingerprint or current_loop}",
+            cache_affinity=(
+                f"{default_cache_affinity}:recovery:{failure_fingerprint or current_loop}"
+            ),
             prefix_segment=prefix_segment,
             context_tokens=max(token_estimate, working_set_tokens),
             compression_pressure=compression_score,

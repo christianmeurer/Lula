@@ -15,14 +15,12 @@ from lg_orch.memory import (
     record_compression_provenance,
 )
 from lg_orch.model_routing import record_model_route
+from lg_orch.nodes._utils import validate_base_url as _validate_base_url_fn
 from lg_orch.tools import MCPClient, RunnerClient
 from lg_orch.trace import append_event
 
 _WORD_RE = re.compile(r"[a-zA-Z0-9_]+")
 _PERSISTENT_REPO_CONTEXT_KEYS = ("system_prompt", "structural_ast_map", "semantic_hits")
-
-
-from lg_orch.nodes._utils import validate_base_url as _validate_base_url_fn
 
 
 def _validate_base_url(url: str) -> bool:
@@ -135,14 +133,19 @@ def _mcp_catalog_snapshot(
 
     # Exclude hash-mismatch sentinel entries from the raw list surfaced to state.
     clean_tools: list[dict[str, Any]] = (
-        [t for t in raw_tools if isinstance(t, dict) and not bool(t.get("_schema_hash_mismatch", False))]
+        [
+            t for t in raw_tools
+            if isinstance(t, dict) and not bool(t.get("_schema_hash_mismatch", False))
+        ]
         if isinstance(raw_tools, list)
         else []
     )
     return summary, str(summary.get("summary", "")).strip(), clean_tools
 
 
-def _mcp_recovery_hints(state: dict[str, Any], mcp_summary: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+def _mcp_recovery_hints(
+    state: dict[str, Any], mcp_summary: dict[str, Any]
+) -> tuple[str, list[dict[str, Any]]]:
     if not mcp_summary:
         return "", []
 
@@ -156,13 +159,21 @@ def _mcp_recovery_hints(state: dict[str, Any], mcp_summary: dict[str, Any]) -> t
     keywords.update(token.lower() for token in _WORD_RE.findall(last_check))
 
     servers_raw = mcp_summary.get("servers", [])
-    servers = [entry for entry in servers_raw if isinstance(entry, dict)] if isinstance(servers_raw, list) else []
+    servers = (
+        [entry for entry in servers_raw if isinstance(entry, dict)]
+        if isinstance(servers_raw, list)
+        else []
+    )
     relevant_tools: list[dict[str, Any]] = []
     fallback_tools: list[dict[str, Any]] = []
     for server in servers:
         server_name = str(server.get("server_name", "")).strip() or "unknown"
         tools_raw = server.get("tools", [])
-        tools = [entry for entry in tools_raw if isinstance(entry, dict)] if isinstance(tools_raw, list) else []
+        tools = (
+            [entry for entry in tools_raw if isinstance(entry, dict)]
+            if isinstance(tools_raw, list)
+            else []
+        )
         for tool in tools:
             name = str(tool.get("name", "")).strip()
             description = str(tool.get("description", "")).strip()
@@ -178,21 +189,21 @@ def _mcp_recovery_hints(state: dict[str, Any], mcp_summary: dict[str, Any]) -> t
             if keywords and any(keyword in haystack for keyword in keywords if keyword):
                 relevant_tools.append(entry)
 
-    if not relevant_tools:
-        relevant_tools = fallback_tools[:5]
-    else:
-        relevant_tools = relevant_tools[:5]
+    relevant_tools = fallback_tools[:5] if not relevant_tools else relevant_tools[:5]
 
     lines: list[str] = []
     if recovery_packet:
         lines.append(
-            f"recovery_focus: {recovery_packet.get('failure_class', '')} | {recovery_packet.get('last_check', '')}"
+            f"recovery_focus: {recovery_packet.get('failure_class', '')}"
+            f" | {recovery_packet.get('last_check', '')}"
         )
     if relevant_tools:
         lines.append(
             "candidate_tools: "
             + ", ".join(
-                f"{tool['server_name']}.{tool['name']}" for tool in relevant_tools if tool.get("name")
+                f"{tool['server_name']}.{tool['name']}"
+                for tool in relevant_tools
+                if tool.get("name")
             )
         )
     return "\n".join(line for line in lines if line.strip()).strip(), relevant_tools
@@ -427,7 +438,13 @@ def context_builder(state: dict[str, Any]) -> dict[str, Any]:
     }
     telemetry["compression_summary"] = get_compression_summary(out)
    
-    out = {**out, "repo_context": repo_context, "provenance": provenance[-20:], "telemetry": telemetry, "mcp_tools": mcp_tools}
+    out = {
+        **out,
+        "repo_context": repo_context,
+        "provenance": provenance[-20:],
+        "telemetry": telemetry,
+        "mcp_tools": mcp_tools,
+    }
     out = append_event(
         out,
         kind="node",

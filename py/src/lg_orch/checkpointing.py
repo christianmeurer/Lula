@@ -3,7 +3,7 @@
 """Backward-compatible re-export shim. Implementation moved to backends/."""
 from __future__ import annotations
 
-from lg_orch.backends import (  # noqa: F401
+from lg_orch.backends import (
     BaseCheckpointSaver,
     CheckpointBackendError,
     PostgresCheckpointSaver,

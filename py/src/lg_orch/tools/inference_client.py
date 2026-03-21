@@ -23,6 +23,8 @@ from lg_orch.model_routing import SlaRoutingPolicy
 try:
     from lg_orch.api.metrics import (
         LULA_LLM_DURATION_SECONDS as _LLM_DURATION_SECONDS,
+    )
+    from lg_orch.api.metrics import (
         LULA_LLM_REQUESTS_TOTAL as _LLM_REQUESTS_TOTAL,
     )
 except ImportError:
@@ -388,7 +390,10 @@ class InferenceClient:
         cache_metadata: dict[str, Any] = {}
         for key, value in resp.headers.items():
             key_l = key.lower()
-            if any(marker in key_l for marker in ("cache", "affinity", "provider", "model", "request-id")):
+            if any(
+                marker in key_l
+                for marker in ("cache", "affinity", "provider", "model", "request-id")
+            ):
                 headers[key_l] = value
             if any(marker in key_l for marker in ("cache", "affinity", "prefix")):
                 cache_metadata[key_l] = value

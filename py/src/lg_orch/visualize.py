@@ -89,22 +89,28 @@ def _html_document(*, title: str, body: str, include_mermaid: bool) -> str:
             f"  <title>{escape(title)}</title>\n",
             "  <style>\n",
             "    :root { color-scheme: dark; }\n",
-            "    body { margin: 0; background: #0f172a; color: #e2e8f0; font-family: Segoe UI, Arial, sans-serif; }\n",
-            "    main { max-width: 1120px; margin: 0 auto; padding: 24px; display: grid; gap: 16px; }\n",
-            "    .card { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 16px 18px; }\n",
+            "    body { margin: 0; background: #0f172a; color: #e2e8f0;"
+            " font-family: Segoe UI, Arial, sans-serif; }\n",
+            "    main { max-width: 1120px; margin: 0 auto; padding: 24px;"
+            " display: grid; gap: 16px; }\n",
+            "    .card { background: #111827; border: 1px solid #334155;"
+            " border-radius: 12px; padding: 16px 18px; }\n",
             "    h1, h2 { margin: 0 0 12px; }\n",
             "    h1 { font-size: 1.35rem; }\n",
             "    h2 { font-size: 1.05rem; }\n",
-            "    .summary, .items { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }\n",
+            "    .summary, .items { list-style: none; padding: 0; margin: 0;"
+            " display: grid; gap: 10px; }\n",
             "    .summary li { display: grid; gap: 4px; }\n",
-            "    .items li { display: flex; gap: 12px; align-items: flex-start; padding-top: 8px; border-top: 1px solid #1f2937; }\n",
+            "    .items li { display: flex; gap: 12px; align-items: flex-start;"
+            " padding-top: 8px; border-top: 1px solid #1f2937; }\n",
             "    .items li:first-child { border-top: 0; padding-top: 0; }\n",
             "    .stack { display: grid; gap: 4px; }\n",
             "    .muted { color: #94a3b8; }\n",
             "    .links { margin-left: auto; white-space: nowrap; }\n",
             "    .mono, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }\n",
             "    .mono { min-width: 84px; color: #93c5fd; }\n",
-            "    .badge { min-width: 44px; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; text-align: center; }\n",
+            "    .badge { min-width: 44px; padding: 2px 8px; border-radius: 999px;"
+            " font-size: 0.75rem; text-align: center; }\n",
             "    .badge.ok { background: #14532d; color: #bbf7d0; }\n",
             "    .badge.err { background: #7f1d1d; color: #fecaca; }\n",
             "    a { color: #93c5fd; text-decoration: none; }\n",
@@ -186,7 +192,8 @@ def render_trace_dashboard(payload: dict[str, Any], *, width: int = 88) -> str:
         )
     if "acceptance_ok" in verification:
         summary_lines.append(
-            f"acceptance: {'passed' if bool(verification.get('acceptance_ok', False)) else 'failed'}"
+            "acceptance: "
+            f"{'passed' if bool(verification.get('acceptance_ok', False)) else 'failed'}"
         )
     if halt_reason:
         summary_lines.append(f"halt_reason: {halt_reason}")
@@ -248,7 +255,8 @@ def render_trace_dashboard_html(
         timeline_items = "\n".join(
             (
                 "<li>"
-                f'<span class="mono">+{_duration_s(int(event.get("ts_ms", start_ms)), start_ms):0.2f}s</span>'
+                f'<span class="mono">'
+                f'+{_duration_s(int(event.get("ts_ms", start_ms)), start_ms):0.2f}s</span>'
                 f"<span>{escape(_event_label(event))}</span>"
                 "</li>"
             )
@@ -325,10 +333,19 @@ def render_trace_dashboard_html(
         )
     if bool(approval.get("pending", False)):
         summary_lines.append(
-            f"  <li><strong>approval</strong><span>{escape(str(approval.get('summary', 'pending approval')).strip() or 'pending approval')}</span></li>"
+            "  <li><strong>approval</strong><span>"
+            + escape(
+                str(approval.get('summary', 'pending approval')).strip()
+                or 'pending approval'
+            )
+            + "</span></li>"
         )
     approval_history_raw = approval.get("history", [])
-    approval_history = [entry for entry in approval_history_raw if isinstance(entry, dict)] if isinstance(approval_history_raw, list) else []
+    approval_history = (
+        [entry for entry in approval_history_raw if isinstance(entry, dict)]
+        if isinstance(approval_history_raw, list)
+        else []
+    )
     if approval_history:
         summary_lines.append(
             f"  <li><strong>approval_history</strong><span>{len(approval_history)}</span></li>"
@@ -362,15 +379,19 @@ def render_trace_dashboard_html(
                 f'<span class="mono">{escape(str(entry.get("ts", "")))}</span>'
                 '<div class="stack">'
                 f'<strong>{escape(str(entry.get("decision", "")).strip() or "decision")}</strong>'
-                f'<span class="muted">actor={escape(str(entry.get("actor", "")).strip() or "unknown")} '
+                f'<span class="muted">actor='
+                f'{escape(str(entry.get("actor", "")).strip() or "unknown")} '
                 f'challenge={escape(str(entry.get("challenge_id", "")).strip() or "—")}</span>'
-                f'<span>{escape(str(entry.get("rationale", "")).strip() or "(no rationale)")}</span>'
+                f'<span>'
+                f'{escape(str(entry.get("rationale", "")).strip() or "(no rationale)")}</span>'
                 "</div>"
                 "</li>"
             )
             for entry in approval_history[-12:]
         )
-        cards.insert(1, _html_card("Approval History", f'<ul class="items">\n{approval_items}\n</ul>'))
+        cards.insert(
+            1, _html_card("Approval History", f'<ul class="items">\n{approval_items}\n</ul>')
+        )
 
     return _html_document(
         title="Lula Dashboard",
@@ -437,7 +458,8 @@ def render_trace_site_index_html(runs: list[dict[str, Any]]) -> str:
             "Lula Trace Site",
             (
                 "<p>Static dashboards generated from file-based run traces.</p>\n"
-                "<p class=\"muted\">Open a dashboard for graph, timeline, tool results, and final output.</p>"
+                "<p class=\"muted\">Open a dashboard for graph, timeline,"
+                " tool results, and final output.</p>"
             ),
         ),
         _html_card("Runs", f'<ul class="items">\n{items}\n</ul>'),
@@ -511,7 +533,9 @@ def render_run_viewer_spa(*, api_base_url: str = "", mermaid_graph: str = "") ->
       flex-shrink: 0;
       background: var(--bg2);
     }}
-    #topbar .logo {{ font-weight: 700; font-size: 15px; letter-spacing: -.3px; color: var(--text); }}
+    #topbar .logo {{
+      font-weight: 700; font-size: 15px; letter-spacing: -.3px; color: var(--text);
+    }}
     #topbar .logo span {{ color: var(--accent); }}
     #req-form {{ display: flex; gap: 8px; flex: 1; max-width: 700px; }}
     #req-input {{
@@ -643,9 +667,11 @@ def render_run_viewer_spa(*, api_base_url: str = "", mermaid_graph: str = "") ->
     .badge-warn     {{ background:#2d2106; color:var(--warn); }}
     .badge-other    {{ background:var(--bg3); color:var(--muted); }}
     /* ── KV table ────────────────────────────────────────────── */
-    dl.kv {{ display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 12px; }}
+    dl.kv {{ display: grid; grid-template-columns: max-content 1fr;
+             gap: 4px 12px; font-size: 12px; }}
     dl.kv dt {{ color: var(--muted); white-space: nowrap; }}
-    dl.kv dd {{ color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    dl.kv dd {{ color: var(--text); overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; }}
     /* ── Timeline ────────────────────────────────────────────── */
     #live-timeline {{ list-style: none; display: grid; gap: 4px; }}
     #live-timeline li {{
@@ -675,7 +701,8 @@ def render_run_viewer_spa(*, api_base_url: str = "", mermaid_graph: str = "") ->
     .tl-dot.active {{ background: var(--accent); }}
     .tl-dot.ok     {{ background: var(--ok); }}
     .tl-dot.err    {{ background: var(--err); }}
-    .ts {{ color: var(--muted); font-size: 10px; width: 52px; flex-shrink: 0; font-family: ui-monospace, monospace; }}
+    .ts {{ color: var(--muted); font-size: 10px; width: 52px;
+           flex-shrink: 0; font-family: ui-monospace, monospace; }}
     .tl-label {{ flex: 1; color: var(--text); }}
     /* ── Lane indicator ──────────────────────────────────────── */
     .lane-pill {{
@@ -687,7 +714,8 @@ def render_run_viewer_spa(*, api_base_url: str = "", mermaid_graph: str = "") ->
     .lane-recovery    {{ background:#422006; color:#fcd34d; }}
     /* ── Tool list ───────────────────────────────────────────── */
     .tool-list {{ list-style: none; display: grid; gap: 3px; }}
-    .tool-list li {{ display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 3px 0; }}
+    .tool-list li {{ display: flex; align-items: center;
+                     gap: 8px; font-size: 11px; padding: 3px 0; }}
     /* ── Diff viewer ─────────────────────────────────────────── */
     .diff-wrap {{ overflow-x: auto; }}
     .diff-wrap pre {{
@@ -750,7 +778,8 @@ def render_run_viewer_spa(*, api_base_url: str = "", mermaid_graph: str = "") ->
 <div id="topbar">
   <div class="logo">Lu<span>la</span></div>
   <form id="req-form" onsubmit="return false;">
-    <input id="req-input" type="text" placeholder="Describe a task for the agent…" autocomplete="off">
+    <input id="req-input" type="text"
+           placeholder="Describe a task for the agent…" autocomplete="off">
     <button class="btn btn-primary" onclick="submitRun()">▶ Run</button>
   </form>
 </div>
@@ -779,11 +808,11 @@ mermaid.initialize({{ startOnLoad: false, theme: 'dark', darkMode: true,
   themeVariables: {{ background: '#0d1117', primaryColor: '#1f6feb',
     edgeLabelBackground: '#161b22', nodeBorder: '#30363d', lineColor: '#8b949e' }} }});
 window._mermaid = mermaid;
-window._mermaidGraph = {repr(escaped_mermaid)};
+window._mermaidGraph = {escaped_mermaid!r};
 </script>
 
 <script>
-const API = {repr(safe_base)};
+const API = {safe_base!r};
 
 // ── State ────────────────────────────────────────────────────
 let _runs = [];
@@ -795,7 +824,8 @@ let _searchQuery = '';
 
 // ── Utilities ────────────────────────────────────────────────
 function esc(s) {{
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }}
 function statusBadge(s) {{
   const cls = s === 'succeeded' ? 'ok' : s === 'failed' ? 'err'
@@ -868,7 +898,7 @@ function renderList() {{
   container.innerHTML = filtered.map(r => {{
     const sel = _selected === r.run_id ? ' selected' : '';
     const reqSnip = (r.request || '').slice(0, 80);
-    return `<div class="run-card${{sel}}" data-id="${{esc(r.run_id)}}" onclick="selectRun('${{esc(r.run_id)}}')">
+    return `<div class="run-card${{sel}}" data-id="${{esc(r.run_id)}}" onclick="selectRun('${{esc(r.run_id)}}')">  # noqa: E501
       <div class="rc-req" title="${{esc(r.request)}}">${{esc(reqSnip)}}</div>
       <div class="rc-meta">${{statusBadge(r.status)}}<span class="rc-time">${{fmtTime(r.created_at)}}</span></div>
     </div>`;
@@ -908,7 +938,7 @@ function openSSEStream(runId) {{
 
 async function loadDetailOnce(runId) {{
   try {{
-    const res = await fetch(API + '/v1/runs/' + encodeURIComponent(runId), {{ headers: bearerHeaders() }});
+    const res = await fetch(API + '/v1/runs/' + encodeURIComponent(runId), {{ headers: bearerHeaders() }});  # noqa: E501
     if (res.ok) renderDetail(await res.json(), runId);
   }} catch {{}}
 }}
@@ -927,14 +957,14 @@ function renderDetail(run, runId) {{
 
   // Action bar
   html += `<div class="action-bar">
-    ${{run.cancellable ? `<button class="btn btn-danger" onclick="cancelRun('${{esc(run.run_id)}}')">✕ Cancel</button>` : ''}}
+    ${{run.cancellable ? `<button class="btn btn-danger" onclick="cancelRun('${{esc(run.run_id)}}')">✕ Cancel</button>` : ''}}  # noqa: E501
     <button class="btn" onclick="loadLogs('${{esc(run.run_id)}}')">Show Logs</button>
   </div>`;
 
   // Approval banner
   if (run.pending_approval) {{
     html += `<div id="approval-banner" class="visible">
-      <div class="ab-text">⚠ Pending approval: ${{esc(run.pending_approval_summary || 'mutation plan awaiting approval')}}</div>
+      <div class="ab-text">⚠ Pending approval: ${{esc(run.pending_approval_summary || 'mutation plan awaiting approval')}}</div>  # noqa: E501
       <button class="btn" onclick="approveMutation()">✓ Approve</button>
       <button class="btn btn-danger" onclick="rejectMutation()">✕ Reject</button>
     </div>`;
@@ -946,13 +976,13 @@ function renderDetail(run, runId) {{
   const intent = (t.intent || run.intent || '').trim();
   const lane = (route.lane || '').trim();
   html += `<div class="card"><h2>Run</h2><dl class="kv">
-    <dt>status</dt><dd>${{statusBadge(run.status)}} ${{inProgress ? '<span style="color:var(--muted);font-size:10px">live</span>' : ''}}</dd>
-    <dt>request</dt><dd title="${{esc(run.request)}}">${{esc((run.request || '').slice(0,120))}}</dd>
+    <dt>status</dt><dd>${{statusBadge(run.status)}} ${{inProgress ? '<span style="color:var(--muted);font-size:10px">live</span>' : ''}}</dd>  # noqa: E501
+    <dt>request</dt><dd title="${{esc(run.request)}}">${{esc((run.request || '').slice(0,120))}}</dd>  # noqa: E501
     <dt>intent</dt><dd>${{esc(intent || '—')}} ${{lanePill(lane)}}</dd>
     <dt>run_id</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.run_id)}}</dd>
     <dt>started</dt><dd>${{fmtTime(run.started_at)}}</dd>
-    ${{run.thread_id ? `<dt>thread</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.thread_id)}}</dd>` : ''}}
-    ${{run.checkpoint_id ? `<dt>checkpoint</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.checkpoint_id)}}</dd>` : ''}}
+    ${{run.thread_id ? `<dt>thread</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.thread_id)}}</dd>` : ''}}  # noqa: E501
+    ${{run.checkpoint_id ? `<dt>checkpoint</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.checkpoint_id)}}</dd>` : ''}}  # noqa: E501
     ${{run.finished_at ? `<dt>finished</dt><dd>${{fmtTime(run.finished_at)}}</dd>` : ''}}
     ${{run.exit_code != null ? `<dt>exit_code</dt><dd>${{esc(String(run.exit_code))}}</dd>` : ''}}
   </dl></div>`;
@@ -968,7 +998,7 @@ function renderDetail(run, runId) {{
         </div>
         <div class="muted">${{esc(entry.rationale || '(no rationale)')}}</div>
       </li>`).join('');
-    html += `<div class="card"><h2>Approval History</h2><ul class="approval-history">${{items}}</ul></div>`;
+    html += `<div class="card"><h2>Approval History</h2><ul class="approval-history">${{items}}</ul></div>`;  # noqa: E501
   }}
 
   // Final output
@@ -990,7 +1020,7 @@ function renderDetail(run, runId) {{
       const phase = data.phase || '';
       const label = [ev.kind, name, phase].filter(Boolean).join(' / ');
       const isActive = inProgress && phase === 'start' && events[events.length - 1] === ev;
-      const dotCls = isActive ? 'active' : (data.ok === false ? 'err' : (data.ok === true ? 'ok' : ''));
+      const dotCls = isActive ? 'active' : (data.ok === false ? 'err' : (data.ok === true ? 'ok' : ''));  # noqa: E501
       const liCls = isActive ? ' node-active' : '';
       return `<li class="${{liCls}}">
         <span class="tl-dot ${{dotCls}}"></span>
@@ -998,8 +1028,8 @@ function renderDetail(run, runId) {{
         <span class="tl-label">${{esc(label)}}</span>
       </li>`;
     }}).join('');
-    html += `<div class="card"><h2>Timeline${{inProgress ? ' <span style="color:var(--accent);font-size:10px">● live</span>' : ''}}</h2>
-      <ul id="live-timeline">${{items || '<li><span class="tl-dot"></span><span class="tl-label" style="color:var(--muted)">Waiting…</span></li>'}}</ul>
+    html += `<div class="card"><h2>Timeline${{inProgress ? ' <span style="color:var(--accent);font-size:10px">● live</span>' : ''}}</h2>  # noqa: E501
+      <ul id="live-timeline">${{items || '<li><span class="tl-dot"></span><span class="tl-label" style="color:var(--muted)">Waiting…</span></li>'}}</ul>  # noqa: E501
     </div>`;
   }}
 
@@ -1013,13 +1043,13 @@ function renderDetail(run, runId) {{
       const exit = r.exit_code != null ? ` (exit ${{r.exit_code}})` : '';
       return `<li>${{dot}}<span>${{esc(label + exit)}}</span></li>`;
     }}).join('');
-    html += `<div class="card"><h2>Tools (${{tools.length}})</h2><ul class="tool-list">${{items}}</ul></div>`;
+    html += `<div class="card"><h2>Tools (${{tools.length}})</h2><ul class="tool-list">${{items}}</ul></div>`;  # noqa: E501
   }}
 
   // Inline diffs
   const diffs = extractDiffs(t.tool_results || []);
   if (diffs.length) {{
-    const diffHtml = diffs.map(p => renderDiff(p)).join('<hr style="border-color:var(--border);margin:6px 0">');
+    const diffHtml = diffs.map(p => renderDiff(p)).join('<hr style="border-color:var(--border);margin:6px 0">');  # noqa: E501
     html += `<div class="card"><h2>Patches</h2><div class="diff-wrap">${{diffHtml}}</div></div>`;
   }}
 
@@ -1051,7 +1081,7 @@ function renderDetail(run, runId) {{
       .catch(() => {{}})
       .then(() => {{
         if (lane) highlightLane(lane);
-        const lastNode = (events.filter(e => e.data?.phase === 'start').slice(-1)[0]?.data?.name || '');
+        const lastNode = (events.filter(e => e.data?.phase === 'start').slice(-1)[0]?.data?.name || '');  # noqa: E501
         if (lastNode) highlightNode(lastNode);
       }});
   }}
@@ -1101,12 +1131,12 @@ function renderDiff(patch) {{
 // ── Logs ─────────────────────────────────────────────────────
 async function loadLogs(runId) {{
   try {{
-    const res = await fetch(API + '/v1/runs/' + encodeURIComponent(runId) + '/logs', {{ headers: bearerHeaders() }});
+    const res = await fetch(API + '/v1/runs/' + encodeURIComponent(runId) + '/logs', {{ headers: bearerHeaders() }});  # noqa: E501
     if (!res.ok) return;
     const data = await res.json();
     const sec = document.getElementById('logs-section');
     if (sec) {{
-      sec.innerHTML = `<div class="card"><h2>Logs</h2><pre id="logs-pre">${{esc((data.logs || []).join('\\n'))}}</pre></div>`;
+      sec.innerHTML = `<div class="card"><h2>Logs</h2><pre id="logs-pre">${{esc((data.logs || []).join('\\n'))}}</pre></div>`;  # noqa: E501
     }}
   }} catch {{}}
 }}

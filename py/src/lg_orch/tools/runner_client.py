@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from opentelemetry import trace as _otel_trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -25,11 +24,11 @@ _W3C_PROPAGATOR = TraceContextTextMapPropagator()
 
 def _traceparent_headers() -> dict[str, str]:
     """Return a ``traceparent`` carrier dict for the active span, or empty dict."""
+    import contextlib
+
     carrier: dict[str, str] = {}
-    try:
+    with contextlib.suppress(Exception):
         _W3C_PROPAGATOR.inject(carrier)
-    except Exception:  # noqa: BLE001
-        pass
     return carrier
 
 

@@ -62,19 +62,13 @@ struct CommandResponse {
 // ---------------------------------------------------------------------------
 
 const ALLOWED_GUEST_COMMANDS: &[&str] = &[
-    "python", "python3", "uv", "pip", "pip3",
-    "cargo", "rustc", "node", "npm", "npx",
-    "go", "git", "sh", "bash",
-    "cat", "ls", "find", "grep", "sed", "awk",
-    "mkdir", "cp", "mv", "rm", "touch",
+    "python", "python3", "uv", "pip", "pip3", "cargo", "rustc", "node", "npm", "npx", "go", "git",
+    "sh", "bash", "cat", "ls", "find", "grep", "sed", "awk", "mkdir", "cp", "mv", "rm", "touch",
     "pytest", "ruff", "mypy",
 ];
 
 fn is_allowed_command(cmd: &str) -> bool {
-    let base = std::path::Path::new(cmd)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(cmd);
+    let base = std::path::Path::new(cmd).file_name().and_then(|n| n.to_str()).unwrap_or(cmd);
     ALLOWED_GUEST_COMMANDS.contains(&base)
 }
 
@@ -218,10 +212,7 @@ mod listener {
 
     /// Vsock port the agent listens on.
     fn agent_port() -> u32 {
-        std::env::var("GUEST_AGENT_PORT")
-            .ok()
-            .and_then(|v| v.trim().parse().ok())
-            .unwrap_or(52525)
+        std::env::var("GUEST_AGENT_PORT").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(52525)
     }
 
     pub async fn run() -> std::io::Result<()> {
@@ -229,16 +220,13 @@ mod listener {
 
         // Try to bind AF_VSOCK; fall back to Unix domain socket if vsock is
         // not available (e.g., inside a container during integration testing).
-        let fd = unsafe {
-            libc::socket(
-                libc::AF_VSOCK,
-                libc::SOCK_STREAM | libc::SOCK_CLOEXEC,
-                0,
-            )
-        };
+        let fd = unsafe { libc::socket(libc::AF_VSOCK, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0) };
 
         if fd < 0 {
-            eprintln!("vsock socket() failed ({errno}); falling back to UDS", errno = std::io::Error::last_os_error());
+            eprintln!(
+                "vsock socket() failed ({errno}); falling back to UDS",
+                errno = std::io::Error::last_os_error()
+            );
             return run_uds().await;
         }
 
@@ -325,8 +313,7 @@ mod listener {
     }
 
     fn uds_path() -> String {
-        std::env::var("GUEST_AGENT_SOCK")
-            .unwrap_or_else(|_| "/tmp/lula-agent.sock".to_string())
+        std::env::var("GUEST_AGENT_SOCK").unwrap_or_else(|_| "/tmp/lula-agent.sock".to_string())
     }
 }
 
@@ -337,8 +324,7 @@ mod listener {
     use tokio::net::UnixListener;
 
     fn uds_path() -> String {
-        std::env::var("GUEST_AGENT_SOCK")
-            .unwrap_or_else(|_| "/tmp/lula-agent.sock".to_string())
+        std::env::var("GUEST_AGENT_SOCK").unwrap_or_else(|_| "/tmp/lula-agent.sock".to_string())
     }
 
     pub async fn run() -> std::io::Result<()> {

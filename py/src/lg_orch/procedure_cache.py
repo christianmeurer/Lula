@@ -167,7 +167,8 @@ class ProcedureCache:
         """Return most-used procedures for inspection."""
         with self._lock:
             cursor = self._conn.execute(
-                "SELECT procedure_id, canonical_name, task_class, use_count, last_used_at, created_at "
+                "SELECT procedure_id, canonical_name, task_class, use_count, "
+                "last_used_at, created_at "
                 "FROM procedures ORDER BY use_count DESC LIMIT ?",
                 (limit,),
             )

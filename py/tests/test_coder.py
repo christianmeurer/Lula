@@ -56,7 +56,22 @@ def test_coder_transforms_handoff_to_executor() -> None:
 
 
 def test_coder_passes_through_when_no_coder_handoff_present() -> None:
-    out = coder(_base_state(active_handoff=None, plan={"steps": [{"id": "step-1", "description": "x", "tools": [], "expected_outcome": "ok", "files_touched": []}]}))
+    out = coder(
+        _base_state(
+            active_handoff=None,
+            plan={
+                "steps": [
+                    {
+                        "id": "step-1",
+                        "description": "x",
+                        "tools": [],
+                        "expected_outcome": "ok",
+                        "files_touched": [],
+                    }
+                ]
+            },
+        )
+    )
     assert out.get("active_handoff") is None
     events = out.get("_trace_events", [])
     assert events[-1]["data"]["handoff"] == "pass_through"

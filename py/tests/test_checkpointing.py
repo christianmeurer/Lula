@@ -9,7 +9,6 @@ from typing import Any
 import pytest
 
 from lg_orch.checkpointing import (
-    CheckpointBackendError,
     PostgresCheckpointSaver,
     RedisCheckpointSaver,
     SqliteCheckpointSaver,
@@ -19,7 +18,6 @@ from lg_orch.checkpointing import (
 )
 from lg_orch.graph import build_graph
 from lg_orch.run_store import RunStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -260,7 +258,8 @@ async def test_redis_checkpoint_saver_ttl() -> None:
 # Postgres test (real Postgres, skipped unless POSTGRES_TEST_DSN is set)
 # ---------------------------------------------------------------------------
 # To run locally:
-#   POSTGRES_TEST_DSN="postgresql://user:pass@localhost:5432/testdb" pytest py/tests/test_checkpointing.py::test_postgres_checkpoint_saver_put_get -v
+#   POSTGRES_TEST_DSN="postgresql://user:pass@localhost:5432/testdb" \
+#     pytest py/tests/test_checkpointing.py::test_postgres_checkpoint_saver_put_get -v
 
 
 @pytest.mark.asyncio

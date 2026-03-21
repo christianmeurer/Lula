@@ -229,7 +229,9 @@ class RunStore:
         try:
             with self._lock:
                 self._conn.execute(_CREATE_SEMANTIC_MEMORIES_FTS)
-                self._conn.execute("INSERT INTO semantic_memories_fts(semantic_memories_fts) VALUES('rebuild')")
+                self._conn.execute(
+                    "INSERT INTO semantic_memories_fts(semantic_memories_fts) VALUES('rebuild')"
+                )
                 self._conn.commit()
             self._fts_enabled = True
         except sqlite3.OperationalError:
@@ -239,7 +241,9 @@ class RunStore:
         if not self._fts_enabled:
             return
         with self._lock:
-            self._conn.execute("INSERT INTO semantic_memories_fts(semantic_memories_fts) VALUES('rebuild')")
+            self._conn.execute(
+                "INSERT INTO semantic_memories_fts(semantic_memories_fts) VALUES('rebuild')"
+            )
             self._conn.commit()
 
     def search_runs(
@@ -458,7 +462,11 @@ class RunStore:
                 continue
             memory_key = str(memory.get("memory_key", "")).strip()
             if not memory_key:
-                memory_key = f"{str(memory.get('kind', '')).strip()}|{str(memory.get('source', '')).strip()}|{summary}".lower()
+                memory_key = (
+                    f"{str(memory.get('kind', '')).strip()}"
+                    f"|{str(memory.get('source', '')).strip()}"
+                    f"|{summary}"
+                ).lower()
             rows.append(
                 (
                     memory_key,

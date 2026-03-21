@@ -27,7 +27,7 @@ from lg_orch.trace import write_run_trace
 from lg_orch.visualize import render_run_header, render_trace_dashboard
 
 
-def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:  # noqa: C901
+def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:
     """Execute the main orchestration graph for a single request.
 
     Parameters

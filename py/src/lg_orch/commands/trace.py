@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import sys
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -155,7 +154,6 @@ def trace_site_command(args: Any) -> int:
             log.error("trace_site_write_failed", path=str(trace_path), error=str(exc))
             return 2
 
-        run_id = _trace_run_id(trace_path, payload_raw)
         run_summaries.append(
             _trace_run_summary(
                 trace_path=trace_path,

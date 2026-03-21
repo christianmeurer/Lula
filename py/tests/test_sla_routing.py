@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -12,7 +12,6 @@ from lg_orch.model_routing import (
     SlaRoutingPolicy,
     build_sla_policy,
 )
-
 
 # ---------------------------------------------------------------------------
 # LatencyWindow — p95 with fewer than 5 samples returns None

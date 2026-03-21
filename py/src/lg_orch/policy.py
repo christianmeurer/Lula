@@ -57,10 +57,13 @@ def enforce_loop_budget(
     safe_max = configured_max_loops if configured_max_loops >= 1 else 1
     effective_max = safe_max
     plan_limit = None
-    if isinstance(plan_max_iterations, int) and not isinstance(plan_max_iterations, bool):
-        if plan_max_iterations >= 1:
-            plan_limit = plan_max_iterations
-            effective_max = min(effective_max, plan_limit)
+    if (
+        isinstance(plan_max_iterations, int)
+        and not isinstance(plan_max_iterations, bool)
+        and plan_max_iterations >= 1
+    ):
+        plan_limit = plan_max_iterations
+        effective_max = min(effective_max, plan_limit)
     max_loops = _coerce_non_negative_int(budgets.get("max_loops"), fallback=effective_max)
     if max_loops < 1:
         max_loops = effective_max

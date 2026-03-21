@@ -61,9 +61,7 @@ pub async fn dispatch_tool(
     // Build a fresh per-request context; initialise the checkpoint pointer
     // from the incoming request so snapshot/undo operations use the caller's
     // LangGraph checkpoint rather than any stale global state.
-    let mut ctx = ToolContext {
-        checkpoint_pointer: req.checkpoint.clone(),
-    };
+    let mut ctx = ToolContext { checkpoint_pointer: req.checkpoint.clone() };
 
     let tool = req.tool.trim().to_string();
     let input = req.input;
@@ -224,9 +222,7 @@ mod tests {
         .unwrap();
 
         cfg.indexing.ensure_started();
-        assert!(cfg
-            .indexing
-            .wait_for_version_at_least(1, Duration::from_secs(4)));
+        assert!(cfg.indexing.wait_for_version_at_least(1, Duration::from_secs(4)));
 
         let req = ToolExecuteRequest {
             tool: "search_codebase".to_string(),

@@ -74,7 +74,11 @@ def decide_model_route(
             latency_sensitive=latency_sensitive,
         )
 
-    if normalized_task in fallback_set and normalized_compression_pressure <= 0 and normalized_fact_count <= 0:
+    if (
+        normalized_task in fallback_set
+        and normalized_compression_pressure <= 0
+        and normalized_fact_count <= 0
+    ):
         return ModelRoutingDecision(
             task_class=normalized_task,
             lane=normalized_lane or "interactive",  # type: ignore[arg-type]
@@ -217,7 +221,9 @@ def record_model_route(
     elif isinstance(context_tokens_raw, int):
         context_tokens = context_tokens_raw
 
-    compression_pressure_raw = route.get("compression_pressure", repo_context.get("planner_context", {}))
+    compression_pressure_raw = route.get(
+        "compression_pressure", repo_context.get("planner_context", {})
+    )
     compression_pressure = 0
     if isinstance(compression_pressure_raw, dict):
         value = compression_pressure_raw.get("compression_pressure", 0)
@@ -293,10 +299,13 @@ def record_inference_telemetry(
         if isinstance(retry_count_raw, int) and not isinstance(retry_count_raw, bool)
         else 0
     )
-    compression_pressure_raw = latest.get("compression_pressure", route.get("compression_pressure", 0))
+    compression_pressure_raw = latest.get(
+        "compression_pressure", route.get("compression_pressure", 0)
+    )
     compression_pressure = (
         int(compression_pressure_raw)
-        if isinstance(compression_pressure_raw, int) and not isinstance(compression_pressure_raw, bool)
+        if isinstance(compression_pressure_raw, int)
+        and not isinstance(compression_pressure_raw, bool)
         else 0
     )
     fact_count_raw = latest.get("fact_count", route.get("fact_count", 0))
@@ -374,7 +383,9 @@ def tool_routing_metadata(state: dict[str, Any], *, stage: str) -> dict[str, Any
         "model": str(latest.get("model", route.get("model", ""))),
         "task_class": str(route.get("task_class", latest.get("task_class", ""))),
         "cache_affinity": str(route.get("cache_affinity", latest.get("cache_affinity", ""))),
-        "prefix_segment": str(route.get("prefix_segment", latest.get("prefix_segment", "stable_prefix"))),
+        "prefix_segment": str(
+            route.get("prefix_segment", latest.get("prefix_segment", "stable_prefix"))
+        ),
     }
 
 

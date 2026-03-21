@@ -122,7 +122,12 @@ def _get_inference_config(
                 or os.environ.get("DIGITAL_OCEAN_MODEL_ACCESS_KEY")
                 or ""
             ).strip()
-        log.info("reporter_api_key_check", provider=provider, has_key=bool(api_key), key_len=len(api_key))
+        log.info(
+            "reporter_api_key_check",
+            provider=provider,
+            has_key=bool(api_key),
+            key_len=len(api_key),
+        )
         if not api_key:
             log.info("reporter_no_api_key", provider=provider)
             return None

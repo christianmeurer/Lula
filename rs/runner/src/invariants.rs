@@ -59,16 +59,13 @@ impl Invariant for PathConfinementInvariant {
         // canonical path work even when the root was constructed without
         // going through `canonicalize` (e.g., in tests that use the raw
         // tempdir path).
-        let canonical_root = req
-            .allowed_root
-            .canonicalize()
-            .unwrap_or_else(|_| req.allowed_root.clone());
+        let canonical_root =
+            req.allowed_root.canonicalize().unwrap_or_else(|_| req.allowed_root.clone());
 
         // Prefer canonical resolution (resolves symlinks); fall back to
         // lexical normalization when the path does not yet exist on disk.
-        let resolved = path
-            .canonicalize()
-            .unwrap_or_else(|_| lexical_normalize(&canonical_root, path));
+        let resolved =
+            path.canonicalize().unwrap_or_else(|_| lexical_normalize(&canonical_root, path));
 
         if !resolved.starts_with(&canonical_root) {
             return Err(format!(
@@ -90,11 +87,7 @@ impl Invariant for PathConfinementInvariant {
 fn lexical_normalize(base: &std::path::Path, path: &std::path::Path) -> PathBuf {
     // For absolute paths start from an empty PathBuf so that we do not
     // accidentally mix in `base` components.
-    let mut result = if path.is_absolute() {
-        PathBuf::new()
-    } else {
-        base.to_path_buf()
-    };
+    let mut result = if path.is_absolute() { PathBuf::new() } else { base.to_path_buf() };
     for component in path.components() {
         match component {
             Component::ParentDir => {
@@ -133,10 +126,7 @@ impl Invariant for CommandAllowlistInvariant {
             return Err("empty command string".to_string());
         }
         if !req.allowed_commands.iter().any(|a| a.as_str() == cmd) {
-            return Err(format!(
-                "command '{}' is not in the allowlist",
-                cmd
-            ));
+            return Err(format!("command '{}' is not in the allowlist", cmd));
         }
         Ok(())
     }
@@ -453,10 +443,7 @@ mod tests {
     #[test]
     fn test_check_all_ok_for_valid_request() {
         let td = tempfile::tempdir().unwrap();
-        let checker = InvariantChecker::new_default(
-            td.path(),
-            &["git".to_string()],
-        );
+        let checker = InvariantChecker::new_default(td.path(), &["git".to_string()]);
         let req = InvariantRequest {
             tool_name: "exec".to_string(),
             path: None,

@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-import textwrap
 from pathlib import Path
 
 
@@ -352,10 +351,18 @@ def test_score_task_tracks_approval_control_plane_fields() -> None:
 
 # --- Wave 8 new tests ---
 
-_SWE_BENCH_FIXTURE = textwrap.dedent("""\
-    {"instance_id": "astropy__astropy-1234", "repo": "astropy/astropy", "problem_statement": "Calling foo() raises ValueError when bar is None.", "base_commit": "abc123", "patch": "diff --git a/foo.py", "test_patch": "diff --git a/test_foo.py", "FAIL_TO_PASS": ["test_foo"], "PASS_TO_PASS": []}
-    {"instance_id": "django__django-5678", "repo": "django/django", "problem_statement": "Migration crashes on PostgreSQL when table has no rows.", "base_commit": "def456", "patch": "diff --git a/db.py", "test_patch": "diff --git a/test_db.py", "FAIL_TO_PASS": ["test_db"], "PASS_TO_PASS": ["test_models"]}
-""")
+_SWE_BENCH_FIXTURE = (
+    '{"instance_id": "astropy__astropy-1234", "repo": "astropy/astropy",'
+    ' "problem_statement": "Calling foo() raises ValueError when bar is None.",'
+    ' "base_commit": "abc123", "patch": "diff --git a/foo.py",'
+    ' "test_patch": "diff --git a/test_foo.py",'
+    ' "FAIL_TO_PASS": ["test_foo"], "PASS_TO_PASS": []}\n'
+    '{"instance_id": "django__django-5678", "repo": "django/django",'
+    ' "problem_statement": "Migration crashes on PostgreSQL when table has no rows.",'
+    ' "base_commit": "def456", "patch": "diff --git a/db.py",'
+    ' "test_patch": "diff --git a/test_db.py",'
+    ' "FAIL_TO_PASS": ["test_db"], "PASS_TO_PASS": ["test_models"]}\n'
+)
 
 
 def test_load_swe_bench_tasks_basic(tmp_path: Path) -> None:

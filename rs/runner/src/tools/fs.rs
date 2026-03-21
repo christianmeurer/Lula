@@ -6,9 +6,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::fs;
 
-use super::{
-    serialize_semantic_hits, serialize_snapshot, snapshot_for_operation, ToolContext,
-};
+use super::{serialize_semantic_hits, serialize_snapshot, snapshot_for_operation, ToolContext};
 use crate::approval::{require_approval, ApprovalTokenInput};
 use crate::config::RunnerConfig;
 use crate::envelope::{ToolEnvelope, UndoMetadata};
@@ -21,7 +19,9 @@ fn normalize_path(base: &std::path::Path, rel: &str) -> std::path::PathBuf {
     let mut result = base.to_path_buf();
     for component in std::path::Path::new(rel).components() {
         match component {
-            Component::ParentDir => { result.pop(); }
+            Component::ParentDir => {
+                result.pop();
+            }
             Component::Normal(c) => result.push(c),
             Component::RootDir => result = std::path::PathBuf::from("/"),
             Component::Prefix(p) => result = std::path::PathBuf::from(p.as_os_str()),
@@ -44,12 +44,7 @@ pub(super) fn resolve_under_root(cfg: &RunnerConfig, rel: &str) -> Result<PathBu
     // using "read_file" as a generic fs tool name (all known fs tools share the same
     // path confinement invariant; the tool-name invariant is already enforced at dispatch).
     let candidate = cfg.root_dir.join(rel);
-    pre_validate_path(
-        &cfg.invariant_checker,
-        "read_file",
-        &candidate,
-        &cfg.root_dir,
-    )?;
+    pre_validate_path(&cfg.invariant_checker, "read_file", &candidate, &cfg.root_dir)?;
 
     let full = candidate.canonicalize().unwrap_or_else(|_| normalize_path(&cfg.root_dir, rel));
 
@@ -79,9 +74,7 @@ async fn read_file_content(full: &PathBuf) -> Result<String, ApiError> {
         return extracted.map_err(|e| ApiError::BadRequest(format!("pdf_extract_failed: {e}")));
     }
 
-    fs::read_to_string(full)
-        .await
-        .map_err(|e| ApiError::BadRequest(e.to_string()))
+    fs::read_to_string(full).await.map_err(|e| ApiError::BadRequest(e.to_string()))
 }
 
 pub async fn read_file(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope, ApiError> {
@@ -98,11 +91,7 @@ pub async fn read_file(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope,
         Ok(content) => {
             metrics::counter!("runner_tool_calls_total", "tool" => "read_file", "status" => "ok")
                 .increment(1);
-            Ok(ToolEnvelope::ok(
-                "read_file",
-                content,
-                json!({"path": inp.path}),
-            ))
+            Ok(ToolEnvelope::ok("read_file", content, json!({"path": inp.path})))
         }
         Err(e) => {
             metrics::counter!(
@@ -149,10 +138,7 @@ pub async fn search_files(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelo
     let can_read_set = cfg.allow_read.clone();
     let out: Vec<Value> = tokio::task::spawn_blocking(move || {
         let mut results: Vec<Value> = Vec::new();
-        for entry in walkdir::WalkDir::new(&full)
-            .into_iter()
-            .filter_map(Result::ok)
-        {
+        for entry in walkdir::WalkDir::new(&full).into_iter().filter_map(Result::ok) {
             let p = entry.path().to_path_buf();
             if p.is_file() {
                 let rel = p.strip_prefix(&root_dir).unwrap_or(&p).to_path_buf();
@@ -222,10 +208,7 @@ struct AstIndexSummaryIn {
 
 impl Default for AstIndexSummaryIn {
     fn default() -> Self {
-        Self {
-            max_files: default_ast_summary_max_files(),
-            path_prefix: None,
-        }
+        Self { max_files: default_ast_summary_max_files(), path_prefix: None }
     }
 }
 
@@ -289,9 +272,7 @@ pub async fn ast_index_summary(cfg: &RunnerConfig, input: Value) -> Result<ToolE
     cfg.indexing.ensure_started();
     let mut snapshot = cfg.indexing.snapshot();
     if let Some(prefix) = path_prefix.as_deref() {
-        snapshot
-            .files
-            .retain(|entry| entry.path.starts_with(prefix));
+        snapshot.files.retain(|entry| entry.path.starts_with(prefix));
     }
     if snapshot.files.len() > max_files {
         snapshot.files.truncate(max_files);
@@ -337,10 +318,7 @@ pub async fn list_files(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope
         let can_read_set = cfg.allow_read.clone();
         let mut entries: Vec<String> = tokio::task::spawn_blocking(move || {
             let mut results: Vec<String> = Vec::new();
-            for entry in walkdir::WalkDir::new(&full)
-                .into_iter()
-                .filter_map(Result::ok)
-            {
+            for entry in walkdir::WalkDir::new(&full).into_iter().filter_map(Result::ok) {
                 let p = entry.path().to_path_buf();
                 if p.is_file() {
                     let rel = p.strip_prefix(&root_dir).unwrap_or(&p).to_path_buf();
@@ -356,13 +334,9 @@ pub async fn list_files(cfg: &RunnerConfig, input: Value) -> Result<ToolEnvelope
         .map_err(|e| ApiError::Other(anyhow::anyhow!("list_files join error: {e}")))?;
         out.append(&mut entries);
     } else {
-        let mut rd = fs::read_dir(full)
-            .await
-            .map_err(|e| ApiError::BadRequest(e.to_string()))?;
-        while let Some(ent) = rd
-            .next_entry()
-            .await
-            .map_err(|e| ApiError::BadRequest(e.to_string()))?
+        let mut rd = fs::read_dir(full).await.map_err(|e| ApiError::BadRequest(e.to_string()))?;
+        while let Some(ent) =
+            rd.next_entry().await.map_err(|e| ApiError::BadRequest(e.to_string()))?
         {
             let p = ent.path();
             let rel = p.strip_prefix(&cfg.root_dir).unwrap_or(&p);
@@ -413,7 +387,11 @@ struct UndoIn {
     skip_all,
     fields(tool = "apply_patch", challenge_id = tracing::field::Empty)
 )]
-pub async fn apply_patch(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Result<ToolEnvelope, ApiError> {
+pub async fn apply_patch(
+    cfg: &RunnerConfig,
+    ctx: &mut ToolContext,
+    input: Value,
+) -> Result<ToolEnvelope, ApiError> {
     let inp: ApplyPatchIn =
         serde_json::from_value(input).map_err(|e| ApiError::BadRequest(e.to_string()))?;
     if inp.changes.is_empty() {
@@ -423,7 +401,12 @@ pub async fn apply_patch(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value
     if let Some(ref a) = inp.approval {
         tracing::Span::current().record("challenge_id", &*a.challenge_id);
     }
-    let approval = require_approval(inp.approval, "apply_patch", "approval:apply_patch", cfg.approval_token_ttl_secs)?;
+    let approval = require_approval(
+        inp.approval,
+        "apply_patch",
+        "approval:apply_patch",
+        cfg.approval_token_ttl_secs,
+    )?;
     let snapshot = snapshot_for_operation(cfg, ctx, "apply_patch").await?;
 
     // Collect temp paths so they can be cleaned up if an error occurs mid-batch.
@@ -441,11 +424,9 @@ pub async fn apply_patch(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value
 
     metrics::counter!("runner_tool_calls_total", "tool" => "apply_patch", "status" => "ok")
         .increment(1);
-    Ok(
-        ToolEnvelope::ok("apply_patch", "ok", json!({"changes": diffs}))
-            .with_approval(approval)
-            .with_snapshot(snapshot),
-    )
+    Ok(ToolEnvelope::ok("apply_patch", "ok", json!({"changes": diffs}))
+        .with_approval(approval)
+        .with_snapshot(snapshot))
 }
 
 async fn apply_patch_inner(
@@ -468,18 +449,14 @@ async fn apply_patch_inner(
                     return Err(ApiError::BadRequest(format!("exists: {}", ch.path)));
                 }
                 if let Some(parent) = full.parent() {
-                    fs::create_dir_all(parent)
-                        .await
-                        .map_err(|e| ApiError::Other(e.into()))?;
+                    fs::create_dir_all(parent).await.map_err(|e| ApiError::Other(e.into()))?;
                 }
                 let tmp_path = full.with_extension("tmp_lula_add");
                 tmp_files.push(tmp_path.clone());
                 fs::write(&tmp_path, ch.content.as_bytes())
                     .await
                     .map_err(|e| ApiError::Other(e.into()))?;
-                tokio::fs::rename(&tmp_path, &full)
-                    .await
-                    .map_err(|e| ApiError::Other(e.into()))?;
+                tokio::fs::rename(&tmp_path, &full).await.map_err(|e| ApiError::Other(e.into()))?;
                 // Rename consumed the temp file; remove it from the cleanup list.
                 tmp_files.retain(|p| p != &tmp_path);
                 diffs.push(json!({"path": full_rel_s, "op": "add", "bytes": ch.content.len()}));
@@ -494,17 +471,13 @@ async fn apply_patch_inner(
                 fs::write(&tmp_path, ch.content.as_bytes())
                     .await
                     .map_err(|e| ApiError::Other(e.into()))?;
-                tokio::fs::rename(&tmp_path, &full)
-                    .await
-                    .map_err(|e| ApiError::Other(e.into()))?;
+                tokio::fs::rename(&tmp_path, &full).await.map_err(|e| ApiError::Other(e.into()))?;
                 tmp_files.retain(|p| p != &tmp_path);
                 diffs.push(json!({"path": full_rel_s, "op": "update", "old_bytes": old.len(), "new_bytes": ch.content.len()}));
             }
             ChangeOp::Delete => {
                 if full.exists() {
-                    fs::remove_file(&full)
-                        .await
-                        .map_err(|e| ApiError::Other(e.into()))?;
+                    fs::remove_file(&full).await.map_err(|e| ApiError::Other(e.into()))?;
                 }
                 diffs.push(json!({"path": full_rel_s, "op": "delete"}));
             }
@@ -513,7 +486,11 @@ async fn apply_patch_inner(
     Ok(diffs.clone())
 }
 
-pub async fn undo(cfg: &RunnerConfig, ctx: &mut ToolContext, input: Value) -> Result<ToolEnvelope, ApiError> {
+pub async fn undo(
+    cfg: &RunnerConfig,
+    ctx: &mut ToolContext,
+    input: Value,
+) -> Result<ToolEnvelope, ApiError> {
     let inp: UndoIn =
         serde_json::from_value(input).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
@@ -720,9 +697,7 @@ mod tests {
         .unwrap();
 
         cfg.indexing.ensure_started();
-        assert!(cfg
-            .indexing
-            .wait_for_version_at_least(1, Duration::from_secs(4)));
+        assert!(cfg.indexing.wait_for_version_at_least(1, Duration::from_secs(4)));
 
         let result = search_codebase(
             &cfg,
@@ -760,20 +735,14 @@ mod tests {
         stdfs::write(td.path().join("rs/lib.rs"), "pub fn alpha() -> i32 { 1 }\n").unwrap();
 
         cfg.indexing.ensure_started();
-        assert!(cfg
-            .indexing
-            .wait_for_version_at_least(1, Duration::from_secs(4)));
+        assert!(cfg.indexing.wait_for_version_at_least(1, Duration::from_secs(4)));
 
         let result = ast_index_summary(&cfg, json!({"max_files": 50})).await;
         assert!(result.is_ok());
         let env = result.unwrap();
         assert!(env.ok);
         let payload: Value = serde_json::from_str(&env.stdout).unwrap();
-        let files = payload
-            .get("files")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let files = payload.get("files").and_then(Value::as_array).cloned().unwrap_or_default();
         assert!(files.iter().any(|entry| {
             entry
                 .get("path")

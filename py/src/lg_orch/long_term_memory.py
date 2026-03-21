@@ -18,8 +18,9 @@ import json
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import numpy as np
 import structlog
@@ -43,7 +44,7 @@ class MemoryRecord:
     content: str
     metadata: dict[str, Any]
     created_at: float
-    embedding: "np.ndarray[Any, np.dtype[np.float32]] | None" = field(default=None)
+    embedding: np.ndarray[Any, np.dtype[np.float32]] | None = field(default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +52,7 @@ class MemoryRecord:
 # ---------------------------------------------------------------------------
 
 
-def stub_embedder(text: str, dim: int = 128) -> "np.ndarray[Any, np.dtype[np.float32]]":
+def stub_embedder(text: str, dim: int = 128) -> np.ndarray[Any, np.dtype[np.float32]]:
     """Deterministic hash-based unit-norm float32 vector.
 
     Fills each 4-byte chunk of the output vector from successive SHA-256
@@ -163,8 +164,8 @@ def _infer_task_type(query: str) -> str:
 
 
 def _cosine_similarity(
-    a: "np.ndarray[Any, np.dtype[np.float32]]",
-    b: "np.ndarray[Any, np.dtype[np.float32]]",
+    a: np.ndarray[Any, np.dtype[np.float32]],
+    b: np.ndarray[Any, np.dtype[np.float32]],
 ) -> float:
     """Cosine similarity between two float32 vectors (both assumed unit-norm)."""
     return float(np.dot(a, b))
@@ -199,8 +200,10 @@ class LongTermMemoryStore:
         if _using_stub:
             _log.warning(
                 "long_term_memory.stub_embedder_active",
-                reason="No real embedder provided; semantic search will return meaningless results. "
-                       "Set an embedding provider via config to enable semantic retrieval.",
+                reason=(
+                    "No real embedder provided; semantic search will return meaningless results. "
+                    "Set an embedding provider via config to enable semantic retrieval."
+                ),
             )
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
@@ -213,18 +216,18 @@ class LongTermMemoryStore:
     # Internal utilities
     # ------------------------------------------------------------------
 
-    def _embed(self, text: str) -> "np.ndarray[Any, np.dtype[np.float32]]":
+    def _embed(self, text: str) -> np.ndarray[Any, np.dtype[np.float32]]:
         vec = self._embedder(text)
         return vec.astype(np.float32)
 
     @staticmethod
     def _blob_to_vec(
         blob: bytes, dim: int
-    ) -> "np.ndarray[Any, np.dtype[np.float32]]":
+    ) -> np.ndarray[Any, np.dtype[np.float32]]:
         return np.frombuffer(blob, dtype=np.float32).copy()
 
     @staticmethod
-    def _vec_to_blob(vec: "np.ndarray[Any, np.dtype[np.float32]]") -> bytes:
+    def _vec_to_blob(vec: np.ndarray[Any, np.dtype[np.float32]]) -> bytes:
         return vec.astype(np.float32).tobytes()
 
     # ------------------------------------------------------------------
@@ -522,7 +525,10 @@ class LongTermMemoryStore:
                             id=int(row["id"]),
                             tier="procedural",
                             run_id=None,
-                            content=f"task_type: {row['task_type']}\nsteps: {', '.join(steps_list)}",
+                            content=(
+                                f"task_type: {row['task_type']}\n"
+                                f"steps: {', '.join(steps_list)}"
+                            ),
                             metadata=meta,
                             created_at=float(row["created_at"]),
                             embedding=None,
@@ -550,11 +556,11 @@ class LongTermMemoryStore:
 
 
 __all__ = [
+    "_TASK_TYPE_KEYWORDS",
     "Embedder",
     "LongTermMemoryStore",
     "MemoryRecord",
     "Tier",
     "_infer_task_type",
-    "_TASK_TYPE_KEYWORDS",
     "stub_embedder",
 ]

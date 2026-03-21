@@ -65,7 +65,7 @@ def resolve_inference_client(
     state: dict[str, Any],
     slot_name: str,
     cfg_key: str,
-) -> tuple["InferenceClient", str]:
+) -> tuple[InferenceClient, str]:
     """Resolve the configured model provider and return ``(client, model_name)``.
 
     Reads ``state["_models"][slot_name]`` and

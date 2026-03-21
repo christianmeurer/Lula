@@ -1,4 +1,4 @@
-"""Tests for lg_orch.long_term_memory (Wave 9 – Tripartite Persistent Memory)."""
+"""Tests for lg_orch.long_term_memory (Wave 9 - Tripartite Persistent Memory)."""
 from __future__ import annotations
 
 import time
@@ -13,7 +13,6 @@ from lg_orch.long_term_memory import (
     _infer_task_type,
     stub_embedder,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,7 +53,7 @@ def test_stub_embedder_unit_norm() -> None:
 def test_store_and_search_semantic(tmp_path: pytest.TempPathFactory) -> None:
     """Store facts with a controlled embedder; verify top-1 is the closest fact."""
 
-    def _embedder(text: str) -> "np.ndarray[object, np.dtype[np.float32]]":
+    def _embedder(text: str) -> np.ndarray[object, np.dtype[np.float32]]:
         # Deploy-related text → dimension 0 dominant
         # Credential-related text → dimension 1 dominant
         # Test-related text → dimension 2 dominant
@@ -85,7 +84,7 @@ def test_store_and_search_semantic(tmp_path: pytest.TempPathFactory) -> None:
 def test_semantic_search_cosine_ordering(tmp_path: pytest.TempPathFactory) -> None:
     """Two facts: one closely related to the query, one unrelated. Verify rank."""
 
-    def _controlled_embedder(text: str) -> "np.ndarray[object, np.dtype[np.float32]]":
+    def _controlled_embedder(text: str) -> np.ndarray[object, np.dtype[np.float32]]:
         # Embed "deploy" queries toward [1,0,...] and others toward [0,1,...]
         if "deploy" in text.lower():
             v = np.zeros(128, dtype=np.float32)
@@ -219,7 +218,10 @@ def test_stub_embedder_warning_emitted_when_no_embedder(tmp_path: pytest.TempPat
         store = LongTermMemoryStore(db_path=str(tmp_path / "ltm_stub.db"))
         store.close()
 
-    events = [call.args[0] if call.args else call.kwargs.get("event", "") for call in mock_warn.call_args_list]
+    events = [
+        call.args[0] if call.args else call.kwargs.get("event", "")
+        for call in mock_warn.call_args_list
+    ]
     assert "long_term_memory.stub_embedder_active" in events, (
         f"expected stub_embedder_active warning; got events: {events}"
     )
@@ -231,16 +233,21 @@ def test_stub_embedder_warning_not_emitted_when_real_embedder_provided(
     """When a real embedder is provided, stub warning must NOT be emitted."""
     import lg_orch.long_term_memory as ltm_module
 
-    def _real_embedder(text: str) -> "np.ndarray[object, np.dtype[np.float32]]":
+    def _real_embedder(text: str) -> np.ndarray[object, np.dtype[np.float32]]:
         v = np.zeros(128, dtype=np.float32)
         v[0] = 1.0
         return v
 
     with patch.object(ltm_module._log, "warning") as mock_warn:
-        store = LongTermMemoryStore(db_path=str(tmp_path / "ltm_real.db"), embedder=_real_embedder)
+        store = LongTermMemoryStore(
+            db_path=str(tmp_path / "ltm_real.db"), embedder=_real_embedder
+        )
         store.close()
 
-    events = [call.args[0] if call.args else call.kwargs.get("event", "") for call in mock_warn.call_args_list]
+    events = [
+        call.args[0] if call.args else call.kwargs.get("event", "")
+        for call in mock_warn.call_args_list
+    ]
     assert "long_term_memory.stub_embedder_active" not in events, (
         f"stub_embedder_active warning must not fire when a real embedder is given; got: {events}"
     )
@@ -280,7 +287,7 @@ def test_semantic_scan_large_warning(tmp_path: pytest.TempPathFactory) -> None:
     """Inserting >5000 rows then calling search_semantic must emit the scan-large warning."""
     import lg_orch.long_term_memory as ltm_module
 
-    def _fast_embedder(text: str) -> "np.ndarray[object, np.dtype[np.float32]]":
+    def _fast_embedder(text: str) -> np.ndarray[object, np.dtype[np.float32]]:
         v = np.zeros(128, dtype=np.float32)
         v[0] = 1.0
         return v
@@ -295,7 +302,8 @@ def test_semantic_scan_large_warning(tmp_path: pytest.TempPathFactory) -> None:
     now = time.time()
     with store._lock:
         store._conn.executemany(
-            "INSERT INTO semantic_memories (content, metadata, embedding, created_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO semantic_memories"
+            " (content, metadata, embedding, created_at) VALUES (?, ?, ?, ?)",
             [(f"fact {i}", "{}", blob, now) for i in range(6_000)],
         )
         store._conn.commit()
@@ -305,7 +313,10 @@ def test_semantic_scan_large_warning(tmp_path: pytest.TempPathFactory) -> None:
 
     store.close()
 
-    events = [call.args[0] if call.args else call.kwargs.get("event", "") for call in mock_warn.call_args_list]
+    events = [
+        call.args[0] if call.args else call.kwargs.get("event", "")
+        for call in mock_warn.call_args_list
+    ]
     assert "long_term_memory.semantic_scan_large" in events, (
         f"expected semantic_scan_large warning; got events: {events}"
     )

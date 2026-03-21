@@ -160,11 +160,7 @@ impl ToolEnvelope {
     /// `timing_ms` defaults to `0`; callers at the dispatch boundary
     /// (i.e. [`crate::tools::dispatch_tool`]) overwrite it once after the
     /// tool completes so there is a single source of truth for wall-clock time.
-    pub fn ok(
-        tool: impl Into<String>,
-        stdout: impl Into<String>,
-        artifacts: Value,
-    ) -> Self {
+    pub fn ok(tool: impl Into<String>, stdout: impl Into<String>, artifacts: Value) -> Self {
         Self {
             tool: tool.into(),
             ok: true,
@@ -295,24 +291,20 @@ mod tests {
         assert_eq!(val["tool"], "health");
         assert_eq!(val["ok"], true);
         assert_eq!(val["exit_code"], 0);
-        assert_eq!(
-            val["diagnostics"].as_array().map_or(0, std::vec::Vec::len),
-            0
-        );
+        assert_eq!(val["diagnostics"].as_array().map_or(0, std::vec::Vec::len), 0);
     }
 
     #[test]
     fn test_envelope_with_diagnostics() {
-        let env = ToolEnvelope::err("exec", 1, "fail", json!({})).with_diagnostics(vec![
-            Diagnostic {
+        let env =
+            ToolEnvelope::err("exec", 1, "fail", json!({})).with_diagnostics(vec![Diagnostic {
                 file: "src/main.rs".to_string(),
                 line: Some(10),
                 column: Some(5),
                 code: Some("E0432".to_string()),
                 fingerprint: Some("abcd1234".to_string()),
                 message: "unresolved import".to_string(),
-            },
-        ]);
+            }]);
         assert_eq!(env.diagnostics.len(), 1);
         assert_eq!(env.diagnostics[0].code.as_deref(), Some("E0432"));
     }
@@ -367,26 +359,11 @@ mod tests {
                 inbound_redactions: RedactionMetadata::default(),
             });
 
-        assert_eq!(
-            env.isolation.as_ref().map(|x| x.backend.as_str()),
-            Some("safe_fallback")
-        );
-        assert_eq!(
-            env.approval.as_ref().map(|x| x.status.as_str()),
-            Some("approved")
-        );
-        assert_eq!(
-            env.snapshot.as_ref().map(|x| x.snapshot_id.as_str()),
-            Some("snap-1")
-        );
-        assert_eq!(
-            env.undo.as_ref().map(|x| x.restored_snapshot_id.as_str()),
-            Some("snap-1")
-        );
-        assert_eq!(
-            env.mcp.as_ref().map(|x| x.server_name.as_str()),
-            Some("test-server")
-        );
+        assert_eq!(env.isolation.as_ref().map(|x| x.backend.as_str()), Some("safe_fallback"));
+        assert_eq!(env.approval.as_ref().map(|x| x.status.as_str()), Some("approved"));
+        assert_eq!(env.snapshot.as_ref().map(|x| x.snapshot_id.as_str()), Some("snap-1"));
+        assert_eq!(env.undo.as_ref().map(|x| x.restored_snapshot_id.as_str()), Some("snap-1"));
+        assert_eq!(env.mcp.as_ref().map(|x| x.server_name.as_str()), Some("test-server"));
     }
 
     #[test]
