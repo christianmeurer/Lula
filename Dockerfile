@@ -14,7 +14,7 @@ WORKDIR /app
 COPY rs/ ./rs/
 COPY Cargo.lock* ./
 
-RUN cargo build --manifest-path ./rs/Cargo.toml --release -p lg-runner
+RUN cargo build --manifest-path ./rs/Cargo.toml --release --locked -p lg-runner
 
 # Stage 2: Python + uv setup
 FROM python:3.12-slim-bookworm AS python-builder
