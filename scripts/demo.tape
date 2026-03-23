@@ -4,8 +4,8 @@
 
 Output docs/demo.gif
 
-Set Width 120
-Set Height 32
+Set Width 1200
+Set Height 600
 Set FontSize 14
 Set Theme "Dracula"
 Set TypingSpeed 40ms
