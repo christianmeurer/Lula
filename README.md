@@ -11,7 +11,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.88-orange.svg)](https://www.rust-lang.org/)
 [![LangGraph](https://img.shields.io/badge/langgraph-0.4-green.svg)](https://github.com/langchain-ai/langgraph)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.0--rc4-blue.svg)](https://github.com/christianmeurer/Lula/releases)
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/christianmeurer/Lula/releases)
 [![DOI](https://zenodo.org/badge/1145578823.svg)](https://doi.org/10.5281/zenodo.19138036)
 
 ---
@@ -23,10 +23,6 @@ Lula is a LangGraph-based multi-agent coding orchestrator paired with a native R
 ![Architecture](docs/arch-diagram.svg)
 
 ![Isolation Layers](docs/isolation-layers.svg)
-
-![Demo](docs/demo.gif)
-
-> Generate with: `vhs scripts/demo.tape`
 
 ---
 
@@ -336,7 +332,7 @@ If you use Lula in your research or work, please cite it:
   title = {Lula — Production-grade multi-agent coding assistant},
   year = {2026},
   url = {https://github.com/christianmeurer/Lula},
-  version = {1.0.0-rc4}
+  version = {1.0.0}
 }
 ```
 
