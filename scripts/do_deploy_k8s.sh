@@ -186,7 +186,7 @@ inject = f"\n      - key: LG_RUNNER_BASE_URL\n        value: {runner_url}\n"
 text = re.sub(r'(\n      - key: LG_ROUTER_MODEL\n        value: .*)', r'\1' + inject, text)
 open(dst, 'w').write(text)
 PYEOF
-  doctl apps update "${DO_APP_ID}" --spec "${PATCHED_APP_SPEC}"
+  doctl apps update "${DO_APP_ID}" --spec - < "${PATCHED_APP_SPEC}"
   echo "App Platform updated. Runner URL set to: ${RUNNER_URL}"
   echo "Make sure App Platform secret LG_CHECKPOINT_REDIS_URL is set to your DO Managed Valkey URI."
 else
