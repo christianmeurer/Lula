@@ -102,13 +102,9 @@ echo "--- [step 7/${TOTAL_STEPS}] Apply namespace ---"
 kubectl apply -f infra/k8s/namespace.yaml
 
 echo "--- [step 8/${TOTAL_STEPS}] Create DOCR pull secret ---"
-doctl registry kubernetes-manifest --namespace lula-orch | kubectl apply -f - || true
-kubectl create secret docker-registry docr-secret \
-  --namespace lula-orch \
-  --docker-server="registry.digitalocean.com" \
-  --docker-username="$(doctl auth whoami)" \
-  --docker-password="$(doctl auth token)" \
-  --dry-run=client -o yaml | kubectl apply -f -
+doctl registry kubernetes-manifest --namespace lula-orch \
+  | sed "s/name: registry-${DO_REGISTRY}/name: docr-secret/" \
+  | kubectl apply -f -
 
 echo "--- [step 9/${TOTAL_STEPS}] Apply gVisor RuntimeClass ---"
 kubectl apply -f infra/k8s/gvisor-runtime-class.yaml

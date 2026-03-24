@@ -67,7 +67,10 @@ COPY scripts/start_remote_stack.sh ./scripts/start_remote_stack.sh
 EXPOSE 8001
 
 RUN groupadd --gid 10001 lula && \
-    useradd --uid 10001 --gid lula --shell /bin/bash --create-home lula
+    useradd --uid 10001 --gid lula --shell /bin/bash --create-home lula && \
+    chmod 755 /root && \
+    chmod -R a+rX /root/.local && \
+    chown -R lula:lula /app
 
 USER lula
 
