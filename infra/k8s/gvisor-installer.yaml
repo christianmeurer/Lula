@@ -19,7 +19,6 @@ spec:
           operator: Equal
           value: gvisor
           effect: NoSchedule
-      hostPID: true
       initContainers:
         - name: installer
           image: ubuntu:22.04
@@ -44,29 +43,13 @@ spec:
                   runtime_type = "io.containerd.runsc.v1"
               EOF
               fi
-              containerd_pid=""
-              if [ -f /host/run/containerd/containerd.pid ]; then
-                containerd_pid="$(cat /host/run/containerd/containerd.pid 2>/dev/null || true)"
-              fi
-              if [ -z "${containerd_pid}" ]; then
-                for proc_dir in /proc/[0-9]*; do
-                  [ -r "${proc_dir}/comm" ] || continue
-                  if [ "$(cat "${proc_dir}/comm" 2>/dev/null)" = "containerd" ]; then
-                    containerd_pid="${proc_dir#/proc/}"
-                    break
-                  fi
-                done
-              fi
-              if [ -z "${containerd_pid}" ]; then
-                echo "containerd process not found in shared host PID namespace" >&2
-                exit 1
-              fi
-              kill -0 "${containerd_pid}"
-              kill -TERM "${containerd_pid}"
-      containers:
-        - name: pause
-          image: gcr.io/pause:3.9
-          command: ["/pause"]
+              echo "gVisor runtime binary installed on the host at /usr/local/sbin/runsc."
+              echo "containerd config updated on the host; automatic containerd restart is intentionally skipped."
+              echo "Restart containerd out-of-band on this node after the pod finishes init to activate the runsc runtime without leaving the installer pod in Init:Unknown."
+       containers:
+         - name: pause
+           image: gcr.io/pause:3.9
+           command: ["/pause"]
       volumes:
         - name: host-root
           hostPath:
