@@ -29,6 +29,9 @@ spec:
               mountPath: /usr/local/sbin
             - name: host-etc-containerd
               mountPath: /etc/containerd
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
             - name: host-run-systemd
               mountPath: /run/systemd
             - name: host-var-run-dbus
@@ -49,7 +52,18 @@ spec:
                   runtime_type = "io.containerd.runsc.v1"
               EOF
               fi
-              nsenter --mount=/proc/1/ns/mnt -- systemctl restart containerd
+              nsenter --mount=/host/proc/1/ns/mnt --pid=/host/proc/1/ns/pid -- \
+                chroot /host/proc/1/root /bin/sh -c '
+                  set -eu
+                  if command -v systemctl >/dev/null 2>&1; then
+                    systemctl restart containerd
+                  elif command -v service >/dev/null 2>&1; then
+                    service containerd restart
+                  else
+                    echo "containerd restart requires systemctl or service on the host" >&2
+                    exit 1
+                  fi
+                '
       containers:
         - name: pause
           image: gcr.io/pause:3.9
@@ -61,6 +75,10 @@ spec:
         - name: host-etc-containerd
           hostPath:
             path: /etc/containerd
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory
         - name: host-run-systemd
           hostPath:
             path: /run/systemd
