@@ -24,10 +24,6 @@ Lula is a LangGraph-based multi-agent coding orchestrator paired with a native R
 
 ![Isolation Layers](docs/isolation-layers.svg)
 
-![Demo](docs/demo.gif)
-
-> Generate with: `vhs scripts/demo.tape`
-
 ---
 
 ## 📐 Architecture Overview
