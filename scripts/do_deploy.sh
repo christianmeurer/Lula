@@ -166,7 +166,7 @@ deploy_app_platform() {
       APP_ID="${id}"
       break
     fi
-  done < <(doctl apps list --format Name,ID --no-header 2>/dev/null || true)
+  done < <(doctl apps list --format Spec.Name,ID --no-header 2>/dev/null || true)
 
   if [[ -z "${APP_ID}" ]]; then
     # New app — use the static spec, no secrets to preserve
@@ -179,7 +179,7 @@ deploy_app_platform() {
 
     ensure_app_platform_secret_key "${PATCHED_SPEC}" "LG_CHECKPOINT_REDIS_URL"
 
-    CREATE_OUTPUT="$(doctl apps create --spec "${PATCHED_SPEC}" --format ID --no-header 2>/dev/null || true)"
+    CREATE_OUTPUT="$(doctl apps create --spec "${PATCHED_SPEC}" --format ID --no-header)"
     APP_ID="${CREATE_OUTPUT//[[:space:]]/}"
 
     if [[ -z "${APP_ID}" ]]; then
@@ -191,7 +191,7 @@ deploy_app_platform() {
             APP_ID="${id}"
             break 2
           fi
-        done < <(doctl apps list --format Name,ID --no-header 2>/dev/null || true)
+        done < <(doctl apps list --format Spec.Name,ID --no-header 2>/dev/null || true)
         if [[ -n "${APP_ID}" ]]; then
           break
         fi
