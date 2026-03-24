@@ -139,6 +139,7 @@ def _request_scheme(*, forwarded_proto: str | None, trust_forwarded_headers: boo
 def _authorize_request(
     *,
     route: str,
+    request_path: str,
     auth_mode: str,
     expected_bearer_token: str | None,
     authorization_header: str | None,
@@ -157,6 +158,13 @@ def _authorize_request(
     if expected_bearer_token is None:
         return "", _json_response(503, {"error": "remote_api_auth_not_configured"})
     auth = _non_empty_str(authorization_header)
+    if auth is None:
+        query = parse_qs(urlsplit(request_path).query, keep_blank_values=False)
+        values = query.get("access_token", [])
+        if values:
+            token = values[0].strip()
+            if token:
+                auth = f"Bearer {token}"
     if auth is None or auth[:7].lower() != "bearer ":
         return "", _json_response(401, {"error": "missing_bearer_token"})
     given = auth[7:].strip()
@@ -587,15 +595,16 @@ def _hdl_spa(
     request_id: str,
     client_ip: str,
 ) -> tuple[int, str, bytes]:
-    if method != "GET":
-        return _json_response(405, {"error": "method_not_allowed"})
-    spa_dir = Path(__file__).parent / "spa"
-    if not spa_dir.exists():
-        return _json_response(503, {"error": "spa_not_available"})
-    from lg_orch.spa.router import create_spa_router
-
-    subpath = "/".join(path_parts[1:]) if len(path_parts) > 1 else ""
-    return create_spa_router(spa_dir)(subpath)
+    return _hdl_root_ui(
+        service,
+        method,
+        request_path,
+        request_body,
+        auth_subject,
+        path_parts,
+        request_id,
+        client_ip,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -686,6 +695,7 @@ def _api_http_dispatch(
     route = urlsplit(request_path).path.rstrip("/") or "/"
     auth_subject, auth_error = _authorize_request(
         route=route,
+        request_path=request_path,
         auth_mode=auth_mode,
         expected_bearer_token=expected_bearer_token,
         authorization_header=authorization_header,

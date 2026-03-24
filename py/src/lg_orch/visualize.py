@@ -907,7 +907,7 @@ function selectRun(runId) {{
 }}
 
 function openSSEStream(runId) {{
-  const url = API + '/v1/runs/' + encodeURIComponent(runId) + '/stream';
+  const url = API + '/v1/runs/' + encodeURIComponent(runId) + '/stream' + accessTokenQuery();
   const es = new EventSource(url);
   _activeSSE = es;
   es.onmessage = (ev) => {{
@@ -1166,10 +1166,34 @@ function approveMutation() {{ void approvalAction('approve'); }}
 function rejectMutation() {{ void approvalAction('reject'); }}
 
 // ── Auth ─────────────────────────────────────────────────────
+function bootstrapBearerToken() {{
+  try {{
+    const url = new URL(window.location.href);
+    const queryToken = (url.searchParams.get('access_token') || '').trim();
+    if (queryToken) {{
+      window._bearerToken = queryToken;
+      localStorage.setItem('lgBearerToken', queryToken);
+      url.searchParams.delete('access_token');
+      history.replaceState(null, '', url.toString());
+      return;
+    }}
+    const storedToken = (localStorage.getItem('lgBearerToken') || '').trim();
+    if (!(window._bearerToken || '').trim() && storedToken) {{
+      window._bearerToken = storedToken;
+    }}
+  }} catch {{}}
+}}
+
 function bearerHeaders() {{
   const tok = (window._bearerToken || '').trim();
   return tok ? {{ Authorization: 'Bearer ' + tok }} : {{}};
 }}
+
+function accessTokenQuery() {{
+  const tok = (window._bearerToken || '').trim();
+  return tok ? ('?access_token=' + encodeURIComponent(tok)) : '';
+}}
+
 // Expose for devtools: window._bearerToken = 'your-token'
 
 // ── Bootstrap ────────────────────────────────────────────────
@@ -1185,6 +1209,7 @@ document.getElementById('req-input').addEventListener('keydown', e => {{
   if (e.key === 'Enter') submitRun();
 }});
 
+bootstrapBearerToken();
 fetchList();
 </script>
 </body>
