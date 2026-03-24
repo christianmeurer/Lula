@@ -179,7 +179,7 @@ deploy_app_platform() {
 
     ensure_app_platform_secret_key "${PATCHED_SPEC}" "LG_CHECKPOINT_REDIS_URL"
 
-    CREATE_OUTPUT="$(doctl apps create --spec "${PATCHED_SPEC}" --format ID --no-header)"
+    CREATE_OUTPUT="$(doctl apps create --spec - --format ID --no-header < "${PATCHED_SPEC}")"
     APP_ID="${CREATE_OUTPUT//[[:space:]]/}"
 
     if [[ -z "${APP_ID}" ]]; then
@@ -212,7 +212,7 @@ deploy_app_platform() {
 
     ensure_app_platform_secret_key "${PATCHED_SPEC}" "LG_CHECKPOINT_REDIS_URL"
 
-    doctl apps update "${APP_ID}" --spec "${PATCHED_SPEC}"
+    doctl apps update "${APP_ID}" --spec - < "${PATCHED_SPEC}"
   fi
 
   if [[ -z "${APP_ID}" ]]; then

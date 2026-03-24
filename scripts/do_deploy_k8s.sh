@@ -80,12 +80,19 @@ else
     --region "${DO_REGION}"
     --count 2
     --size s-2vcpu-4gb
-    --node-pool "name=gvisor-pool;count=2;size=s-2vcpu-4gb;label=sandbox=gvisor;taint=sandbox=gvisor:NoSchedule"
   )
   if [[ -n "${DO_K8S_VERSION}" ]]; then
     CREATE_ARGS+=(--version "${DO_K8S_VERSION}")
   fi
   doctl "${CREATE_ARGS[@]}"
+
+  echo "Creating gVisor node pool on cluster '${DO_CLUSTER_NAME}'..."
+  doctl kubernetes cluster node-pool create "${DO_CLUSTER_NAME}" \
+    --name gvisor-pool \
+    --count 2 \
+    --size s-2vcpu-4gb \
+    --label sandbox=gvisor \
+    --taint sandbox=gvisor:NoSchedule
 fi
 
 echo "--- [step 6/${TOTAL_STEPS}] Save kubeconfig ---"
