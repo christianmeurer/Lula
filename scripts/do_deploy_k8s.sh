@@ -125,7 +125,24 @@ echo "--- [step 12/${TOTAL_STEPS}] Apply runner Deployment and LoadBalancer Serv
 # Patch image tag in runner-deployment before applying
 PATCHED_RUNNER_DEPLOY="$(mktemp --suffix=.yaml)"
 trap "rm -f '${PATCHED_RUNNER_DEPLOY}'" EXIT
-sed "s|lula-orch:latest|lula-orch:${IMAGE_TAG}|g" infra/k8s/runner-deployment.yaml > "${PATCHED_RUNNER_DEPLOY}"
+python3 - "${IMAGE}" infra/k8s/runner-deployment.yaml "${PATCHED_RUNNER_DEPLOY}" <<'PYEOF'
+from pathlib import Path
+import sys
+
+image, src, dst = sys.argv[1], sys.argv[2], sys.argv[3]
+text = Path(src).read_text()
+lines = text.splitlines()
+
+for index, line in enumerate(lines):
+    if line.lstrip().startswith("image:"):
+        indent = line[: len(line) - len(line.lstrip())]
+        lines[index] = f"{indent}image: {image}"
+        break
+else:
+    raise SystemExit("image line not found in runner deployment manifest")
+
+Path(dst).write_text("\n".join(lines) + "\n")
+PYEOF
 kubectl apply -f "${PATCHED_RUNNER_DEPLOY}"
 kubectl apply -f infra/k8s/runner-service.yaml
 
