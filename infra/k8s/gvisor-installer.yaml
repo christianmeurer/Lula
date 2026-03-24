@@ -46,10 +46,10 @@ spec:
               echo "gVisor runtime binary installed on the host at /usr/local/sbin/runsc."
               echo "containerd config updated on the host; automatic containerd restart is intentionally skipped."
               echo "Restart containerd out-of-band on this node after the pod finishes init to activate the runsc runtime without leaving the installer pod in Init:Unknown."
-       containers:
-         - name: pause
-           image: gcr.io/pause:3.9
-           command: ["/pause"]
+      containers:
+        - name: pause
+          image: gcr.io/pause:3.9
+          command: ["/pause"]
       volumes:
         - name: host-root
           hostPath:
