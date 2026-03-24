@@ -19,6 +19,7 @@ spec:
           operator: Equal
           value: gvisor
           effect: NoSchedule
+      hostPID: true
       initContainers:
         - name: installer
           image: ubuntu:22.04
@@ -48,19 +49,20 @@ spec:
                 containerd_pid="$(cat /host/run/containerd/containerd.pid 2>/dev/null || true)"
               fi
               if [ -z "${containerd_pid}" ]; then
-                for proc_dir in /host/proc/[0-9]*; do
+                for proc_dir in /proc/[0-9]*; do
                   [ -r "${proc_dir}/comm" ] || continue
                   if [ "$(cat "${proc_dir}/comm" 2>/dev/null)" = "containerd" ]; then
-                    containerd_pid="${proc_dir#/host/proc/}"
+                    containerd_pid="${proc_dir#/proc/}"
                     break
                   fi
                 done
               fi
               if [ -z "${containerd_pid}" ]; then
-                echo "containerd process not found on host" >&2
+                echo "containerd process not found in shared host PID namespace" >&2
                 exit 1
               fi
-              nsenter --pid=/host/proc/1/ns/pid -- /bin/sh -ceu 'kill -0 "$1"; kill -TERM "$1"' -- "${containerd_pid}"
+              kill -0 "${containerd_pid}"
+              kill -TERM "${containerd_pid}"
       containers:
         - name: pause
           image: gcr.io/pause:3.9
