@@ -117,7 +117,7 @@ scripts\dev.ps1
 bash scripts/dev.sh
 ```
 
-This starts the Rust runner on `127.0.0.1:8088` and the Python API on `0.0.0.0:8001`. Open `http://localhost:8001` for the SPA run viewer.
+This starts the Rust runner on `127.0.0.1:8088` and the Python API on `0.0.0.0:8001`. Open `http://localhost:8001/app/` for the run viewer UI.
 
 ### Run a task
 
@@ -241,8 +241,15 @@ MODEL_ACCESS_KEY=<model key>
 LG_RUNNER_API_KEY=<runner key>
 LG_REMOTE_API_AUTH_MODE=bearer
 LG_REMOTE_API_BEARER_TOKEN=<api token>
-LG_REMOTE_API_RATE_LIMIT_RPS=60
-LG_RUNNER_LINUX_NAMESPACE_ENABLED=1
+LG_CHECKPOINT_REDIS_URL=<valkey-uri>
+```
+
+If you are using the split production topology, deploy the hardened runner on DOKS with [`scripts/do_deploy_k8s.sh`](scripts/do_deploy_k8s.sh) and point the App Platform service at it with `LG_RUNNER_BASE_URL`.
+
+The production UI entrypoint is:
+
+```bash
+https://<app-domain>/app/?access_token=<LG_REMOTE_API_BEARER_TOKEN>
 ```
 
 ---

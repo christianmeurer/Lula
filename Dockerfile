@@ -20,10 +20,15 @@ FROM python:3.12-slim-bookworm AS python-builder
 
 WORKDIR /app
 
+ARG UV_VERSION=0.7.2
+
+ADD https://astral.sh/uv/${UV_VERSION}/install.sh /tmp/uv-installer.sh
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -LsSf https://astral.sh/uv/install.sh | sh
+    && sh /tmp/uv-installer.sh \
+    && rm /tmp/uv-installer.sh
 
 ENV PATH=/root/.local/bin:${PATH}
 
@@ -36,11 +41,12 @@ RUN uv python install 3.12 \
     && uv sync --project ./py --python 3.12 --no-dev
 
 # Stage 3: Runtime image
-FROM debian:bookworm-slim AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
 
-ENV PATH=/root/.local/bin:/app/py/.venv/bin:${PATH} \
+ENV PATH=/app/py/.venv/bin:${PATH} \
+    HOME=/home/lula \
     LG_PROFILE=prod \
     LG_REPO_ROOT=/app \
     LG_RUNNER_BIND=127.0.0.1:8088 \
@@ -48,14 +54,13 @@ ENV PATH=/root/.local/bin:/app/py/.venv/bin:${PATH} \
     PORT=8001
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates curl python3 \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Rust binary
 COPY --from=rust-builder /app/rs/target/release/lg-runner ./rs/target/release/lg-runner
 
 # Copy Python environment and app files
-COPY --from=python-builder /root/.local /root/.local
 COPY --from=python-builder /app/py /app/py
 COPY --from=python-builder /app/configs /app/configs
 COPY --from=python-builder /app/prompts /app/prompts
@@ -68,8 +73,6 @@ EXPOSE 8001
 
 RUN groupadd --gid 10001 lula && \
     useradd --uid 10001 --gid lula --shell /bin/bash --create-home lula && \
-    chmod 755 /root && \
-    chmod -R a+rX /root/.local && \
     chown -R lula:lula /app
 
 USER lula

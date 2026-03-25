@@ -706,20 +706,15 @@ Current state: [`rs/runner/src/sandbox.rs`](../rs/runner/src/sandbox.rs) `LinuxN
 
 ### 13.2 Firecracker REST API correctness
 
-Current state: [`rs/runner/src/tools/exec.rs`](../rs/runner/src/tools/exec.rs:135) `MicroVmEphemeral` path passes `--kernel` and `--rootfs` as CLI args to a `firecracker` binary. This is a stub architecture — real Firecracker does not accept those arguments; it exposes a Unix socket REST API.
+Current state: the Firecracker REST path is implemented. [`rs/runner/src/sandbox.rs`](../rs/runner/src/sandbox.rs) starts `firecracker --api-sock ...`, issues the REST configuration calls (`PUT /machine-config`, `PUT /boot-source`, `PUT /drives/rootfs`, `PUT /vsock`, `PUT /actions`), and the execution path in [`rs/runner/src/tools/exec.rs`](../rs/runner/src/tools/exec.rs) dispatches commands through the guest agent over AF_VSOCK via [`rs/runner/src/vsock.rs`](../rs/runner/src/vsock.rs).
 
-**Decision required (choose one):**
+Remaining work is operational rather than architectural:
 
-**Option A — Implement real Firecracker REST client:**
-- Replace the CLI invocation in [`rs/runner/src/tools/exec.rs`](../rs/runner/src/tools/exec.rs) with a `FirecrackerClient` struct that: (1) spawns `firecracker --api-sock /tmp/firecracker-{id}.sock`; (2) issues `PUT /machine-config` with `vcpu_count`, `mem_size_mib`; (3) issues `PUT /boot-source` with `kernel_image_path`, `boot_args`; (4) issues `PUT /drives/rootfs` with `path_on_host`, `is_root_device: true`, `is_read_only: false`; (5) issues `PUT /actions {"action_type": "InstanceStart"}`; (6) polls `GET /` until VM is ready; (7) runs the tool command via the guest agent; (8) issues `PUT /actions {"action_type": "SendCtrlAltDel"}` to shut down.
-- Add `firecracker_socket_path` to `SandboxConfig`.
+- Ensure Tier 3 deployments retarget the runner onto Firecracker-capable nodes.
+- Keep `/opt/lula/rootfs.ext4` and `/opt/lula/vmlinux` present on every Firecracker node.
+- Add deployment documentation that verifies the runtime via node inspection (`crictl inspectp`) instead of relying only on health endpoints.
 
-**Option B — Demote MicroVmEphemeral to tech debt and use LinuxNamespace as production tier:**
-- Remove or `#[cfg(feature = "firecracker")]` gate the `MicroVmEphemeral` arm in [`rs/runner/src/tools/exec.rs`](../rs/runner/src/tools/exec.rs).
-- Document in [`docs/architecture.md`](../docs/architecture.md) that `LinuxNamespace` + cgroup v2 + gVisor Kubernetes runtime is the supported production sandbox tier.
-- Add `WARN` log if `sandbox_mode = "MicroVmEphemeral"` is configured in non-dev builds.
-
-Recommended: implement Option B immediately and track Option A as a future milestone.
+This item is therefore **implemented in code** and should be tracked as deployment/documentation fidelity work, not as a pending runner-architecture redesign.
 
 ### 13.3 SCIP toolchain integration — `scripts/index_repo.sh`
 

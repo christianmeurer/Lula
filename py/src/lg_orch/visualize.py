@@ -771,7 +771,7 @@ def render_run_viewer_spa(*, api_base_url: str = "", mermaid_graph: str = "") ->
   <form id="req-form" onsubmit="return false;">
     <input id="req-input" type="text"
            placeholder="Describe a task for the agent…" autocomplete="off">
-    <button class="btn btn-primary" onclick="submitRun()">▶ Run</button>
+    <button type="button" class="btn btn-primary" onclick="submitRun()">▶ Run</button>
   </form>
 </div>
 
@@ -889,7 +889,7 @@ function renderList() {{
   container.innerHTML = filtered.map(r => {{
     const sel = _selected === r.run_id ? ' selected' : '';
     const reqSnip = (r.request || '').slice(0, 80);
-    return `<div class="run-card${{sel}}" data-id="${{esc(r.run_id)}}" onclick="selectRun('${{esc(r.run_id)}}')">  # noqa: E501
+    return `<div class="run-card${{sel}}" data-id="${{esc(r.run_id)}}" onclick="selectRun('${{esc(r.run_id)}}')">
       <div class="rc-req" title="${{esc(r.request)}}">${{esc(reqSnip)}}</div>
       <div class="rc-meta">${{statusBadge(r.status)}}<span class="rc-time">${{fmtTime(r.created_at)}}</span></div>
     </div>`;
@@ -929,7 +929,10 @@ function openSSEStream(runId) {{
 
 async function loadDetailOnce(runId) {{
   try {{
-    const res = await fetch(API + '/v1/runs/' + encodeURIComponent(runId), {{ headers: bearerHeaders() }});  # noqa: E501
+    const res = await fetch(
+      API + '/v1/runs/' + encodeURIComponent(runId),
+      {{ headers: bearerHeaders() }},
+    );
     if (res.ok) renderDetail(await res.json(), runId);
   }} catch {{}}
 }}
@@ -948,14 +951,14 @@ function renderDetail(run, runId) {{
 
   // Action bar
   html += `<div class="action-bar">
-    ${{run.cancellable ? `<button class="btn btn-danger" onclick="cancelRun('${{esc(run.run_id)}}')">✕ Cancel</button>` : ''}}  # noqa: E501
+    ${{run.cancellable ? `<button class="btn btn-danger" onclick="cancelRun('${{esc(run.run_id)}}')">✕ Cancel</button>` : ''}}
     <button class="btn" onclick="loadLogs('${{esc(run.run_id)}}')">Show Logs</button>
   </div>`;
 
   // Approval banner
   if (run.pending_approval) {{
     html += `<div id="approval-banner" class="visible">
-      <div class="ab-text">⚠ Pending approval: ${{esc(run.pending_approval_summary || 'mutation plan awaiting approval')}}</div>  # noqa: E501
+      <div class="ab-text">⚠ Pending approval: ${{esc(run.pending_approval_summary || 'mutation plan awaiting approval')}}</div>
       <button class="btn" onclick="approveMutation()">✓ Approve</button>
       <button class="btn btn-danger" onclick="rejectMutation()">✕ Reject</button>
     </div>`;
@@ -967,13 +970,13 @@ function renderDetail(run, runId) {{
   const intent = (t.intent || run.intent || '').trim();
   const lane = (route.lane || '').trim();
   html += `<div class="card"><h2>Run</h2><dl class="kv">
-    <dt>status</dt><dd>${{statusBadge(run.status)}} ${{inProgress ? '<span style="color:var(--muted);font-size:10px">live</span>' : ''}}</dd>  # noqa: E501
-    <dt>request</dt><dd title="${{esc(run.request)}}">${{esc((run.request || '').slice(0,120))}}</dd>  # noqa: E501
+    <dt>status</dt><dd>${{statusBadge(run.status)}} ${{inProgress ? '<span style="color:var(--muted);font-size:10px">live</span>' : ''}}</dd>
+    <dt>request</dt><dd title="${{esc(run.request)}}">${{esc((run.request || '').slice(0,120))}}</dd>
     <dt>intent</dt><dd>${{esc(intent || '—')}} ${{lanePill(lane)}}</dd>
     <dt>run_id</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.run_id)}}</dd>
     <dt>started</dt><dd>${{fmtTime(run.started_at)}}</dd>
-    ${{run.thread_id ? `<dt>thread</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.thread_id)}}</dd>` : ''}}  # noqa: E501
-    ${{run.checkpoint_id ? `<dt>checkpoint</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.checkpoint_id)}}</dd>` : ''}}  # noqa: E501
+    ${{run.thread_id ? `<dt>thread</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.thread_id)}}</dd>` : ''}}
+    ${{run.checkpoint_id ? `<dt>checkpoint</dt><dd style="font-family:ui-monospace;font-size:10px">${{esc(run.checkpoint_id)}}</dd>` : ''}}
     ${{run.finished_at ? `<dt>finished</dt><dd>${{fmtTime(run.finished_at)}}</dd>` : ''}}
     ${{run.exit_code != null ? `<dt>exit_code</dt><dd>${{esc(String(run.exit_code))}}</dd>` : ''}}
   </dl></div>`;
@@ -989,7 +992,7 @@ function renderDetail(run, runId) {{
         </div>
         <div class="muted">${{esc(entry.rationale || '(no rationale)')}}</div>
       </li>`).join('');
-    html += `<div class="card"><h2>Approval History</h2><ul class="approval-history">${{items}}</ul></div>`;  # noqa: E501
+    html += `<div class="card"><h2>Approval History</h2><ul class="approval-history">${{items}}</ul></div>`;
   }}
 
   // Final output
@@ -1011,7 +1014,7 @@ function renderDetail(run, runId) {{
       const phase = data.phase || '';
       const label = [ev.kind, name, phase].filter(Boolean).join(' / ');
       const isActive = inProgress && phase === 'start' && events[events.length - 1] === ev;
-      const dotCls = isActive ? 'active' : (data.ok === false ? 'err' : (data.ok === true ? 'ok' : ''));  # noqa: E501
+      const dotCls = isActive ? 'active' : (data.ok === false ? 'err' : (data.ok === true ? 'ok' : ''));
       const liCls = isActive ? ' node-active' : '';
       return `<li class="${{liCls}}">
         <span class="tl-dot ${{dotCls}}"></span>
@@ -1019,8 +1022,8 @@ function renderDetail(run, runId) {{
         <span class="tl-label">${{esc(label)}}</span>
       </li>`;
     }}).join('');
-    html += `<div class="card"><h2>Timeline${{inProgress ? ' <span style="color:var(--accent);font-size:10px">● live</span>' : ''}}</h2>  # noqa: E501
-      <ul id="live-timeline">${{items || '<li><span class="tl-dot"></span><span class="tl-label" style="color:var(--muted)">Waiting…</span></li>'}}</ul>  # noqa: E501
+    html += `<div class="card"><h2>Timeline${{inProgress ? ' <span style="color:var(--accent);font-size:10px">● live</span>' : ''}}</h2>
+      <ul id="live-timeline">${{items || '<li><span class="tl-dot"></span><span class="tl-label" style="color:var(--muted)">Waiting…</span></li>'}}</ul>
     </div>`;
   }}
 
@@ -1034,13 +1037,15 @@ function renderDetail(run, runId) {{
       const exit = r.exit_code != null ? ` (exit ${{r.exit_code}})` : '';
       return `<li>${{dot}}<span>${{esc(label + exit)}}</span></li>`;
     }}).join('');
-    html += `<div class="card"><h2>Tools (${{tools.length}})</h2><ul class="tool-list">${{items}}</ul></div>`;  # noqa: E501
+    html += `<div class="card"><h2>Tools (${{tools.length}})</h2><ul class="tool-list">${{items}}</ul></div>`;
   }}
 
   // Inline diffs
   const diffs = extractDiffs(t.tool_results || []);
   if (diffs.length) {{
-    const diffHtml = diffs.map(p => renderDiff(p)).join('<hr style="border-color:var(--border);margin:6px 0">');  # noqa: E501
+    const diffHtml = diffs
+      .map(p => renderDiff(p))
+      .join('<hr style="border-color:var(--border);margin:6px 0">');
     html += `<div class="card"><h2>Patches</h2><div class="diff-wrap">${{diffHtml}}</div></div>`;
   }}
 
@@ -1072,7 +1077,9 @@ function renderDetail(run, runId) {{
       .catch(() => {{}})
       .then(() => {{
         if (lane) highlightLane(lane);
-        const lastNode = (events.filter(e => e.data?.phase === 'start').slice(-1)[0]?.data?.name || '');  # noqa: E501
+        const lastNode = (
+          events.filter(e => e.data?.phase === 'start').slice(-1)[0]?.data?.name || ''
+        );
         if (lastNode) highlightNode(lastNode);
       }});
   }}
@@ -1122,12 +1129,15 @@ function renderDiff(patch) {{
 // ── Logs ─────────────────────────────────────────────────────
 async function loadLogs(runId) {{
   try {{
-    const res = await fetch(API + '/v1/runs/' + encodeURIComponent(runId) + '/logs', {{ headers: bearerHeaders() }});  # noqa: E501
+    const res = await fetch(
+      API + '/v1/runs/' + encodeURIComponent(runId) + '/logs',
+      {{ headers: bearerHeaders() }},
+    );
     if (!res.ok) return;
     const data = await res.json();
     const sec = document.getElementById('logs-section');
     if (sec) {{
-      sec.innerHTML = `<div class="card"><h2>Logs</h2><pre id="logs-pre">${{esc((data.logs || []).join('\\n'))}}</pre></div>`;  # noqa: E501
+      sec.innerHTML = `<div class="card"><h2>Logs</h2><pre id="logs-pre">${{esc((data.logs || []).join('\\n'))}}</pre></div>`;
     }}
   }} catch {{}}
 }}
