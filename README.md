@@ -223,6 +223,8 @@ All manifests are in [`infra/k8s/`](infra/k8s/). GitOps is managed by ArgoCD wit
 DO_REGISTRY=your-registry-name bash scripts/do_deploy_k8s.sh
 ```
 
+Tier 3 Firecracker is implemented in the runner/guest-agent code paths. Enabling it in production is now primarily a deployment concern: schedule the runner onto Firecracker-capable nodes and provide `/opt/lula/rootfs.ext4` plus `/opt/lula/vmlinux`.
+
 Key manifests: [`deployment.yaml`](infra/k8s/deployment.yaml), [`runner-deployment.yaml`](infra/k8s/runner-deployment.yaml), [`hpa.yaml`](infra/k8s/hpa.yaml), [`pdb.yaml`](infra/k8s/pdb.yaml), [`network-policy.yaml`](infra/k8s/network-policy.yaml), [`argocd-app.yaml`](infra/k8s/argocd-app.yaml).
 
 Full guide: [`docs/deployment_digitalocean.md`](docs/deployment_digitalocean.md).
@@ -231,6 +233,14 @@ Full guide: [`docs/deployment_digitalocean.md`](docs/deployment_digitalocean.md)
 
 ```bash
 DO_REGISTRY=your-registry-name bash scripts/do_deploy.sh
+```
+
+Preferred zero-to-live path:
+
+```bash
+DO_REGISTRY=your-registry-name \
+DIGITAL_OCEAN_MODEL_ACCESS_KEY=<your-do-gradient-key> \
+bash scripts/do_deploy_one_shot.sh
 ```
 
 App spec: [`infra/do/app.yaml`](infra/do/app.yaml). Required environment variables:
