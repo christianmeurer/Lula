@@ -638,7 +638,7 @@ The release pipeline ([`.github/workflows/release.yml`](../.github/workflows/rel
 | Secret | Value |
 |---|---|
 | `DIGITALOCEAN_ACCESS_TOKEN` | DO API token with registry read/write |
-| `DO_REGISTRY_NAME` | `lula-registry` |
+| `DO_REGISTRY_NAME` | e.g. `lula-orch` |
 
 On every `v*.*.*` Git tag push the pipeline:
 1. Runs `cargo deny check` (supply-chain security gate)
