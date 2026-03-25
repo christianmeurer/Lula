@@ -1,5 +1,5 @@
 name: lula-orch
-region: nyc
+region: nyc3
 services:
   - name: api
     image:
@@ -42,6 +42,7 @@ services:
         type: SECRET
       # Model routing — combined image starts runner internally at 127.0.0.1:8088.
       # For an external k8s runner set LG_RUNNER_BASE_URL to the service URL.
+      # The one-shot deployment flow can inject LG_RUNNER_BASE_URL automatically.
       - key: LG_PLANNER_PROVIDER
         value: digitalocean
       - key: LG_PLANNER_MODEL
