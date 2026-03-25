@@ -351,6 +351,11 @@ App Platform is recommended for simplicity (managed TLS, rolling deploys, zero i
 doctl auth init
 doctl registry create lula-orch --region nyc3
 
+# Preferred: one-shot App Platform deploy with generated Lula secrets
+export DO_REGISTRY=lula-orch
+export DIGITAL_OCEAN_MODEL_ACCESS_KEY=<secret>
+bash scripts/do_deploy_one_shot.sh
+
 # Deploy (App Platform)
 export DO_REGISTRY=lula-orch
 export LG_REMOTE_API_BEARER_TOKEN=<secret>
@@ -362,4 +367,10 @@ bash scripts/do_deploy.sh
 export DO_DEPLOY_TARGET=droplet
 export DO_DROPLET_SSH_KEY=<fingerprint>
 bash scripts/do_deploy.sh
+```
+
+After deployment, open the browser UI at:
+
+```sh
+https://<app-domain>/app/?access_token=<LG_REMOTE_API_BEARER_TOKEN>
 ```
