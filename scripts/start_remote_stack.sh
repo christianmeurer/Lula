@@ -10,6 +10,7 @@ RUNNER_BIND="${LG_RUNNER_BIND:-127.0.0.1:8088}"
 RUNNER_HEALTH_URL="${LG_RUNNER_HEALTH_URL:-http://127.0.0.1:8088/healthz}"
 REMOTE_API_HOST="${LG_REMOTE_API_HOST:-0.0.0.0}"
 REMOTE_API_PORT="${LG_REMOTE_API_PORT:-${PORT:-${WEBSITES_PORT:-8001}}}"
+API_BIN="${ROOT_DIR}/py/.venv/bin/lg-orch"
 
 cleanup() {
   if [[ -n "${api_pid:-}" ]] && kill -0 "$api_pid" 2>/dev/null; then
@@ -56,7 +57,11 @@ fi
 
 (
   cd "$ROOT_DIR/py"
-  uv run --project . lg-orch serve-api --host "$REMOTE_API_HOST" --port "$REMOTE_API_PORT"
+  if [[ -x "$API_BIN" ]]; then
+    "$API_BIN" serve-api --host "$REMOTE_API_HOST" --port "$REMOTE_API_PORT"
+  else
+    uv run --project . lg-orch serve-api --host "$REMOTE_API_HOST" --port "$REMOTE_API_PORT"
+  fi
 ) &
 api_pid=$!
 

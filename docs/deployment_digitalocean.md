@@ -1,6 +1,6 @@
 # DigitalOcean Deployment — LG-Orchestration-Platform
 
-This document describes how to build, push, and run the platform on DigitalOcean using either **App Platform** (recommended) or a **Droplet** (lower cost, manual TLS).
+This document describes how to build, push, and run the platform on DigitalOcean using **App Platform**, a **Droplet**, or the split **App Platform + DOKS runner** production topology.
 
 ---
 
@@ -67,7 +67,7 @@ The spec file at [`infra/do/app.yaml`](../infra/do/app.yaml) defines the App Pla
 | `instance_size_slug` | `apps-s-1vcpu-1gb` | Basic — adequate for personal use |
 | `http_port` | `8001` | Matches `PORT` env var |
 | `health_check.http_path` | `/healthz` | Remote API exposes this |
-| Secret env vars | `LG_REMOTE_API_BEARER_TOKEN`, `LG_RUNNER_API_KEY`, `DIGITAL_OCEAN_MODEL_ACCESS_KEY`, `MODEL_ACCESS_KEY` | Must be set via console or `doctl apps update` after creation |
+| Secret env vars | `LG_REMOTE_API_BEARER_TOKEN`, `LG_RUNNER_API_KEY`, `DIGITAL_OCEAN_MODEL_ACCESS_KEY`, `MODEL_ACCESS_KEY`, `LG_CHECKPOINT_REDIS_URL` | Must be set via console or injected by deployment automation |
 
 ### Create the app (first deploy)
 
@@ -83,16 +83,25 @@ doctl apps update <APP_ID> --spec infra/do/app.yaml
 
 The deploy script handles create-or-update detection automatically.
 
+### Current production topology note
+
+The repository currently supports two distinct DigitalOcean production shapes:
+
+1. **Combined App Platform / Droplet image** — orchestrator and runner launched together via [`scripts/start_remote_stack.sh`](../scripts/start_remote_stack.sh).
+2. **Split production topology** — App Platform hosts the orchestrator UI/API while the hardened runner is deployed separately on DOKS via [`scripts/do_deploy_k8s.sh`](../scripts/do_deploy_k8s.sh) and referenced through `LG_RUNNER_BASE_URL`.
+
+If you are using the split topology, the browser UI is served from the App Platform app and the runner health checks happen against the DOKS runner service.
+
 ### Setting secret environment variables
 
-Secret vars are **not** stored in `app.yaml` (which is committed to source control). Set them after creation:
+Secret vars are **not** stored in `app.yaml` (which is committed to source control). Set them after creation or use the planned one-shot deploy flow that generates and wires them automatically:
 
 ```sh
 doctl apps update <APP_ID> --spec infra/do/app.yaml
 # Then in the DO console: App → Settings → Environment Variables → edit secrets
 ```
 
-Or use the `do_deploy.sh` `--set-secrets` pattern described in [Updating / rolling deploys](#updating--rolling-deploys).
+The current [`scripts/do_deploy.sh`](../scripts/do_deploy.sh) updates the App Platform spec but still expects the secret values themselves to be managed out-of-band.
 
 ---
 
@@ -156,6 +165,12 @@ Then proxy `443 → 127.0.0.1:8001`. Until TLS is configured, set `LG_REMOTE_API
 
 The remote API exposes `/healthz` on `$PORT` (default `8001`). App Platform polls it automatically per `infra/do/app.yaml`. For Droplet deployments the deploy script polls it locally before exiting.
 
+The health payload currently returns:
+
+```json
+{"ok": true}
+```
+
 Manual check:
 
 ```sh
@@ -170,6 +185,22 @@ curl -fsS http://<public-ip>:8001/healthz
 
 - **App Platform**: TLS is provisioned automatically. The app is reachable at `https://<name>-<id>.ondigitalocean.app`. Set `LG_REMOTE_API_TRUST_FORWARDED_HEADERS=true`.
 - **Droplet**: HTTP only by default. Add nginx + certbot (see [Droplet target](#droplet-target) above). Set `LG_REMOTE_API_TRUST_FORWARDED_HEADERS=false` until a trusted proxy is in place.
+
+### Browser UI path
+
+The production browser UI is the SOTA 2026 run console served by the API and available at:
+
+```sh
+https://<app-domain>/app/
+```
+
+When bearer auth is enabled, open it with the tokenized URL form:
+
+```sh
+https://<app-domain>/app/?access_token=<LG_REMOTE_API_BEARER_TOKEN>
+```
+
+The UI persists the token in browser local storage and uses the same token for both REST calls and authenticated SSE stream setup.
 
 ---
 

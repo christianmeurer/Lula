@@ -2,7 +2,7 @@
 
 **Target platform:** DigitalOcean  
 **Audience:** Developer / DevOps engineer deploying from scratch  
-**Last updated:** 2026-03-20
+**Last updated:** 2026-03-25
 
 ---
 
@@ -60,9 +60,9 @@ A single multi-stage Docker image ([`Dockerfile`](../Dockerfile)) contains both 
 
 - **Stage 1** (rust-builder): Compiles `lg-runner` from `rs/`
 - **Stage 2** (python-builder): Installs Python deps via `uv`
-- **Stage 3** (runtime): Debian Bookworm Slim, copies both artifacts
+- **Stage 3** (runtime): Python 3.12 Slim runtime, copies the Rust runner and the Python virtual environment
 
-The image is published to `registry.digitalocean.com/lula-registry/lula` on every `v*.*.*` tag push via [`.github/workflows/release.yml`](../.github/workflows/release.yml). The release pipeline pins the image digest in [`infra/k8s/deployment.yaml`](../infra/k8s/deployment.yaml) automatically.
+The Kubernetes orchestrator image is currently deployed from `registry.digitalocean.com/lula-orch/lula-orch`, while the runner manifest still references `registry.digitalocean.com/lula-registry/lula` pending manifest consolidation. Treat the registry/repository pair as deployment-managed input rather than a stable documentation constant until the manifests are normalized.
 
 ---
 
@@ -99,7 +99,7 @@ docker push registry.digitalocean.com/lula-registry/lula:latest
 doctl apps create --spec infra/do/app.yaml
 ```
 
-Config profile: `LG_PROFILE=prod` — uses [`configs/runtime.prod.toml`](../configs/runtime.prod.toml) with `SafeFallback` as the active sandbox tier when KVM is unavailable.
+Config profile: `LG_PROFILE=prod` — uses [`configs/runtime.prod.toml`](../configs/runtime.prod.toml) with DigitalOcean-hosted model routing and runtime-selected sandbox behavior.
 
 ---
 
@@ -130,9 +130,10 @@ Persistent services:
 
 **Use case:** Maximum isolation, multi-tenant code execution, compliance-gated deployments  
 **Isolation:** Firecracker MicroVM (full VM per tool batch) + gVisor container runtime  
+**Status:** Implemented in the runner and guest-agent code paths; enabled operationally by scheduling the runner onto Firecracker-capable nodes and mounting `/opt/lula/rootfs.ext4` and `/opt/lula/vmlinux`  
 **Additional requirements:** KVM-capable nodes, pre-baked `/opt/lula/rootfs.ext4` and `/opt/lula/vmlinux`
 
-Requires dedicated Firecracker-capable nodes (large Droplets with nested virtualization or bare metal). The runner reads `LG_RUNNER_ROOTFS_IMAGE` and `LG_RUNNER_KERNEL_IMAGE` from environment (defaulting to `/opt/lula/rootfs.ext4` and `/opt/lula/vmlinux`). These are mounted from the node at `/opt/lula/` via the `firecracker-assets` hostPath volume in [`infra/k8s/runner-deployment.yaml`](../infra/k8s/runner-deployment.yaml).
+Requires dedicated Firecracker-capable nodes (large Droplets with nested virtualization or bare metal). The runner already reads `LG_RUNNER_ROOTFS_IMAGE` and `LG_RUNNER_KERNEL_IMAGE` from environment (defaulting to `/opt/lula/rootfs.ext4` and `/opt/lula/vmlinux`). These are mounted from the node at `/opt/lula/` via the `firecracker-assets` hostPath volume in [`infra/k8s/runner-deployment.yaml`](../infra/k8s/runner-deployment.yaml), so Tier 3 enablement is primarily a node-pool targeting and rollout concern rather than a missing runner feature.
 
 See [Section 7](#7-firecracker-setup-tier-3-addendum) for full Firecracker node setup procedure.
 
@@ -248,7 +249,7 @@ lula-runner Pods
 | Egress | To `app: lula-orch` pods (approval back-channel) | TCP 8765 |
 | All other egress | DENIED | — |
 
-The orchestrator has no restrictive NetworkPolicy applied — it uses the cluster default (allow all). For hardened deployments, apply an explicit NetworkPolicy permitting egress to Valkey/Redis-compatible checkpoint storage, PostgreSQL, the inference APIs, DNS, and the runner only.
+The orchestrator now has an explicit egress policy in [`infra/k8s/network-policy.yaml`](../infra/k8s/network-policy.yaml) permitting DNS, HTTPS provider traffic, Redis-compatible checkpoint storage, PostgreSQL, OTLP, and runner traffic only.
 
 ### TLS
 
@@ -619,7 +620,7 @@ cd eval && uv run python run.py --task tasks/canary.json --dry-run
 Expected output from `/healthz`:
 
 ```json
-{"status": "ok", "runner": "ok", "checkpoint": "ok"}
+{"ok": true}
 ```
 
 Runner health check (internal, via kubectl exec):
@@ -776,31 +777,38 @@ doctl kubernetes node-pool create "${DO_CLUSTER_NAME}" \
   --taint "sandbox=firecracker:NoSchedule"
 ```
 
-Update [`infra/k8s/runner-deployment.yaml`](../infra/k8s/runner-deployment.yaml) to target the firecracker pool and set the sandbox tier:
+Update [`infra/k8s/runner-deployment.yaml`](../infra/k8s/runner-deployment.yaml) to target the firecracker pool and make the Firecracker choice explicit in deployment metadata:
 
 ```yaml
 nodeSelector:
   sandbox: firecracker
 env:
-  - name: LG_RUNNER_SANDBOX_TIER
-    value: "firecracker"
   - name: LG_RUNNER_ROOTFS_IMAGE
     value: "/opt/lula/rootfs.ext4"
   - name: LG_RUNNER_KERNEL_IMAGE
     value: "/opt/lula/vmlinux"
 ```
 
+The runtime path itself is already implemented in code: Firecracker VM bootstrap is handled in `rs/runner/src/sandbox.rs`, guest execution travels over AF_VSOCK in `rs/runner/src/vsock.rs`, and the in-guest command executor lives in `rs/guest-agent/src/main.rs`.
+
 ### Step 5 — Verify Firecracker Isolation
 
 ```bash
-# Health check with sandbox tier assertion
-curl -fsS http://<runner-internal-ip>:8088/healthz | jq '.sandbox_tier'
-# Expected: "firecracker"
-
 # Or via kubectl exec
 kubectl exec -n lula-orch \
   $(kubectl get pod -n lula-orch -l app=lula-runner -o name | head -1) \
   -- curl -fsS http://localhost:8088/healthz
+```
+
+Runtime verification should rely on node/runtime evidence rather than `/healthz` payload shape alone:
+
+```bash
+# Confirm the runner pod landed on the firecracker node pool
+kubectl get pod -n lula-orch -l app=lula-runner -o jsonpath='{.items[0].spec.nodeName}' && echo
+
+# Inspect the pod sandbox runtime on that node
+sudo crictl pods --name lula-runner
+sudo crictl inspectp <pod-sandbox-id>
 ```
 
 ---

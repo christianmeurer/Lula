@@ -5,6 +5,7 @@ WORKDIR /app
 ARG UV_VERSION=0.7.2
 
 ENV PATH=/root/.local/bin:${PATH} \
+    HOME=/home/lula \
     LG_PROFILE=prod \
     LG_REPO_ROOT=/app \
     LG_REMOTE_API_HOST=0.0.0.0 \
@@ -24,10 +25,14 @@ COPY schemas/ ./schemas/
 
 RUN uv sync --project ./py --python 3.12 --no-dev
 
+ENV PATH=/app/py/.venv/bin:${PATH}
+
 EXPOSE 8001
 
 # Run as non-root
-RUN groupadd --gid 10001 lula && useradd --uid 10001 --gid 10001 --no-create-home lula
+RUN groupadd --gid 10001 lula \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /bin/bash lula \
+    && chown -R lula:lula /app
 USER lula
 
-CMD ["bash", "-c", "cd /app/py && uv run lg-orch serve-api --host \"${LG_REMOTE_API_HOST:-0.0.0.0}\" --port \"${PORT:-8001}\""]
+CMD ["bash", "-c", "cd /app/py && lg-orch serve-api --host \"${LG_REMOTE_API_HOST:-0.0.0.0}\" --port \"${PORT:-8001}\""]

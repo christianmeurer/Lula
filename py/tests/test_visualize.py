@@ -187,6 +187,25 @@ def test_render_run_viewer_spa_diff_css_classes() -> None:
     assert "Approval History" in result
 
 
+def test_render_run_viewer_spa_bootstraps_bearer_token_and_sse_query_auth() -> None:
+    result = render_run_viewer_spa()
+    assert "bootstrapBearerToken()" in result
+    assert "localStorage.setItem('lgBearerToken'" in result
+    assert "accessTokenQuery()" in result
+    assert "new EventSource(url)" in result
+    assert "/stream' + accessTokenQuery()" in result
+
+
+def test_render_run_viewer_spa_uses_button_type_for_run_submission() -> None:
+    result = render_run_viewer_spa()
+    assert '<button type="button" class="btn btn-primary" onclick="submitRun()">▶ Run</button>' in result
+
+
+def test_render_run_viewer_spa_contains_no_python_noqa_artifacts() -> None:
+    result = render_run_viewer_spa()
+    assert "# noqa" not in result
+
+
 def test_render_trace_site_index_html_lists_runs() -> None:
     result = render_trace_site_index_html(
         [
