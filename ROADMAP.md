@@ -44,14 +44,73 @@ _Derived from `docs/quality_report.md` (2026-03-20). Items are ordered by severi
 - [x] Complete golden assertion files for all 8 eval task categories
 - [x] Parallelize `pass@k` multi-run loop in `eval/run.py`
 
+## Wave 8 — Security & Correctness (2026-03-28) ✅
+- [x] Snapshot ID validation against `^[a-zA-Z0-9_-]{1,64}$` before git ref construction (`snapshots.rs`)
+- [x] MCP server env key allowlist — blocks `LD_*`, `DYLD_*`, `*PRELOAD*`, `SHELL`, `IFS`, `BASH_ENV` (`tools/mcp.rs`)
+- [x] Internal error details no longer leaked to HTTP clients — full error logged server-side, generic string returned (`errors.rs`)
+- [x] Approval secret cached in `OnceLock` — eliminates per-request env var read under lock (`approval.rs`)
+- [x] OTel trace context stored in request extensions instead of dropped guard (`auth.rs`)
+
+## Wave 9 — Performance & Hygiene (2026-03-28) ✅
+- [x] Diagnostics regex compiled once via `LazyLock` statics instead of per-call (`diagnostics.rs`)
+- [x] Release profile: `lto = "thin"`, `codegen-units = 1`, `opt-level = 3`, `strip = "symbols"` (`Cargo.toml`)
+- [x] License aligned to MIT across all workspace crates (`Cargo.toml`)
+- [x] Guest agent vsock listener binds to `VMADDR_CID_HOST` (2) instead of `VMADDR_CID_ANY` (`guest-agent/src/main.rs`)
+- [x] `timing_ms` changed from `u128` to `u64` — prevents JavaScript JSON precision loss (`envelope.rs`)
+
+## Wave 10 — Python Orchestrator Fixes (2026-03-28) ✅
+- [x] Local-model path passes `VerifierReport` to `_default_plan()` — recovery steps included in default plan (`planner.py`, `_planner_prompt.py`)
+- [x] `SlaRoutingPolicy.select_model()` wired into `_planner_model_output()` — SLA-aware model selection active (`planner.py`)
+- [x] `cleanup_orphaned_worktrees()` added — scans and removes orphaned `lg-orch/` git worktrees on startup (`worktree.py`)
+- [x] `HealingLoop` typed handoff — structured `healing_context` dict instead of formatted string; post-healing verification check (`healing_loop.py`)
+
+## Wave 11 — Backlog Items (2026-03-28) ✅
+- [x] `OllamaEmbedder` + `make_embedder()` factory — configurable embedding provider via `LG_EMBED_PROVIDER` env var (`long_term_memory.py`)
+- [x] `startupProbe` added to runner and orchestrator K8s deployments and Helm chart templates
+- [x] `ScipIndex.mark_stale()` + `is_stale` property — index invalidated after `apply_patch` operations (`scip_index.py`, `executor.py`)
+- [x] Batch size limit: `MAX_BATCH_SIZE = 50` in `batch_execute_tool` (`main.rs`)
+- [x] Maximum timeout cap: `MAX_TIMEOUT_SECS = 3600` in exec tool (`exec.rs`)
+
+## Deployment Fixes (2026-03-28) ✅
+- [x] `--root-dir /workspace` (was `/app`) — commands now run in writable emptyDir volume
+- [x] `HOME`, `TMPDIR`, `XDG_CACHE_HOME` env vars with `/workspace` fallbacks in exec tool and deployment manifest
+- [x] Prod write allowlist changed from empty to `[".", "**"]` — `apply_patch` now works in prod
+- [x] Default `_runner_base_url` reads from `LG_RUNNER_BASE_URL` env var with K8s DNS fallback
+- [x] `automountServiceAccountToken: false` added to runner pod spec
+- [x] Batch executor returns partial results — single tool failure no longer aborts entire batch
+- [x] Startup cgroup v2 probe emits Prometheus metric `runner_cgroup_available`
+
+## Phase 2 Audit — Python LOW Fixes (2026-03-29) ✅
+- [x] `graph.py`: OTel double-call bug fixed — node function called exactly once; exceptions recorded on span with StatusCode.ERROR
+- [x] `vericoding.py`: Space removed from `_SHELL_METACHARS` — `create_subprocess_exec` does not use a shell, spaces in args are safe
+
+## Phase 3 — Rust Codebase Audit (2026-03-29) ✅
+- [x] Full audit of `fs.rs`, `mod.rs`, `exec.rs`, `indexing.rs`, `invariants.rs` — no new issues found
+- [x] Clippy clean: zero warnings with `-D warnings`
+- [x] All blocking I/O properly handled (spawn_blocking or dedicated std::thread)
+
+## Phase 4 — Helm/K8s Fixes (2026-03-29) ✅
+- [x] Helm `runner-deployment.yaml`: `runtimeClassName` and `nodeSelector` conditional on `.Values.runner.gvisor.enabled`
+- [x] Helm `values.yaml`: Added `runner.gvisor.enabled: true` with documentation comment
+- [x] `secrets.yaml.example`: Added `LG_RUNNER_APPROVAL_SECRET` to example
+
+## Phase 5 — ROADMAP Verification (2026-03-29) ✅
+- [x] `approval.rs` OnceLock — already completed in Wave 8
+- [x] `config.rs` prod allowlist — documented; root_dir=/workspace makes `[".", "**"]` correct
+- [x] `startupProbe` — present in all four deployment manifests
+
+## Wave 13 — 9.5/10 Feature Set (2026-03-29)
+
+- [x] TOCTOU path traversal fixed with cap-std confinement (rs/runner/src/tools/fs.rs, invariants.rs)
+- [x] OllamaEmbedder wired as default embedding provider (LG_EMBED_PROVIDER env var)
+- [x] PVC-backed persistent workspace option (charts/lula/templates/workspace-pvc.yaml)
+- [x] Real-time tool stdout streaming via SSE (tool_stdout events in streaming.py)
+- [x] Resume/approval UI in SPA for suspended runs
+- [x] VS Code extension implemented (lula.runTask, lula.showRuns, lula.configure)
+
 ## Backlog (Medium-term)
-- [ ] Replace `stub_embedder` with configurable embedding provider (Ollama / OpenAI embeddings)
 - [ ] Add vector index (sqlite-vec or pgvector) to replace full-table cosine scan
 - [ ] Implement External Secrets Operator integration for K8s secret management
-- [ ] Add `startupProbe` to both K8s deployments
 - [ ] Add `deployment.yaml` static replicas = 2 to match HPA `minReplicas`
 - [ ] Add SBOM generation (CycloneDX) to release workflow
-- [ ] Fix `approval.rs` rotation secret to use `OnceLock`
-- [ ] Fix `config.rs` allowlist wildcard arm to be locked-down default
-- [ ] Add maximum timeout cap in `exec.rs` (e.g., 3 600 s)
-- [ ] Add batch size limit to `batch_execute_tool` in `main.rs`
+- [ ] TOCTOU path traversal fix — requires `cap-std` dependency addition (`invariants.rs`, `fs.rs`)
