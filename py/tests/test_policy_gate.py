@@ -97,3 +97,59 @@ def test_policy_gate_halts_when_plan_iterations_exhausted() -> None:
     )
     assert out["halt_reason"] == "plan_max_iterations_exhausted"
     assert out["verification"]["failure_class"] == "plan_max_iterations_exhausted"
+
+
+def test_policy_gate_handles_invalid_network_default() -> None:
+    out = policy_gate(
+        _base_state(
+            _config_policy={
+                "network_default": "invalid_value",
+                "require_approval_for_mutations": False,
+            }
+        )
+    )
+    # Invalid values should default to "deny"
+    assert out["guards"]["allow_network"] is False
+
+
+def test_policy_gate_handles_non_int_max_loops() -> None:
+    out = policy_gate(_base_state(_budget_max_loops="not_a_number"))
+    # Should fall back to default of 3
+    assert out["budgets"]["max_loops"] == 3
+
+
+def test_policy_gate_handles_non_int_max_tool_calls() -> None:
+    out = policy_gate(_base_state(_budget_max_tool_calls_per_loop="bad"))
+    assert out["budgets"]["tool_calls_limit"] == 0
+
+
+def test_policy_gate_handles_non_int_max_patch_bytes() -> None:
+    out = policy_gate(_base_state(_budget_max_patch_bytes="bad"))
+    assert out["budgets"]["patch_bytes_limit"] == 0
+
+
+def test_policy_gate_handles_non_int_plan_max_iterations() -> None:
+    out = policy_gate(
+        _base_state(
+            plan={"max_iterations": "not_a_number"},
+        )
+    )
+    # Should fall back to 0 (not capping loops)
+    assert "plan_max_iterations" not in out["budgets"]
+
+
+def test_policy_gate_sets_tool_calls_and_patch_budgets() -> None:
+    out = policy_gate(
+        _base_state(
+            _budget_max_tool_calls_per_loop=10,
+            _budget_max_patch_bytes=50000,
+        )
+    )
+    assert out["budgets"]["tool_calls_limit"] == 10
+    assert out["budgets"]["tool_calls_used"] == 0
+    assert out["budgets"]["patch_bytes_limit"] == 50000
+
+
+def test_policy_gate_sets_context_budget() -> None:
+    out = policy_gate(_base_state(_budget_context={"max_tokens": 4096}))
+    assert out["budgets"]["context"] == {"max_tokens": 4096}

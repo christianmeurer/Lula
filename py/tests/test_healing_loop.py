@@ -308,3 +308,68 @@ def test_run_job_marks_failed_on_missing_verification(tmp_path: Any) -> None:
 
     asyncio.run(healing._run_job(job))
     assert job.status == "failed"
+
+
+# ---------------------------------------------------------------------------
+# _validate_test_command edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_validate_test_command_accepts_pytest() -> None:
+    from lg_orch.healing_loop import _validate_test_command
+
+    assert _validate_test_command("pytest tests/ -q") is True
+
+
+def test_validate_test_command_accepts_uv() -> None:
+    from lg_orch.healing_loop import _validate_test_command
+
+    assert _validate_test_command("uv run pytest tests/") is True
+
+
+def test_validate_test_command_rejects_unknown_binary() -> None:
+    from lg_orch.healing_loop import _validate_test_command
+
+    assert _validate_test_command("rm -rf /") is False
+
+
+def test_validate_test_command_rejects_empty() -> None:
+    from lg_orch.healing_loop import _validate_test_command
+
+    assert _validate_test_command("") is False
+
+
+def test_validate_test_command_rejects_malformed_shell() -> None:
+    from lg_orch.healing_loop import _validate_test_command
+
+    assert _validate_test_command("'unclosed quote") is False
+
+
+# ---------------------------------------------------------------------------
+# detect_test_runner additional coverage
+# ---------------------------------------------------------------------------
+
+
+def test_detect_test_runner_makefile(tmp_path: Path) -> None:
+    (tmp_path / "Makefile").write_text("test:\n\tpytest\n")
+    assert detect_test_runner(tmp_path) == "make test"
+
+
+def test_detect_test_runner_nodejs_malformed_json(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text("{bad json")
+    assert detect_test_runner(tmp_path) == "npm test"
+
+
+def test_detect_test_runner_nodejs_no_test_script(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text('{"scripts": {"build": "tsc"}}')
+    assert detect_test_runner(tmp_path) == "npm test"
+
+
+def test_detect_test_runner_pytest_ini(tmp_path: Path) -> None:
+    (tmp_path / "pytest.ini").write_text("[pytest]\n")
+    assert detect_test_runner(tmp_path) == "python -m pytest"
+
+
+def test_detect_test_runner_setup_cfg(tmp_path: Path) -> None:
+    (tmp_path / "setup.cfg").write_text("[tool:pytest]\n")
+    assert detect_test_runner(tmp_path) == "python -m pytest"
