@@ -43,7 +43,13 @@ infra/k8s/secrets.yaml
 *.pyo
 htmlcov/
 .coverage
+# CI/build artifacts
 coverage.xml
+*.vsix
+
+# Debug logs
+runner-logs.txt
+
 *.egg-info/
 dist/
 build/
