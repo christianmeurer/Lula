@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <!-- Background -->
+  <rect width="128" height="128" rx="16" fill="#0d1117"/>
+
+  <!-- Sandboxed-container box icon -->
+  <path d="M 38 32 H 62 L 68 38 V 70 H 38 Z" stroke="#58a6ff" stroke-width="3" fill="none" stroke-linejoin="round"/>
+  <rect x="44" y="40" width="18" height="3" rx="1.5" fill="#58a6ff"/>
+  <rect x="44" y="48" width="12" height="3" rx="1.5" fill="#58a6ff"/>
+  <rect x="44" y="56" width="15" height="3" rx="1.5" fill="#58a6ff"/>
+
+  <!-- Letter L -->
+  <rect x="76" y="32" width="6" height="38" rx="1" fill="#e6edf3"/>
+  <rect x="76" y="64" width="24" height="6" rx="1" fill="#e6edf3"/>
+
+  <!-- Subtitle -->
+  <text x="64" y="92" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#8b949e">AI Agent</text>
+</svg>
