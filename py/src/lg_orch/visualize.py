@@ -31,9 +31,18 @@ def graph_mermaid(*, nodes: list[str], edges: list[GraphEdge], direction: str = 
     return "\n".join(lines) + "\n"
 
 
-def _panel(title: str, body_lines: list[str], *, width: int = 88, style: str = "lula.accent") -> Panel:
+def _panel(
+    title: str, body_lines: list[str], *, width: int = 88, style: str = "lula.accent"
+) -> Panel:
     body = Text("\n".join(body_lines))
-    return Panel(body, title=title, title_align="left", width=min(width, console.width), border_style=style, padding=(0, 1))
+    return Panel(
+        body,
+        title=title,
+        title_align="left",
+        width=min(width, console.width),
+        border_style=style,
+        padding=(0, 1),
+    )
 
 
 def _duration_s(ts_ms: int, start_ms: int) -> float:
@@ -131,7 +140,14 @@ def render_timeline(events: list[dict[str, Any]], *, width: int = 88, max_rows: 
         console.print(_panel("Timeline", ["No events captured."], width=width, style="lula.muted"))
         return
 
-    table = Table(title="Timeline", title_style="lula.accent", width=min(width, console.width), border_style="cyan", show_lines=False, pad_edge=True)
+    table = Table(
+        title="Timeline",
+        title_style="lula.accent",
+        width=min(width, console.width),
+        border_style="cyan",
+        show_lines=False,
+        pad_edge=True,
+    )
     table.add_column("#", style="dim", width=4)
     table.add_column("Offset", style="lula.muted", width=10)
     table.add_column("Kind", style="lula.node", min_width=16)
@@ -144,7 +160,11 @@ def render_timeline(events: list[dict[str, Any]], *, width: int = 88, max_rows: 
         kind = str(ev.get("kind", "event"))
         delta = _duration_s(ts_ms, start_ms)
         bar_units = min(24, int(delta * 3))
-        bar_text = Text("\u2588" * bar_units, style="green") if bar_units > 0 else Text("\u00b7", style="dim")
+        bar_text = (
+            Text("\u2588" * bar_units, style="green")
+            if bar_units > 0
+            else Text("\u00b7", style="dim")
+        )
         table.add_row(f"{idx:02d}", f"+{delta:.2f}s", kind, bar_text)
 
     console.print(table)
@@ -154,10 +174,21 @@ def render_tool_results(
     tool_results: list[dict[str, Any]], *, width: int = 88, max_rows: int = 8
 ) -> None:
     if not tool_results:
-        console.print(_panel("Tool Results", ["No tool invocations captured."], width=width, style="lula.muted"))
+        console.print(
+            _panel(
+                "Tool Results", ["No tool invocations captured."], width=width, style="lula.muted"
+            )
+        )
         return
 
-    table = Table(title="Tool Results", title_style="lula.accent", width=min(width, console.width), border_style="cyan", show_lines=False, pad_edge=True)
+    table = Table(
+        title="Tool Results",
+        title_style="lula.accent",
+        width=min(width, console.width),
+        border_style="cyan",
+        show_lines=False,
+        pad_edge=True,
+    )
     table.add_column("#", style="dim", width=4)
     table.add_column("Status", width=6)
     table.add_column("Tool", style="lula.tool")
@@ -180,7 +211,15 @@ def render_run_header(*, request: str, intent: str | None) -> None:
     body.append(req + "\n")
     body.append("intent:  ", style="lula.muted")
     body.append(intent_line.removeprefix("intent: "))
-    console.print(Panel(body, title="Lula Console", title_align="left", border_style="lula.header", padding=(0, 1)))
+    console.print(
+        Panel(
+            body,
+            title="Lula Console",
+            title_align="left",
+            border_style="lula.header",
+            padding=(0, 1),
+        )
+    )
 
 
 def render_trace_dashboard(payload: dict[str, Any], *, width: int = 88) -> None:

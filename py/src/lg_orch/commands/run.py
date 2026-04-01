@@ -23,10 +23,10 @@ from lg_orch.checkpointing import (
     stable_checkpoint_thread_id,
 )
 from lg_orch.config import AppConfig
+from lg_orch.console import console
 from lg_orch.graph import build_graph
 from lg_orch.logging import get_logger
 from lg_orch.trace import write_run_trace
-from lg_orch.console import console
 from lg_orch.visualize import render_run_header, render_trace_dashboard
 
 
