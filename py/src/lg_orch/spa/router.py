@@ -1,61 +1,43 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
-"""SPA file dispatcher used by the ThreadingHTTPServer in ``remote_api.py``.
-
-:func:`create_spa_router` returns a callable that maps a URL subpath to a
-``(status, content_type, body)`` triple — the same shape expected by
-``_api_http_response()`` in ``remote_api.py``.
-
-Routing rules
-~~~~~~~~~~~~~
-* ``style.css``  → serve ``spa/style.css``
-* ``main.js``    → serve ``spa/main.js``
-* anything else  → serve ``spa/index.html`` (SPA catch-all)
-"""
+"""SPA static-file router for Leptos WASM build output."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import mimetypes
+import os
 from pathlib import Path
+from typing import Callable, Tuple
 
-_MIME: dict[str, str] = {
-    ".html": "text/html; charset=utf-8",
-    ".css": "text/css; charset=utf-8",
-    ".js": "application/javascript; charset=utf-8",
-}
+mimetypes.add_type("application/wasm", ".wasm")
 
-# Subpaths that are served as literal static files (not caught by the SPA router)
-_STATIC_ASSETS = {"style.css", "main.js"}
+_DEFAULT_DIST = Path(__file__).resolve().parent.parent.parent.parent.parent / "rs" / "spa-leptos" / "dist"
 
 
-def create_spa_router(
-    spa_dir: Path,
-) -> Callable[[str], tuple[int, str, bytes]]:
-    """Return a dispatcher ``(subpath) -> (status, content_type, body)``.
+def _dist_dir() -> Path:
+    env = os.environ.get("LG_SPA_DIST_DIR")
+    if env:
+        return Path(env)
+    return _DEFAULT_DIST
 
-    Parameters
-    ----------
-    spa_dir:
-        Absolute path to the ``spa/`` package directory containing
-        ``index.html``, ``style.css``, and ``main.js``.
-    """
 
-    def dispatch(subpath: str) -> tuple[int, str, bytes]:
-        # Strip leading slashes so callers can pass raw path remainders
-        clean = subpath.lstrip("/")
+def create_spa_router() -> Callable[[str], Tuple[int, str, bytes]]:
+    """Return a dispatcher that serves Leptos dist/ files with SPA fallback."""
 
-        if clean in _STATIC_ASSETS:
-            asset_path = spa_dir / clean
-            if not asset_path.is_file():
-                return 404, "text/plain; charset=utf-8", b"asset not found"
-            suffix = asset_path.suffix
-            mime = _MIME.get(suffix, "application/octet-stream")
-            return 200, mime, asset_path.read_bytes()
+    def dispatch(subpath: str) -> Tuple[int, str, bytes]:
+        dist = _dist_dir()
+        if not dist.is_dir():
+            body = b"SPA dist not found. Run: cd rs/spa-leptos && trunk build"
+            return 503, "text/plain; charset=utf-8", body
 
-        # SPA catch-all: everything else routes to index.html
-        index_path = spa_dir / "index.html"
-        if not index_path.is_file():
-            return 503, "text/plain; charset=utf-8", b"SPA index.html not found"
-        return 200, "text/html; charset=utf-8", index_path.read_bytes()
+        target = dist / subpath if subpath else None
+        if target and target.is_file() and dist in target.resolve().parents:
+            mime = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+            return 200, mime, target.read_bytes()
+
+        index = dist / "index.html"
+        if index.is_file():
+            return 200, "text/html; charset=utf-8", index.read_bytes()
+
+        return 404, "text/plain; charset=utf-8", b"index.html not found in dist"
 
     return dispatch
