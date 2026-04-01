@@ -306,10 +306,10 @@ def cleanup_orphaned_worktrees(base_path: str | Path) -> list[str]:
 
         for line in result.stdout.splitlines():
             if line.startswith("worktree "):
-                current_path = line[len("worktree "):].strip()
+                current_path = line[len("worktree ") :].strip()
                 current_branch = None
             elif line.startswith("branch "):
-                current_branch = line[len("branch "):].strip()
+                current_branch = line[len("branch ") :].strip()
             elif line == "" and current_path and current_branch:
                 # End of block — check if this is an lg-orch worktree
                 branch_short = current_branch.removeprefix("refs/heads/")

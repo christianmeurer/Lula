@@ -96,9 +96,7 @@ class RedisCheckpointSaver(BaseCheckpointSaver[Any]):
             else self._DEFAULT_SOCKET_CONNECT_TIMEOUT
         )
         _sock_timeout = (
-            socket_timeout
-            if socket_timeout is not None
-            else self._DEFAULT_SOCKET_TIMEOUT
+            socket_timeout if socket_timeout is not None else self._DEFAULT_SOCKET_TIMEOUT
         )
 
         # Async client for aget_tuple, aput, etc.

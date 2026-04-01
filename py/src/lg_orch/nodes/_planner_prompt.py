@@ -228,9 +228,7 @@ def _default_plan(
         "The request can be answered or executed with bounded next steps.",
     ]
     if verification and not verification.get("ok", True):
-        acceptance_criteria.append(
-            "Recovery from prior verification failure has been addressed."
-        )
+        acceptance_criteria.append("Recovery from prior verification failure has been addressed.")
 
     return PlannerOutput(
         steps=steps,

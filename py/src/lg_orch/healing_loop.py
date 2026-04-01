@@ -125,9 +125,7 @@ class HealingLoop:
 
         # HIGH FIX 4: Validate test command against allowlist before executing
         if not _validate_test_command(self.test_runner_cmd):
-            logging.warning(
-                "healing_loop_blocked_unsafe_test_command: %s", self.test_runner_cmd
-            )
+            logging.warning("healing_loop_blocked_unsafe_test_command: %s", self.test_runner_cmd)
             return TestSuiteResult(
                 run_id=run_id,
                 repo_path=self._repo_path,

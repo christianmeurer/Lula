@@ -122,8 +122,7 @@ class OllamaEmbedder:
         except Exception:
             self._available = False
             logging.warning(
-                "OllamaEmbedder: Ollama not reachable at %s; "
-                "falling back to stub_embedder",
+                "OllamaEmbedder: Ollama not reachable at %s; falling back to stub_embedder",
                 self._base_url,
             )
         return self._available

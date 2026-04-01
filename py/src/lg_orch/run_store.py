@@ -618,9 +618,7 @@ class RedisRunStore:
             return
         created_at = str(data.get("created_at", ""))
         try:
-            score = datetime.fromisoformat(
-                created_at.replace("Z", "+00:00")
-            ).timestamp()
+            score = datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp()
         except (ValueError, TypeError):
             score = time.time()
         key = self._run_key(run_id)
@@ -817,9 +815,7 @@ class RedisRunStore:
             if raw is None:
                 continue
             data = json.loads(raw)
-            haystack = " ".join(
-                str(data.get(f, "")) for f in ("summary", "source", "kind")
-            ).lower()
+            haystack = " ".join(str(data.get(f, "")) for f in ("summary", "source", "kind")).lower()
             if query_text in haystack:
                 results.append(data)
                 if len(results) >= limit:

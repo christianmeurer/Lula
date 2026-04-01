@@ -261,33 +261,21 @@ class OrchState(BaseModel):
     model_provider_runtime_internal: dict[str, Any] = Field(
         default_factory=dict, alias="_model_provider_runtime"
     )
-    budget_max_loops_internal: int = Field(
-        default=1, alias="_budget_max_loops"
-    )
+    budget_max_loops_internal: int = Field(default=1, alias="_budget_max_loops")
     budget_max_tool_calls_per_loop_internal: int = Field(
         default=1, alias="_budget_max_tool_calls_per_loop"
     )
-    budget_max_patch_bytes_internal: int = Field(
-        default=0, alias="_budget_max_patch_bytes"
-    )
-    budget_context_internal: dict[str, Any] = Field(
-        default_factory=dict, alias="_budget_context"
-    )
-    config_policy_internal: dict[str, Any] = Field(
-        default_factory=dict, alias="_config_policy"
-    )
+    budget_max_patch_bytes_internal: int = Field(default=0, alias="_budget_max_patch_bytes")
+    budget_context_internal: dict[str, Any] = Field(default_factory=dict, alias="_budget_context")
+    config_policy_internal: dict[str, Any] = Field(default_factory=dict, alias="_config_policy")
     trace_enabled_internal: bool = Field(default=False, alias="_trace_enabled")
     trace_out_dir_internal: str = Field(default="", alias="_trace_out_dir")
     trace_capture_model_metadata_internal: bool = Field(
         default=False, alias="_trace_capture_model_metadata"
     )
     run_store_path_internal: str = Field(default="", alias="_run_store_path")
-    procedure_cache_path_internal: str = Field(
-        default="", alias="_procedure_cache_path"
-    )
-    vericoding_enabled_internal: bool = Field(
-        default=False, alias="_vericoding_enabled"
-    )
+    procedure_cache_path_internal: str = Field(default="", alias="_procedure_cache_path")
+    vericoding_enabled_internal: bool = Field(default=False, alias="_vericoding_enabled")
     vericoding_extensions_internal: list[str] = Field(
         default_factory=list, alias="_vericoding_extensions"
     )

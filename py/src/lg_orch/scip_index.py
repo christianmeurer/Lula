@@ -83,6 +83,7 @@ class ScipIndex:
         """Return all symbols whose ``name`` equals *name* (exact match)."""
         if self._stale:
             import logging
+
             logging.debug("ScipIndex.find_symbol called on stale index; results may be outdated")
         return [s for s in self.symbols if s.name == name]
 

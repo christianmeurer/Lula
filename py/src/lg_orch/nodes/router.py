@@ -48,8 +48,16 @@ def _classify_intent(request: str) -> str:
     words = set(_WORD_RE.findall(r))
     if words.intersection(
         {
-            "implement", "add", "change", "fix", "refactor",
-            "write", "create", "build", "generate", "make",
+            "implement",
+            "add",
+            "change",
+            "fix",
+            "refactor",
+            "write",
+            "create",
+            "build",
+            "generate",
+            "make",
         }
     ):
         return "code_change"
