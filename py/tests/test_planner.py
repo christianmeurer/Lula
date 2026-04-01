@@ -1136,8 +1136,7 @@ def test_default_plan_with_failed_verification_includes_recovery_step() -> None:
     assert "test_assertion" in recovery_step["description"]
     assert "widen_context" in recovery_step["description"]
     assert any(
-        "Recovery from prior verification failure" in c
-        for c in plan_dict["acceptance_criteria"]
+        "Recovery from prior verification failure" in c for c in plan_dict["acceptance_criteria"]
     )
 
 

@@ -521,8 +521,9 @@ class InferenceClient:
             timeout=httpx.Timeout(float(self.timeout_s)),
         )
         try:
-
-            req = client.build_request("POST", "/chat/completions", json=payload, headers=req_headers)
+            req = client.build_request(
+                "POST", "/chat/completions", json=payload, headers=req_headers
+            )
 
             @retry(
                 reraise=True,

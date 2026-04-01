@@ -16,6 +16,7 @@ from typing import Any, cast
 
 from langchain_core.runnables.config import RunnableConfig
 
+from lg_orch.backends.redis import RedisCheckpointSaver
 from lg_orch.checkpointing import (
     create_checkpoint_saver,
     resolve_checkpoint_db_path,
@@ -40,6 +41,7 @@ def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:
     repo_root:
         Resolved repository root path.
     """
+    import contextlib
     import os
 
     log = get_logger()
@@ -69,10 +71,8 @@ def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:
             log.warning("resume_approvals_file_read_failed", error=str(exc))
         finally:
             # Clean up the temp file after reading
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(resume_approvals_file)
-            except OSError:
-                pass
     if not resume_approvals_raw:
         resume_approvals_raw = str(os.environ.get("LG_RESUME_APPROVALS_JSON", "")).strip()
     if resume_approvals_raw:
@@ -122,7 +122,7 @@ def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:
                 # Verify connectivity before committing to Redis backend.
                 # The socket_connect_timeout (default 5s) on the client
                 # ensures this does not hang indefinitely.
-                _redis_saver._sync_client.ping()  # type: ignore[union-attr]
+                cast(RedisCheckpointSaver, _redis_saver)._sync_client.ping()
                 checkpointer = _redis_saver
                 log.info("checkpoint_redis_ok", url=cfg.checkpoint.redis_url[:30])
             except Exception as exc:
