@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import sqlite3
-import struct
 import threading
 import time
 from collections.abc import Callable

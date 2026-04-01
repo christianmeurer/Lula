@@ -640,7 +640,6 @@ mod tests {
         } else if let Err(e) = result {
             panic!("unexpected error: {e:?}");
         }
-
     }
 
     #[test]

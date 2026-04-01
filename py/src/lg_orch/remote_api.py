@@ -848,7 +848,7 @@ def serve_remote_api(*, repo_root: Path, host: str, port: int) -> int:
     from lg_orch.config import load_config
     from lg_orch.logging import get_logger, init_telemetry
     from lg_orch.procedure_cache import ProcedureCache
-    from lg_orch.run_store import RunStore, create_run_store
+    from lg_orch.run_store import create_run_store
 
     init_telemetry(
         service_name="lula-orchestrator",
