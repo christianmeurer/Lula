@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import os
 import sqlite3
 import threading
@@ -121,9 +120,10 @@ class OllamaEmbedder:
                 self._available = True
         except Exception:
             self._available = False
-            logging.warning(
-                "OllamaEmbedder: Ollama not reachable at %s; falling back to stub_embedder",
-                self._base_url,
+            _log.warning(
+                "OllamaEmbedder.ollama_not_reachable",
+                base_url=self._base_url,
+                fallback="stub_embedder",
             )
         return self._available
 
@@ -148,7 +148,7 @@ class OllamaEmbedder:
                     return cast(list[float], stub_embedder(text).tolist())
                 return [float(v) for v in embedding]
         except Exception as e:
-            logging.warning("OllamaEmbedder: embedding failed: %s; using stub", e)
+            _log.warning("OllamaEmbedder.embedding_failed", error=str(e), fallback="stub_embedder")
             return cast(list[float], stub_embedder(text).tolist())
 
 
