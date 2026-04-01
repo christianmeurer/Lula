@@ -26,6 +26,7 @@ from lg_orch.config import AppConfig
 from lg_orch.graph import build_graph
 from lg_orch.logging import get_logger
 from lg_orch.trace import write_run_trace
+from lg_orch.console import console
 from lg_orch.visualize import render_run_header, render_trace_dashboard
 
 
@@ -270,8 +271,7 @@ def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:
     out: dict[str, Any] = dict(state)
     view = str(getattr(args, "view", "classic"))
     if view == "console":
-        sys.stdout.write(render_run_header(request=str(args.request), intent=None))
-        sys.stdout.write("\n")
+        render_run_header(request=str(args.request), intent=None)
     else:
         print("\n--- Starting Lula Platform Agent ---")
 
@@ -286,9 +286,11 @@ def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:
             if view == "console":
                 event_count = len(list(node_state.get("_trace_events", [])))
                 tool_count = len(list(node_state.get("tool_results", [])))
-                print(
-                    f"[{stream_step:02d}] node={node_name:<12} "
-                    f"events={event_count:<3} tools={tool_count:<3}"
+                console.print(
+                    f"[lula.muted]\\[{stream_step:02d}][/] "
+                    f"[lula.node]{node_name:<12}[/] "
+                    f"events=[lula.accent]{event_count:<3}[/] "
+                    f"tools=[lula.tool]{tool_count:<3}[/]"
                 )
             else:
                 print(f"\n[Node: {node_name}]")
@@ -339,8 +341,8 @@ def run_command(args: Any, *, cfg: AppConfig, repo_root: Path) -> int:
             "tool_results": list(out.get("tool_results", [])),
             "final": out.get("final", ""),
         }
-        sys.stdout.write("\n")
-        sys.stdout.write(render_trace_dashboard(trace_payload))
+        console.print()
+        render_trace_dashboard(trace_payload)
     else:
         print("\n--- Final Output ---")
         sys.stdout.write(str(out.get("final", "")) + "\n")

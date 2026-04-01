@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from html import escape
 from typing import Any
 
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+from lg_orch.console import console
+
 
 @dataclass(frozen=True)
 class GraphEdge:
@@ -25,13 +31,9 @@ def graph_mermaid(*, nodes: list[str], edges: list[GraphEdge], direction: str = 
     return "\n".join(lines) + "\n"
 
 
-def _box(title: str, body_lines: list[str], *, width: int = 88) -> str:
-    inner = max(40, width - 4)
-    line_top = f"┌{'─' * inner}┐"
-    line_bottom = f"└{'─' * inner}┘"
-    title_line = f"│ {title[: inner - 2].ljust(inner - 2)} │"
-    padded = [f"│ {ln[: inner - 2].ljust(inner - 2)} │" for ln in body_lines]
-    return "\n".join([line_top, title_line, *padded, line_bottom])
+def _panel(title: str, body_lines: list[str], *, width: int = 88, style: str = "lula.accent") -> Panel:
+    body = Text("\n".join(body_lines))
+    return Panel(body, title=title, title_align="left", width=min(width, console.width), border_style=style, padding=(0, 1))
 
 
 def _duration_s(ts_ms: int, start_ms: int) -> float:
@@ -124,47 +126,64 @@ def _html_document(*, title: str, body: str, include_mermaid: bool) -> str:
     )
 
 
-def render_timeline(events: list[dict[str, Any]], *, width: int = 88, max_rows: int = 14) -> str:
+def render_timeline(events: list[dict[str, Any]], *, width: int = 88, max_rows: int = 14) -> None:
     if not events:
-        return _box("Timeline", ["No events captured."])
+        console.print(_panel("Timeline", ["No events captured."], width=width, style="lula.muted"))
+        return
+
+    table = Table(title="Timeline", title_style="lula.accent", width=min(width, console.width), border_style="cyan", show_lines=False, pad_edge=True)
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Offset", style="lula.muted", width=10)
+    table.add_column("Kind", style="lula.node", min_width=16)
+    table.add_column("Bar", min_width=12)
 
     start_ms = int(events[0].get("ts_ms", 0))
     visible = events[-max_rows:]
-    lines: list[str] = []
     for idx, ev in enumerate(visible, start=1):
         ts_ms = int(ev.get("ts_ms", start_ms))
         kind = str(ev.get("kind", "event"))
         delta = _duration_s(ts_ms, start_ms)
         bar_units = min(24, int(delta * 3))
-        bar = "█" * bar_units if bar_units > 0 else "·"
-        lines.append(f"{idx:02d}  +{delta:6.2f}s  {kind:<22} {bar}")
+        bar_text = Text("\u2588" * bar_units, style="green") if bar_units > 0 else Text("\u00b7", style="dim")
+        table.add_row(f"{idx:02d}", f"+{delta:.2f}s", kind, bar_text)
 
-    return _box("Timeline", lines, width=width)
+    console.print(table)
 
 
 def render_tool_results(
     tool_results: list[dict[str, Any]], *, width: int = 88, max_rows: int = 8
-) -> str:
+) -> None:
     if not tool_results:
-        return _box("Tool Results", ["No tool invocations captured."])
+        console.print(_panel("Tool Results", ["No tool invocations captured."], width=width, style="lula.muted"))
+        return
+
+    table = Table(title="Tool Results", title_style="lula.accent", width=min(width, console.width), border_style="cyan", show_lines=False, pad_edge=True)
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Status", width=6)
+    table.add_column("Tool", style="lula.tool")
 
     visible = tool_results[-max_rows:]
-    lines: list[str] = []
     for idx, result in enumerate(visible, start=1):
         tool = str(result.get("tool", "unknown"))
         ok = bool(result.get("ok", False))
-        marker = "OK" if ok else "ERR"
-        lines.append(f"{idx:02d}  [{marker}] {tool}")
-    return _box("Tool Results", lines, width=width)
+        status = Text("OK", style="lula.ok") if ok else Text("ERR", style="lula.err")
+        table.add_row(f"{idx:02d}", status, tool)
+
+    console.print(table)
 
 
-def render_run_header(*, request: str, intent: str | None) -> str:
+def render_run_header(*, request: str, intent: str | None) -> None:
     req = request.strip() or "(empty request)"
     intent_line = f"intent: {intent}" if intent else "intent: (pending)"
-    return _box("Lula Console", [f"request: {req}", intent_line])
+    body = Text()
+    body.append("request: ", style="lula.muted")
+    body.append(req + "\n")
+    body.append("intent:  ", style="lula.muted")
+    body.append(intent_line.removeprefix("intent: "))
+    console.print(Panel(body, title="Lula Console", title_align="left", border_style="lula.header", padding=(0, 1)))
 
 
-def render_trace_dashboard(payload: dict[str, Any], *, width: int = 88) -> str:
+def render_trace_dashboard(payload: dict[str, Any], *, width: int = 88) -> None:
     request = str(payload.get("request", ""))
     intent_raw = payload.get("intent")
     intent = str(intent_raw) if isinstance(intent_raw, str) else None
@@ -182,14 +201,11 @@ def render_trace_dashboard(payload: dict[str, Any], *, width: int = 88) -> str:
     final_lines = final.splitlines() or ["(empty)"]
     summary_lines: list[str] = []
     if "ok" in verification:
-        summary_lines.append(
-            f"verification: {'passed' if bool(verification.get('ok', False)) else 'failed'}"
-        )
+        v_ok = bool(verification.get("ok", False))
+        summary_lines.append(f"verification: {'passed' if v_ok else 'failed'}")
     if "acceptance_ok" in verification:
-        summary_lines.append(
-            "acceptance: "
-            f"{'passed' if bool(verification.get('acceptance_ok', False)) else 'failed'}"
-        )
+        a_ok = bool(verification.get("acceptance_ok", False))
+        summary_lines.append(f"acceptance: {'passed' if a_ok else 'failed'}")
     if halt_reason:
         summary_lines.append(f"halt_reason: {halt_reason}")
     if bool(approval.get("pending", False)):
@@ -201,14 +217,11 @@ def render_trace_dashboard(payload: dict[str, Any], *, width: int = 88) -> str:
     if not summary_lines:
         summary_lines.append("No verification summary captured.")
 
-    sections = [
-        render_run_header(request=request, intent=intent),
-        _box("Verification", summary_lines, width=width),
-        render_timeline(events, width=width),
-        render_tool_results(tool_results, width=width),
-        _box("Final Output", final_lines[:8], width=width),
-    ]
-    return "\n\n".join(sections) + "\n"
+    render_run_header(request=request, intent=intent)
+    console.print(_panel("Verification", summary_lines, width=width, style="lula.warn"))
+    render_timeline(events, width=width)
+    render_tool_results(tool_results, width=width)
+    console.print(_panel("Final Output", final_lines[:8], width=width, style="lula.ok"))
 
 
 def render_trace_dashboard_html(
