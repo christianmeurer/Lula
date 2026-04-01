@@ -26,7 +26,7 @@ pub fn CommandBar(
         .forget();
     };
 
-    let do_submit_click = do_submit.clone();
+    let do_submit_click = do_submit;
 
     view! {
         <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-surface);border-bottom:1px solid var(--border);">
@@ -42,7 +42,7 @@ pub fn CommandBar(
                     set_value.set(target.value());
                 }
                 on:keydown={
-                    let do_submit = do_submit.clone();
+                    let do_submit = do_submit;
                     move |ev: web_sys::KeyboardEvent| {
                         if ev.key() == "Enter" && !ev.shift_key() {
                             ev.prevent_default();
