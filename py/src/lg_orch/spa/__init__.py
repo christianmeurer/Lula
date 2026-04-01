@@ -1,16 +1,8 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
-"""Standalone SPA served from the RemoteAPI.
+"""Lula Console SPA — Leptos (Rust/WASM) build output served as static files.
 
-The SPA provides a live-streaming operator console backed by Server-Sent Events.
-Files in this package are served under ``/app`` by the ThreadingHTTPServer in
-``remote_api.py``.
+The SPA is built by ``trunk build --release`` in ``rs/spa-leptos/`` and output
+to ``rs/spa-leptos/dist/``. The Python API serves these files at ``/app/``.
 
-Architecture
-------------
-* ``index.html`` — fully self-contained (inline ``<style>`` + ``<script>``); works
-  when opened directly from disk with no server.
-* ``style.css`` — human-readable unminified copy of the same styles.
-* ``main.js`` — human-readable commented copy of the same JS logic.
-* ``router.py`` — :func:`create_spa_router` wires the above into the stdlib server.
+Set ``LG_SPA_DIST_DIR`` to override the dist path (useful in Docker).
 """
