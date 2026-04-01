@@ -4,7 +4,15 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from lg_orch.main import _build_parser, _trace_http_response, cli
+from lg_orch.main import (
+    _build_parser,
+    _trace_http_response,
+    _trace_payload_from_path,
+    _trace_run_id,
+    _trace_run_summary,
+    _validated_run_id,
+    cli,
+)
 
 
 def test_parser_accepts_console_view() -> None:
@@ -317,3 +325,177 @@ def test_heal_command_callable_directly() -> None:
     from lg_orch.commands.heal import heal_command
 
     assert callable(heal_command)
+
+
+# ---------------------------------------------------------------------------
+# _validated_run_id
+# ---------------------------------------------------------------------------
+
+
+def test_validated_run_id_returns_none_for_none() -> None:
+    assert _validated_run_id(None) is None
+
+
+def test_validated_run_id_returns_none_for_empty() -> None:
+    assert _validated_run_id("") is None
+    assert _validated_run_id("   ") is None
+
+
+def test_validated_run_id_returns_none_for_invalid_chars() -> None:
+    assert _validated_run_id("run/../../etc") is None
+    assert _validated_run_id("run id with spaces") is None
+
+
+def test_validated_run_id_accepts_valid_ids() -> None:
+    assert _validated_run_id("run-abc") == "run-abc"
+    assert _validated_run_id("run_123.test") == "run_123.test"
+    assert _validated_run_id("A") == "A"
+
+
+# ---------------------------------------------------------------------------
+# _trace_run_id
+# ---------------------------------------------------------------------------
+
+
+def test_trace_run_id_uses_payload_run_id() -> None:
+    p = Path("/tmp/run-fallback.json")
+    assert _trace_run_id(p, {"run_id": "from-payload"}) == "from-payload"
+
+
+def test_trace_run_id_falls_back_to_filename() -> None:
+    p = Path("/tmp/run-abc123.json")
+    assert _trace_run_id(p, {}) == "abc123"
+
+
+def test_trace_run_id_strips_whitespace() -> None:
+    p = Path("/tmp/run-fallback.json")
+    assert _trace_run_id(p, {"run_id": "  trimmed  "}) == "trimmed"
+
+
+# ---------------------------------------------------------------------------
+# _trace_run_summary
+# ---------------------------------------------------------------------------
+
+
+def test_trace_run_summary_builds_complete_structure() -> None:
+    p = Path("/tmp/run-abc.json")
+    payload = {
+        "run_id": "abc",
+        "request": "Analyze logs",
+        "intent": "debug",
+        "events": [{"ts_ms": 1}],
+        "tool_results": [{"tool": "search"}],
+        "verification": {"ok": True, "acceptance_ok": False},
+        "halt_reason": "plan_done",
+        "telemetry": {"context_budget": {"working_set": {"token_estimate": 512}}},
+        "checkpoint": {"thread_id": "t-1", "latest_checkpoint_id": "cp-1"},
+    }
+    summary = _trace_run_summary(
+        trace_path=p,
+        payload=payload,
+        dashboard_href="/runs/abc",
+        trace_href="/v1/runs/abc",
+    )
+    assert summary["run_id"] == "abc"
+    assert summary["request"] == "Analyze logs"
+    assert summary["intent"] == "debug"
+    assert summary["events_count"] == 1
+    assert summary["tool_results_count"] == 1
+    assert summary["verification_ok"] is True
+    assert summary["acceptance_ok"] is False
+    assert summary["halt_reason"] == "plan_done"
+    assert summary["working_set_tokens"] == 512
+    assert summary["checkpoint_thread_id"] == "t-1"
+    assert summary["checkpoint_id"] == "cp-1"
+
+
+def test_trace_run_summary_handles_minimal_payload() -> None:
+    p = Path("/tmp/run-xyz.json")
+    summary = _trace_run_summary(
+        trace_path=p,
+        payload={},
+        dashboard_href="/runs/xyz",
+        trace_href="/v1/runs/xyz",
+    )
+    assert summary["request"] == "(empty request)"
+    assert summary["intent"] == "(pending)"
+    assert summary["events_count"] == 0
+    assert summary["tool_results_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _trace_payload_from_path
+# ---------------------------------------------------------------------------
+
+
+def test_trace_payload_from_path_returns_none_for_missing_file(tmp_path: Path) -> None:
+    result = _trace_payload_from_path(tmp_path / "nonexistent.json", warn_context="test")
+    assert result is None
+
+
+def test_trace_payload_from_path_returns_none_for_invalid_json(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text("{broken", encoding="utf-8")
+    result = _trace_payload_from_path(bad, warn_context="test")
+    assert result is None
+
+
+def test_trace_payload_from_path_returns_none_for_non_object(tmp_path: Path) -> None:
+    arr = tmp_path / "array.json"
+    arr.write_text("[1, 2, 3]", encoding="utf-8")
+    result = _trace_payload_from_path(arr, warn_context="test")
+    assert result is None
+
+
+def test_trace_payload_from_path_returns_dict_for_valid(tmp_path: Path) -> None:
+    good = tmp_path / "good.json"
+    good.write_text('{"run_id": "abc"}', encoding="utf-8")
+    result = _trace_payload_from_path(good, warn_context="test")
+    assert result == {"run_id": "abc"}
+
+
+# ---------------------------------------------------------------------------
+# _trace_http_response — additional routes
+# ---------------------------------------------------------------------------
+
+
+def test_trace_http_response_returns_404_for_unknown_route(tmp_path: Path) -> None:
+    trace_dir = tmp_path / "runs"
+    trace_dir.mkdir()
+    status, _, _body = _trace_http_response(
+        trace_dir, request_path="/unknown/path", mermaid_graph=""
+    )
+    assert status == 404
+
+
+def test_trace_http_response_index_returns_html(tmp_path: Path) -> None:
+    trace_dir = tmp_path / "runs"
+    trace_dir.mkdir()
+    status, content_type, _body = _trace_http_response(
+        trace_dir, request_path="/", mermaid_graph=""
+    )
+    assert status == 200
+    assert "text/html" in content_type
+
+
+def test_trace_http_response_v1_run_returns_json(tmp_path: Path) -> None:
+    trace_dir = tmp_path / "runs"
+    trace_dir.mkdir()
+    payload = {"run_id": "test1", "request": "hello"}
+    (trace_dir / "run-test1.json").write_text(json.dumps(payload), encoding="utf-8")
+    status, content_type, body = _trace_http_response(
+        trace_dir, request_path="/v1/runs/test1", mermaid_graph=""
+    )
+    assert status == 200
+    assert "application/json" in content_type
+    data = json.loads(body.decode("utf-8"))
+    assert data["run_id"] == "test1"
+
+
+def test_trace_http_response_runs_dashboard_missing_returns_404(tmp_path: Path) -> None:
+    trace_dir = tmp_path / "runs"
+    trace_dir.mkdir()
+    status, _, _ = _trace_http_response(
+        trace_dir, request_path="/runs/nonexistent", mermaid_graph=""
+    )
+    assert status == 404
