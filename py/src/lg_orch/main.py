@@ -83,6 +83,10 @@ def _build_parser() -> argparse.ArgumentParser:
     serve_api_p = sub.add_parser("serve-api")
     serve_api_p.add_argument("--host", default="127.0.0.1")
     serve_api_p.add_argument("--port", type=int, default=8001)
+    sub_heal = sub.add_parser("heal", help="Run the autonomous healing loop")
+    sub_heal.add_argument("--repo-root", type=str, default=None)
+    sub_heal.add_argument("--runner-base-url", type=str, default=None)
+    sub_heal.add_argument("--max-iterations", type=int, default=5)
     return p
 
 
@@ -342,6 +346,11 @@ def cli(argv: list[str] | None = None) -> int:
         from lg_orch.commands.serve import serve_command
 
         return serve_command(args, repo_root=repo_root)
+
+    if args.cmd == "heal":
+        from lg_orch.commands.heal import heal_command
+
+        return heal_command(args, repo_root=repo_root)
 
     if args.cmd == "run-multi":
         import asyncio as _asyncio

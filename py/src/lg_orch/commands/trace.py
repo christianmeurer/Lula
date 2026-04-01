@@ -100,7 +100,7 @@ def trace_view_command(args: Any) -> int:
         return 0
 
     width = int(args.width)
-    sys.stdout.write(render_trace_dashboard(payload_raw, width=width))
+    render_trace_dashboard(payload_raw, width=width)
     return 0
 
 
