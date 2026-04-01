@@ -195,6 +195,50 @@ def test_diversity_routing_policy_round_robin() -> None:
     assert results == ["alpha", "beta", "gamma", "alpha", "beta", "gamma", "alpha"]
 
 
+def test_decide_model_route_interactive_low_latency() -> None:
+    """Interactive lane with low tokens and latency-sensitive returns local interactive."""
+    decision = decide_model_route(
+        task_class="analysis",
+        primary_provider="remote_openai",
+        primary_model="gpt-4.1",
+        local_provider="local",
+        fallback_task_classes=(),
+        lane="interactive",
+        context_tokens=500,
+        latency_sensitive=True,
+    )
+    assert decision.provider_used == "local"
+    assert decision.reason == "interactive_low_latency_policy"
+
+
+def test_latest_model_route_returns_empty_for_no_match() -> None:
+    from lg_orch.model_routing import latest_model_route
+
+    state = {"telemetry": {"model_routing": [{"node": "coder", "model": "x"}]}}
+    assert latest_model_route(state, node_name="planner") == {}
+
+
+def test_latest_model_route_returns_empty_for_missing_telemetry() -> None:
+    from lg_orch.model_routing import latest_model_route
+
+    assert latest_model_route({}, node_name="planner") == {}
+
+
+def test_record_model_route_handles_non_list_fallback_classes() -> None:
+    """When fallback_task_classes is not a list, should use empty tuple."""
+    state = {
+        "telemetry": {},
+        "_models": {"planner": {"provider": "local", "model": "det"}},
+        "_model_routing_policy": {
+            "local_provider": "local",
+            "fallback_task_classes": "not_a_list",
+        },
+    }
+    out = record_model_route(state, node_name="planner", task_class="analysis", model_slot="planner")
+    routing = out["telemetry"]["model_routing"]
+    assert len(routing) == 1
+
+
 def test_diversity_routing_policy_reset() -> None:
     """reset() restarts the round-robin from the first model."""
     policy = DiversityRoutingPolicy(models=["alpha", "beta"])

@@ -1280,3 +1280,538 @@ def test_metrics_endpoint_unauthenticated(tmp_path: Path) -> None:
         authorization_header=None,
     )
     assert status == 200
+
+
+# ---------------------------------------------------------------------------
+# Pure helper functions — _request_client_ip, _request_scheme, etc.
+# ---------------------------------------------------------------------------
+
+
+def test_request_client_ip_uses_forwarded_for_when_trusted() -> None:
+    from lg_orch.remote_api import _request_client_ip
+
+    result = _request_client_ip(
+        client_address=("192.168.1.1", 5000),
+        forwarded_for="10.0.0.1, 10.0.0.2",
+        trust_forwarded_headers=True,
+    )
+    assert result == "10.0.0.1"
+
+
+def test_request_client_ip_ignores_forwarded_for_when_untrusted() -> None:
+    from lg_orch.remote_api import _request_client_ip
+
+    result = _request_client_ip(
+        client_address=("192.168.1.1", 5000),
+        forwarded_for="10.0.0.1",
+        trust_forwarded_headers=False,
+    )
+    assert result == "192.168.1.1"
+
+
+def test_request_client_ip_returns_empty_when_no_address() -> None:
+    from lg_orch.remote_api import _request_client_ip
+
+    result = _request_client_ip(
+        client_address=None,
+        forwarded_for=None,
+        trust_forwarded_headers=False,
+    )
+    assert result == ""
+
+
+def test_request_scheme_uses_forwarded_proto_when_trusted() -> None:
+    from lg_orch.remote_api import _request_scheme
+
+    result = _request_scheme(forwarded_proto="https, http", trust_forwarded_headers=True)
+    assert result == "https"
+
+
+def test_request_scheme_defaults_to_http_when_untrusted() -> None:
+    from lg_orch.remote_api import _request_scheme
+
+    result = _request_scheme(forwarded_proto="https", trust_forwarded_headers=False)
+    assert result == "http"
+
+
+def test_request_scheme_defaults_to_http_when_no_proto() -> None:
+    from lg_orch.remote_api import _request_scheme
+
+    result = _request_scheme(forwarded_proto=None, trust_forwarded_headers=True)
+    assert result == "http"
+
+
+def test_request_id_from_value_returns_given_value() -> None:
+    from lg_orch.remote_api import _request_id_from_value
+
+    assert _request_id_from_value("req-123") == "req-123"
+
+
+def test_request_id_from_value_generates_uuid_for_empty() -> None:
+    from lg_orch.remote_api import _request_id_from_value
+
+    result = _request_id_from_value("")
+    assert len(result) == 32  # hex UUID
+
+
+def test_request_id_from_value_generates_uuid_for_none() -> None:
+    from lg_orch.remote_api import _request_id_from_value
+
+    result = _request_id_from_value(None)
+    assert len(result) == 32
+
+
+def test_json_response_returns_proper_format() -> None:
+    from lg_orch.remote_api import _json_response
+
+    status, content_type, body = _json_response(200, {"ok": True})
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert json.loads(body.decode("utf-8")) == {"ok": True}
+
+
+def test_authorize_request_allows_healthz_unauthenticated() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    auth_subject, error = _authorize_request(
+        route="/healthz",
+        request_path="/healthz",
+        auth_mode="bearer",
+        expected_bearer_token="secret",
+        authorization_header=None,
+        allow_unauthenticated_healthz=True,
+    )
+    assert error is None
+    assert auth_subject == ""
+
+
+def test_authorize_request_allows_metrics_always() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    _, error = _authorize_request(
+        route="/metrics",
+        request_path="/metrics",
+        auth_mode="bearer",
+        expected_bearer_token="secret",
+        authorization_header=None,
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is None
+
+
+def test_authorize_request_off_mode_allows_all() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    _, error = _authorize_request(
+        route="/v1/runs",
+        request_path="/v1/runs",
+        auth_mode="off",
+        expected_bearer_token=None,
+        authorization_header=None,
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is None
+
+
+def test_authorize_request_rejects_unsupported_auth_mode() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    _, error = _authorize_request(
+        route="/v1/runs",
+        request_path="/v1/runs",
+        auth_mode="basic",
+        expected_bearer_token=None,
+        authorization_header=None,
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is not None
+    assert error[0] == 500
+
+
+def test_authorize_request_rejects_when_token_not_configured() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    _, error = _authorize_request(
+        route="/v1/runs",
+        request_path="/v1/runs",
+        auth_mode="bearer",
+        expected_bearer_token=None,
+        authorization_header=None,
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is not None
+    assert error[0] == 503
+
+
+def test_authorize_request_rejects_missing_bearer_token() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    _, error = _authorize_request(
+        route="/v1/runs",
+        request_path="/v1/runs",
+        auth_mode="bearer",
+        expected_bearer_token="secret",
+        authorization_header=None,
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is not None
+    assert error[0] == 401
+
+
+def test_authorize_request_rejects_invalid_bearer_token() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    _, error = _authorize_request(
+        route="/v1/runs",
+        request_path="/v1/runs",
+        auth_mode="bearer",
+        expected_bearer_token="secret",
+        authorization_header="Bearer wrong-token",
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is not None
+    assert error[0] == 403
+
+
+def test_authorize_request_accepts_valid_bearer_token() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    auth_subject, error = _authorize_request(
+        route="/v1/runs",
+        request_path="/v1/runs",
+        auth_mode="bearer",
+        expected_bearer_token="secret",
+        authorization_header="Bearer secret",
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is None
+    assert auth_subject == "bearer"
+
+
+def test_authorize_request_accepts_query_string_token() -> None:
+    from lg_orch.remote_api import _authorize_request
+
+    auth_subject, error = _authorize_request(
+        route="/v1/runs",
+        request_path="/v1/runs?access_token=secret",
+        auth_mode="bearer",
+        expected_bearer_token="secret",
+        authorization_header=None,
+        allow_unauthenticated_healthz=False,
+    )
+    assert error is None
+    assert auth_subject == "bearer"
+
+
+# ---------------------------------------------------------------------------
+# _audit_action_and_resource
+# ---------------------------------------------------------------------------
+
+
+def test_audit_action_run_create() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="POST", route="/v1/runs", path_parts=["v1", "runs"], status=201
+    )
+    assert action == "run.create"
+
+
+def test_audit_action_run_list() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="GET", route="/v1/runs", path_parts=["v1", "runs"], status=200
+    )
+    assert action == "run.list"
+
+
+def test_audit_action_run_read_v1() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="GET", route="/v1/runs/abc", path_parts=["v1", "runs", "abc"], status=200
+    )
+    assert action == "run.read"
+    assert resource == "abc"
+
+
+def test_audit_action_run_read_short() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="GET", route="/runs/abc", path_parts=["runs", "abc"], status=200
+    )
+    assert action == "run.read"
+    assert resource == "abc"
+
+
+def test_audit_action_run_cancel_v1() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="POST",
+        route="/v1/runs/abc/cancel",
+        path_parts=["v1", "runs", "abc", "cancel"],
+        status=202,
+    )
+    assert action == "run.cancel"
+    assert resource == "abc"
+
+
+def test_audit_action_run_cancel_short() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="POST",
+        route="/runs/abc/cancel",
+        path_parts=["runs", "abc", "cancel"],
+        status=202,
+    )
+    assert action == "run.cancel"
+    assert resource == "abc"
+
+
+def test_audit_action_run_approve_v1() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="POST",
+        route="/v1/runs/abc/approve",
+        path_parts=["v1", "runs", "abc", "approve"],
+        status=202,
+    )
+    assert action == "run.approve"
+    assert resource == "abc"
+
+
+def test_audit_action_run_approve_short() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="POST",
+        route="/runs/abc/approve",
+        path_parts=["runs", "abc", "approve"],
+        status=202,
+    )
+    assert action == "run.approve"
+    assert resource == "abc"
+
+
+def test_audit_action_logs_stream() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="GET",
+        route="/v1/runs/abc/logs",
+        path_parts=["v1", "runs", "abc", "logs"],
+        status=200,
+    )
+    assert action == "run.read"
+    assert resource == "abc"
+
+
+def test_audit_action_run_search() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="GET",
+        route="/runs/search",
+        path_parts=["runs", "search"],
+        status=200,
+    )
+    assert action == "run.search"
+
+
+def test_audit_action_default() -> None:
+    from lg_orch.remote_api import _audit_action_and_resource
+
+    action, resource = _audit_action_and_resource(
+        method="GET", route="/unknown", path_parts=["unknown"], status=404
+    )
+    assert action == "api.request"
+    assert resource is None
+
+
+# ---------------------------------------------------------------------------
+# _match_parameterized route matching
+# ---------------------------------------------------------------------------
+
+
+def test_match_parameterized_v1_run_logs() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/v1/runs/abc/logs", "GET", ["v1", "runs", "abc", "logs"])
+    assert h is not None
+
+
+def test_match_parameterized_v1_run_cancel() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/v1/runs/abc/cancel", "POST", ["v1", "runs", "abc", "cancel"])
+    assert h is not None
+
+
+def test_match_parameterized_v1_run_approve() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/v1/runs/abc/approve", "POST", ["v1", "runs", "abc", "approve"])
+    assert h is not None
+
+
+def test_match_parameterized_v1_run_reject() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/v1/runs/abc/reject", "POST", ["v1", "runs", "abc", "reject"])
+    assert h is not None
+
+
+def test_match_parameterized_v1_run_stream() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/v1/runs/abc/stream", "GET", ["v1", "runs", "abc", "stream"])
+    assert h is not None
+
+
+def test_match_parameterized_v1_run_get() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/v1/runs/abc", "GET", ["v1", "runs", "abc"])
+    assert h is not None
+
+
+def test_match_parameterized_runs_stream() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/runs/abc/stream", "GET", ["runs", "abc", "stream"])
+    assert h is not None
+
+
+def test_match_parameterized_runs_approve() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/runs/abc/approve", "POST", ["runs", "abc", "approve"])
+    assert h is not None
+
+
+def test_match_parameterized_runs_approval_policy() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/runs/abc/approval-policy", "POST", ["runs", "abc", "approval-policy"])
+    assert h is not None
+
+
+def test_match_parameterized_runs_vote() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/runs/abc/vote", "POST", ["runs", "abc", "vote"])
+    assert h is not None
+
+
+def test_match_parameterized_app() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/app/index.html", "GET", ["app", "index.html"])
+    assert h is not None
+
+
+def test_match_parameterized_no_match() -> None:
+    from lg_orch.remote_api import _match_parameterized
+
+    h = _match_parameterized("/unknown", "GET", ["unknown"])
+    assert h is None
+
+
+# ---------------------------------------------------------------------------
+# Short-form /runs/* handler integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_runs_list_endpoint(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, body = _api_http_response(
+        service, method="GET", request_path="/runs", request_body=None,
+    )
+    assert status == 200
+    assert "runs" in json.loads(body.decode("utf-8"))
+
+
+def test_runs_list_rejects_post(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, body = _api_http_response(
+        service, method="POST", request_path="/runs/", request_body=None,
+    )
+    assert status == 405
+
+
+def test_healthz_rejects_post(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, _ = _api_http_response(
+        service, method="POST", request_path="/healthz", request_body=None,
+    )
+    assert status == 405
+
+
+def test_v1_run_get_missing(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, body = _api_http_response(
+        service, method="GET", request_path="/v1/runs/nonexistent", request_body=None,
+    )
+    assert status == 404
+
+
+def test_v1_run_get_rejects_post(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, _ = _api_http_response(
+        service, method="POST", request_path="/v1/runs/abc", request_body=None,
+    )
+    assert status == 405
+
+
+def test_v1_run_logs_missing(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, body = _api_http_response(
+        service, method="GET", request_path="/v1/runs/nonexistent/logs", request_body=None,
+    )
+    assert status == 404
+
+
+def test_v1_run_logs_rejects_post(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, _ = _api_http_response(
+        service, method="POST", request_path="/v1/runs/abc/logs", request_body=None,
+    )
+    assert status == 405
+
+
+def test_v1_run_cancel_rejects_get(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, _ = _api_http_response(
+        service, method="GET", request_path="/v1/runs/abc/cancel", request_body=None,
+    )
+    assert status == 405
+
+
+def test_v1_run_approve_rejects_get(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, _ = _api_http_response(
+        service, method="GET", request_path="/v1/runs/abc/approve", request_body=None,
+    )
+    assert status == 405
+
+
+def test_v1_run_approve_invalid_json(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, body = _api_http_response(
+        service, method="POST", request_path="/v1/runs/abc/approve",
+        request_body=b"not json",
+    )
+    assert status == 400
+
+
+def test_api_404_for_unknown_route(tmp_path: Path) -> None:
+    service = RemoteAPIService(repo_root=tmp_path)
+    status, _, body = _api_http_response(
+        service, method="GET", request_path="/v1/unknown", request_body=None,
+    )
+    assert status == 404

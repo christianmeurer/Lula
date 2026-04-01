@@ -212,3 +212,101 @@ def test_tool_calls_total_none_does_not_raise(
 
     result = client.execute_tool(tool="health", input={})
     assert result["ok"] is False  # network unreachable, but no crash from None counter
+
+
+# ---------------------------------------------------------------------------
+# _checkpoint_payload / _route_payload static method tests
+# ---------------------------------------------------------------------------
+
+
+def test_checkpoint_payload_returns_none_for_missing_key() -> None:
+    assert RunnerClient._checkpoint_payload({}) is None
+
+
+def test_checkpoint_payload_returns_none_for_non_dict() -> None:
+    assert RunnerClient._checkpoint_payload({"_checkpoint": "not_a_dict"}) is None
+
+
+def test_checkpoint_payload_returns_none_for_missing_thread_id() -> None:
+    assert RunnerClient._checkpoint_payload({"_checkpoint": {"checkpoint_ns": "x"}}) is None
+
+
+def test_checkpoint_payload_returns_none_for_empty_thread_id() -> None:
+    assert RunnerClient._checkpoint_payload({"_checkpoint": {"thread_id": "  "}}) is None
+
+
+def test_checkpoint_payload_minimal() -> None:
+    result = RunnerClient._checkpoint_payload({"_checkpoint": {"thread_id": "t1"}})
+    assert result is not None
+    assert result["thread_id"] == "t1"
+    assert result["checkpoint_ns"] == ""
+    assert "checkpoint_id" not in result
+    assert "run_id" not in result
+
+
+def test_checkpoint_payload_with_resume_checkpoint_id() -> None:
+    result = RunnerClient._checkpoint_payload({
+        "_checkpoint": {"thread_id": "t1", "resume_checkpoint_id": "cp-2"}
+    })
+    assert result is not None
+    assert result["checkpoint_id"] == "cp-2"
+
+
+def test_checkpoint_payload_with_run_id() -> None:
+    result = RunnerClient._checkpoint_payload({
+        "_checkpoint": {"thread_id": "t1", "run_id": "run-1"}
+    })
+    assert result is not None
+    assert result["run_id"] == "run-1"
+
+
+def test_route_payload_returns_none_for_missing_key() -> None:
+    assert RunnerClient._route_payload({}) is None
+
+
+def test_route_payload_returns_none_for_non_dict() -> None:
+    assert RunnerClient._route_payload({"_route": "string"}) is None
+
+
+def test_route_payload_returns_dict() -> None:
+    result = RunnerClient._route_payload({"_route": {"lane": "recovery"}})
+    assert result == {"lane": "recovery"}
+
+
+# ---------------------------------------------------------------------------
+# RunnerClient read/search helpers
+# ---------------------------------------------------------------------------
+
+
+@patch("lg_orch.tools.runner_client.RunnerClient.execute_tool")
+def test_search_codebase_returns_empty_on_failure(mock_execute: MagicMock) -> None:
+    mock_execute.return_value = {"ok": False, "stderr": "error"}
+    client = RunnerClient(base_url="http://127.0.0.1:8088")
+    out = client.search_codebase(query="test")
+    assert out == []
+
+
+@patch("lg_orch.tools.runner_client.RunnerClient.execute_tool")
+def test_get_ast_index_summary_returns_empty_on_failure(mock_execute: MagicMock) -> None:
+    mock_execute.return_value = {"ok": False, "stderr": "error"}
+    client = RunnerClient(base_url="http://127.0.0.1:8088")
+    out = client.get_ast_index_summary()
+    assert out == {}
+
+
+def test_execute_tool_forwards_route_payload() -> None:
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = {
+        "tool": "exec", "ok": True, "exit_code": 0,
+        "stdout": "", "stderr": "", "diagnostics": [],
+        "timing_ms": 1, "artifacts": {},
+    }
+    mock_http = MagicMock()
+    mock_http.post.return_value = mock_resp
+    client = RunnerClient(base_url="http://127.0.0.1:8088", _client=mock_http)
+
+    client.execute_tool(tool="exec", input={"_route": {"lane": "recovery"}})
+    call_kwargs = mock_http.post.call_args.kwargs
+    payload = call_kwargs["json"]
+    assert payload["route"] == {"lane": "recovery"}

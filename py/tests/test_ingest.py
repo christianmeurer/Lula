@@ -64,6 +64,25 @@ def test_ingest_creates_trace_event() -> None:
     assert last["data"]["phase"] == "end"
 
 
+def test_ingest_accepts_orch_state_model() -> None:
+    from lg_orch.state import OrchState
+
+    model = OrchState(request="from model")
+    out = ingest(model)
+    assert out["request"] == "from model"
+    assert "_run_id" in out
+
+
+def test_ingest_handles_validation_error_gracefully() -> None:
+    """When validate_state fails, ingest should fall back to defaults."""
+    from unittest.mock import patch
+
+    with patch("lg_orch.nodes.ingest.validate_state", side_effect=Exception("boom")):
+        out = ingest(_base_state(request="test"))
+    assert out["request"] == "test"
+    assert out["intent"] == "analysis"
+
+
 def test_ingest_initializes_orch_state_fields() -> None:
     out = ingest(_base_state())
     assert out["intent"] == "analysis"

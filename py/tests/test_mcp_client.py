@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lg_orch.tools.mcp_client import MCPClient, _compute_tools_hash
+from lg_orch.tools.mcp_client import MCPClient, _compute_tools_hash, _to_timeout
 from lg_orch.tools.runner_client import RunnerClient
 
 
@@ -43,6 +43,144 @@ def test_compute_tools_hash_matches_manual() -> None:
     canonical = json.dumps(tools, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     expected = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     assert _compute_tools_hash(tools) == expected
+
+
+# ---------------------------------------------------------------------------
+# _to_timeout
+# ---------------------------------------------------------------------------
+
+
+def test_to_timeout_int() -> None:
+    assert _to_timeout(30) == 30
+
+
+def test_to_timeout_int_clamps_to_1() -> None:
+    assert _to_timeout(0) == 1
+    assert _to_timeout(-5) == 1
+
+
+def test_to_timeout_float() -> None:
+    assert _to_timeout(5.7) == 5
+
+
+def test_to_timeout_float_clamps_to_1() -> None:
+    assert _to_timeout(0.1) == 1
+
+
+def test_to_timeout_string() -> None:
+    assert _to_timeout("25") == 25
+
+
+def test_to_timeout_invalid_string_returns_default() -> None:
+    assert _to_timeout("not_a_number") == 20
+
+
+def test_to_timeout_bool_returns_default() -> None:
+    assert _to_timeout(True) == 20
+    assert _to_timeout(False) == 20
+
+
+def test_to_timeout_none_returns_default() -> None:
+    assert _to_timeout(None) == 20
+
+
+def test_to_timeout_custom_default() -> None:
+    assert _to_timeout(None, default=60) == 60
+
+
+# ---------------------------------------------------------------------------
+# _server_payload validation
+# ---------------------------------------------------------------------------
+
+
+def test_server_payload_raises_for_unknown_server() -> None:
+    client = MCPClient(runner_client=_runner_mock(), server_configs={})
+    with pytest.raises(ValueError, match="unknown MCP server"):
+        client._server_payload("missing")
+
+
+def test_server_payload_raises_for_missing_command() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={"s": {"args": []}},
+    )
+    with pytest.raises(ValueError, match="invalid MCP server command"):
+        client._server_payload("s")
+
+
+def test_server_payload_raises_for_invalid_args() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={"s": {"command": "python", "args": "not_a_list"}},
+    )
+    with pytest.raises(ValueError, match="invalid MCP server args"):
+        client._server_payload("s")
+
+
+def test_server_payload_raises_for_non_string_arg_entry() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={"s": {"command": "python", "args": [123]}},
+    )
+    with pytest.raises(ValueError, match="invalid MCP server arg entry"):
+        client._server_payload("s")
+
+
+def test_server_payload_raises_for_invalid_cwd() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={"s": {"command": "python", "args": [], "cwd": 123}},
+    )
+    with pytest.raises(ValueError, match="invalid MCP server cwd"):
+        client._server_payload("s")
+
+
+def test_server_payload_raises_for_invalid_env() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={"s": {"command": "python", "args": [], "env": "not_a_dict"}},
+    )
+    with pytest.raises(ValueError, match="invalid MCP server env"):
+        client._server_payload("s")
+
+
+def test_server_payload_raises_for_non_string_env_entry() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={"s": {"command": "python", "args": [], "env": {"key": 123}}},
+    )
+    with pytest.raises(ValueError, match="invalid MCP server env entry"):
+        client._server_payload("s")
+
+
+def test_server_payload_valid_config() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={
+            "s": {
+                "command": "python",
+                "args": ["server.py"],
+                "cwd": "/tmp",
+                "env": {"FOO": "bar"},
+                "timeout_s": 30,
+            }
+        },
+    )
+    payload = client._server_payload("s")
+    assert payload["command"] == "python"
+    assert payload["args"] == ["server.py"]
+    assert payload["cwd"] == "/tmp"
+    assert payload["env"] == {"FOO": "bar"}
+    assert payload["timeout_s"] == 30
+
+
+def test_server_payload_none_cwd() -> None:
+    client = MCPClient(
+        runner_client=_runner_mock(),
+        server_configs={"s": {"command": "python", "args": []}},
+    )
+    payload = client._server_payload("s")
+    assert "cwd" not in payload or payload.get("cwd") is None
 
 
 def test_discover_tools_uses_runner_mcp_discover() -> None:
