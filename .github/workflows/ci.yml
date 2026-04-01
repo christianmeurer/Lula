@@ -166,13 +166,49 @@ jobs:
           path: artifacts/rootfs.ext4
           if-no-files-found: error
 
+  build-spa:
+    name: "Build Leptos WASM SPA"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint-rust]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "rs -> rs/target"
+
+      - name: Install trunk
+        run: curl -sSL https://github.com/trunk-rs/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar xz && sudo mv trunk /usr/local/bin/
+
+      - name: Build SPA
+        working-directory: rs/spa-leptos
+        run: trunk build --release
+
+      - name: Upload SPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spa-dist
+          path: rs/spa-leptos/dist/
+          retention-days: 1
+
   eval-canary:
     name: "Eval Canary Smoke Test"
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [test-python, test-rust]
+    needs: [test-python, test-rust, build-spa]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download SPA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: spa-dist
+          path: rs/spa-leptos/dist/
 
       - uses: actions/setup-python@v5
         with:

@@ -6,7 +6,6 @@ from lg_orch.visualize import (
     GraphEdge,
     graph_mermaid,
     render_run_header,
-    render_run_viewer_spa,
     render_timeline,
     render_tool_results,
     render_trace_dashboard,
@@ -142,56 +141,6 @@ def test_render_trace_dashboard_html_combines_sections() -> None:
     assert "Approval History" in result
     assert "apply_patch requires approval" in result
     assert "Done" in result
-
-
-def test_render_run_viewer_spa_returns_html() -> None:
-    result = render_run_viewer_spa()
-    assert result.startswith("<!DOCTYPE html>")
-    assert "<script" in result
-
-
-def test_render_run_viewer_spa_contains_api_calls() -> None:
-    result = render_run_viewer_spa()
-    assert "/v1/runs" in result
-    assert "approvalAction('approve')" in result
-    assert "approvalAction('reject')" in result
-
-
-def test_render_run_viewer_spa_contains_submit_form() -> None:
-    result = render_run_viewer_spa()
-    assert "<input" in result
-
-
-def test_render_run_viewer_spa_custom_api_base_url() -> None:
-    result = render_run_viewer_spa(api_base_url="https://api.example.com")
-    assert "https://api.example.com" in result
-
-
-def test_render_run_viewer_spa_diff_css_classes() -> None:
-    result = render_run_viewer_spa()
-    assert ".diff-add" in result
-    assert ".diff-remove" in result
-    assert "Approval History" in result
-
-
-def test_render_run_viewer_spa_bootstraps_bearer_token_and_sse_query_auth() -> None:
-    result = render_run_viewer_spa()
-    assert "bootstrapBearerToken()" in result
-    assert "localStorage.setItem('lgBearerToken'" in result
-    assert "accessTokenQuery()" in result
-    assert "new EventSource(url)" in result
-    assert "/stream' + accessTokenQuery()" in result
-
-
-def test_render_run_viewer_spa_uses_button_type_for_run_submission() -> None:
-    result = render_run_viewer_spa()
-    expected = '<button type="button" class="btn btn-primary" onclick="submitRun()">▶ Run</button>'
-    assert expected in result
-
-
-def test_render_run_viewer_spa_contains_no_python_noqa_artifacts() -> None:
-    result = render_run_viewer_spa()
-    assert "# noqa" not in result
 
 
 def test_render_trace_site_index_html_lists_runs() -> None:
