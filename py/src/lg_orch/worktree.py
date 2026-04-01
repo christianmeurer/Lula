@@ -306,37 +306,35 @@ def cleanup_orphaned_worktrees(base_path: str | Path) -> list[str]:
 
         for line in result.stdout.splitlines():
             if line.startswith("worktree "):
-                current_path = line[len("worktree "):].strip()
+                current_path = line[len("worktree ") :].strip()
                 current_branch = None
             elif line.startswith("branch "):
-                current_branch = line[len("branch "):].strip()
+                current_branch = line[len("branch ") :].strip()
             elif line == "" and current_path and current_branch:
                 # End of block — check if this is an lg-orch worktree
                 branch_short = current_branch.removeprefix("refs/heads/")
-                if branch_short.startswith("lg-orch/"):
-                    # If the worktree directory doesn't exist, it's definitely orphaned
-                    if not Path(current_path).exists():
-                        try:
-                            subprocess.run(
-                                ["git", "worktree", "remove", "--force", current_path],
-                                cwd=str(base_path),
-                                capture_output=True,
-                                timeout=30,
-                            )
-                            # Also delete the branch
-                            subprocess.run(
-                                ["git", "branch", "-D", branch_short],
-                                cwd=str(base_path),
-                                capture_output=True,
-                                timeout=30,
-                            )
-                            removed.append(current_path)
-                        except Exception as e:
-                            logging.warning(
-                                "Failed to remove orphaned worktree %s: %s",
-                                current_path,
-                                e,
-                            )
+                if branch_short.startswith("lg-orch/") and not Path(current_path).exists():
+                    try:
+                        subprocess.run(
+                            ["git", "worktree", "remove", "--force", current_path],
+                            cwd=str(base_path),
+                            capture_output=True,
+                            timeout=30,
+                        )
+                        # Also delete the branch
+                        subprocess.run(
+                            ["git", "branch", "-D", branch_short],
+                            cwd=str(base_path),
+                            capture_output=True,
+                            timeout=30,
+                        )
+                        removed.append(current_path)
+                    except Exception as e:
+                        logging.warning(
+                            "Failed to remove orphaned worktree %s: %s",
+                            current_path,
+                            e,
+                        )
                 current_path = None
                 current_branch = None
 

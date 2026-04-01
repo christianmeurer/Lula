@@ -320,12 +320,14 @@ def test_cross_repo_deps_returns_empty_when_no_overlap() -> None:
 
 def test_scip_index_is_not_stale_by_default() -> None:
     from lg_orch.scip_index import ScipIndex
+
     idx = ScipIndex(repo_root="/tmp/test", symbols=[])
     assert not idx.is_stale
 
 
 def test_scip_index_mark_stale() -> None:
     from lg_orch.scip_index import ScipIndex
+
     idx = ScipIndex(repo_root="/tmp/test", symbols=[])
     idx.mark_stale()
     assert idx.is_stale

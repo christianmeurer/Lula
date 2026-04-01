@@ -18,7 +18,7 @@ from lg_orch.nodes import (
     router,
     verifier,
 )
-from lg_orch.state import OrchState, OrchStateDict
+from lg_orch.state import OrchStateDict
 from lg_orch.visualize import GraphEdge, graph_mermaid
 
 

@@ -393,10 +393,7 @@ def executor(state: dict[str, Any] | BaseModel) -> dict[str, Any]:
 
                 # Mark the SCIP index as stale if any apply_patch succeeded
                 for result in batch_results:
-                    if (
-                        result.get("tool") == "apply_patch"
-                        and result.get("ok", False)
-                    ):
+                    if result.get("tool") == "apply_patch" and result.get("ok", False):
                         state["_scip_index_stale"] = True
                         break
 

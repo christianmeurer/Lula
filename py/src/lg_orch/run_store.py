@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Christian Meurer — https://github.com/christianmeurer/Lula
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -10,7 +11,7 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 _log = logging.getLogger(__name__)
 
@@ -617,9 +618,7 @@ class RedisRunStore:
             return
         created_at = str(data.get("created_at", ""))
         try:
-            score = datetime.fromisoformat(
-                created_at.replace("Z", "+00:00")
-            ).timestamp()
+            score = datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp()
         except (ValueError, TypeError):
             score = time.time()
         key = self._run_key(run_id)
@@ -633,7 +632,7 @@ class RedisRunStore:
         raw = self._client.get(key)
         if raw is None:
             return None
-        return json.loads(raw)
+        return cast(dict[str, Any], json.loads(raw))
 
     def list_runs(self, namespace: str | None = None) -> list[dict[str, Any]]:
         ns = namespace if namespace is not None else self._namespace
@@ -684,8 +683,6 @@ class RedisRunStore:
         now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         idx_key = self._recovery_index_key()
         for fact in facts:
-            if not isinstance(fact, dict):
-                continue
             fingerprint = str(fact.get("failure_fingerprint", "")).strip()
             if not fingerprint:
                 continue
@@ -768,8 +765,6 @@ class RedisRunStore:
         now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         idx_key = self._semantic_index_key()
         for memory in memories:
-            if not isinstance(memory, dict):
-                continue
             summary = str(memory.get("summary", "")).strip()
             if not summary:
                 continue
@@ -816,9 +811,7 @@ class RedisRunStore:
             if raw is None:
                 continue
             data = json.loads(raw)
-            haystack = " ".join(
-                str(data.get(f, "")) for f in ("summary", "source", "kind")
-            ).lower()
+            haystack = " ".join(str(data.get(f, "")) for f in ("summary", "source", "kind")).lower()
             if query_text in haystack:
                 results.append(data)
                 if len(results) >= limit:
@@ -826,10 +819,8 @@ class RedisRunStore:
         return results
 
     def close(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._client.close()
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------

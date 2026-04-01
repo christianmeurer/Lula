@@ -94,7 +94,7 @@ def init_telemetry(
     from lg_orch import __version__
 
     resolved_endpoint = otlp_endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    
+
     if not resolved_endpoint:
         # Fall back gracefully: install a no-op provider so downstream code
         # can still call opentelemetry.trace.get_tracer() without crashing.

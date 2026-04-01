@@ -202,8 +202,13 @@ def planner(state: dict[str, Any] | BaseModel) -> dict[str, Any]:
     try:
         intent = str(route.get("intent", "")).strip() or _classify_intent(request)
         remote_plan, response = _planner_model_output(state, route_decision=route_decision)
-        plan = remote_plan if remote_plan is not None else _default_plan(
-            request, verification=state.get("verification") or {},
+        plan = (
+            remote_plan
+            if remote_plan is not None
+            else _default_plan(
+                request,
+                verification=state.get("verification") or {},
+            )
         )
         plan_payload = plan.model_dump()
         configured_max_loops = int(state.get("_budget_max_loops", 1) or 1)
@@ -213,7 +218,8 @@ def planner(state: dict[str, Any] | BaseModel) -> dict[str, Any]:
         )
         if not plan_payload.get("acceptance_criteria"):
             plan_payload["acceptance_criteria"] = _default_plan(
-                request, verification=state.get("verification") or {},
+                request,
+                verification=state.get("verification") or {},
             ).acceptance_criteria
         verification_raw = state.get("verification", {})
         verification = dict(verification_raw) if isinstance(verification_raw, dict) else {}
@@ -263,7 +269,8 @@ def planner(state: dict[str, Any] | BaseModel) -> dict[str, Any]:
     except Exception as exc:
         log.error("planner_failed", error=str(exc))
         fallback_plan = _default_plan(
-            request, verification=state.get("verification") or {},
+            request,
+            verification=state.get("verification") or {},
         ).model_dump()
         fallback_plan["rollback"] = "Plan generation failed; deterministic fallback used."
         fallback_plan = _apply_semantic_memory_constraints(
