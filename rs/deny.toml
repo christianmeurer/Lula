@@ -4,6 +4,7 @@ version = 2
 # Add RUSTSEC IDs here only to suppress known false-positives.
 ignore = [
     "RUSTSEC-2026-0009", # CVSS 4.0 advisory; cargo-deny parser does not support CVSS 4.0
+    "RUSTSEC-2024-0436", # paste crate unmaintained; transitive dep from Leptos, macro-only
 ]
 
 [licenses]
