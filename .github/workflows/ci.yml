@@ -90,6 +90,9 @@ jobs:
         with:
           components: rustfmt
 
+      - name: Set stable as default toolchain
+        run: rustup default stable
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rs -> rs/target
