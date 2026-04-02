@@ -1,0 +1,64 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: lula-alerts
+  namespace: lula-orch
+spec:
+  groups:
+    - name: lula.rules
+      rules:
+        - alert: LulaOrchestratorDown
+          expr: up{job="lula-orch"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Lula orchestrator is down"
+
+        - alert: LulaRunnerDown
+          expr: up{job="lula-runner"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Lula runner is down"
+
+        - alert: LulaHighToolLatency
+          expr: histogram_quantile(0.95, rate(runner_tool_duration_seconds_bucket[5m])) > 30
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tool execution p95 latency > 30s"
+
+        - alert: LulaHighErrorRate
+          expr: rate(runner_tool_calls_total{ok="false"}[5m]) / rate(runner_tool_calls_total[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tool error rate > 10%"
+
+        - alert: LulaCgroupUnavailable
+          expr: runner_cgroup_available == 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Runner cgroup v2 not available — resource limits inactive"
+
+        - alert: LulaHighMemoryUsage
+          expr: container_memory_working_set_bytes{container="orchestrator"} / container_spec_memory_limit_bytes{container="orchestrator"} > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Orchestrator memory usage > 90% of limit"
+
+        - alert: LulaPendingApprovals
+          expr: count(lula_runs_total{status="suspended"}) > 5
+          for: 15m
+          labels:
+            severity: info
+          annotations:
+            summary: "More than 5 runs awaiting approval for over 15 minutes"
