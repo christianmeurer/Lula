@@ -389,9 +389,7 @@ class TestDumpLoadTypedMixin:
 
 class TestStableCheckpointThreadId:
     def test_with_provided(self) -> None:
-        result = stable_checkpoint_thread_id(
-            request="x", thread_prefix="p", provided="custom"
-        )
+        result = stable_checkpoint_thread_id(request="x", thread_prefix="p", provided="custom")
         assert result == "custom"
 
     def test_generated(self) -> None:
