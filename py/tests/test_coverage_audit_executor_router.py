@@ -1,13 +1,12 @@
 """Tests for audit, executor helpers, and router coverage gaps."""
+
 from __future__ import annotations
 
 import asyncio
-import json
 import pathlib
 import threading
-import time
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -15,12 +14,13 @@ from lg_orch.audit import (
     AuditEvent,
     AuditLogger,
     AuditSink,
-    S3AuditSink,
     GCSAuditSink,
-    to_jsonl,
+    S3AuditSink,
     utc_now_iso,
 )
 from lg_orch.nodes.executor import (
+    _apply_patch_changed_paths,
+    _approval_for_tool,
     _as_int,
     _budget_failure_result,
     _coerce_approval_token,
@@ -28,11 +28,8 @@ from lg_orch.nodes.executor import (
     _estimate_patch_bytes,
     _normalize_rel_path,
     _path_matches_allowlist,
-    _apply_patch_changed_paths,
-    _approval_for_tool,
 )
 from lg_orch.nodes.router import _classify_intent, _default_route
-
 
 # ---------------------------------------------------------------------------
 # AuditLogger — export with sink in running event loop
@@ -211,53 +208,74 @@ def test_coerce_approval_token_empty_challenge() -> None:
 
 
 def test_coerce_approval_token_dot_separated() -> None:
-    result = _coerce_approval_token({
-        "challenge_id": "cid",
-        "token": "a.b.c.d",
-    })
+    result = _coerce_approval_token(
+        {
+            "challenge_id": "cid",
+            "token": "a.b.c.d",
+        }
+    )
     assert result is not None
     assert result["challenge_id"] == "cid"
     assert result["token"] == "a.b.c.d"
 
 
 def test_coerce_approval_token_pipe_separated() -> None:
-    result = _coerce_approval_token({
-        "challenge_id": "cid",
-        "token": "a|b|c|d",
-    })
+    result = _coerce_approval_token(
+        {
+            "challenge_id": "cid",
+            "token": "a|b|c|d",
+        }
+    )
     assert result is not None
     assert result["token"] == "a|b|c|d"
 
 
 def test_coerce_approval_token_legacy_plain() -> None:
-    result = _coerce_approval_token({
-        "challenge_id": "cid",
-        "token": "simple-token",
-    })
+    result = _coerce_approval_token(
+        {
+            "challenge_id": "cid",
+            "token": "simple-token",
+        }
+    )
     assert result is not None
     assert result["token"] == "simple-token"
 
 
 def test_coerce_approval_token_dot_with_empty_part() -> None:
-    assert _coerce_approval_token({
-        "challenge_id": "cid",
-        "token": "a..c.d",
-    }) is None
+    assert (
+        _coerce_approval_token(
+            {
+                "challenge_id": "cid",
+                "token": "a..c.d",
+            }
+        )
+        is None
+    )
 
 
 def test_coerce_approval_token_pipe_with_empty_part() -> None:
-    assert _coerce_approval_token({
-        "challenge_id": "cid",
-        "token": "a||c|d",
-    }) is None
+    assert (
+        _coerce_approval_token(
+            {
+                "challenge_id": "cid",
+                "token": "a||c|d",
+            }
+        )
+        is None
+    )
 
 
 def test_coerce_approval_token_bad_segment_count() -> None:
     """Tokens with 2 or 3 separators but not exactly 4 parts should be rejected."""
-    assert _coerce_approval_token({
-        "challenge_id": "cid",
-        "token": "a.b.c",
-    }) is None
+    assert (
+        _coerce_approval_token(
+            {
+                "challenge_id": "cid",
+                "token": "a.b.c",
+            }
+        )
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -440,114 +458,154 @@ def test_classify_intent_analysis_fallback() -> None:
 
 
 def test_default_route_recovery_lane() -> None:
-    route = _default_route({
-        "request": "fix the tests",
-        "retry_target": "router",
-        "verification": {"failure_class": "test_failure"},
-        "repo_context": {"planner_context": {"token_estimate": 100}},
-        "facts": [],
-        "budgets": {"current_loop": 1},
-        "_model_routing_policy": {"interactive_context_limit": 1800, "default_cache_affinity": "workspace"},
-    })
+    route = _default_route(
+        {
+            "request": "fix the tests",
+            "retry_target": "router",
+            "verification": {"failure_class": "test_failure"},
+            "repo_context": {"planner_context": {"token_estimate": 100}},
+            "facts": [],
+            "budgets": {"current_loop": 1},
+            "_model_routing_policy": {
+                "interactive_context_limit": 1800,
+                "default_cache_affinity": "workspace",
+            },
+        }
+    )
     assert route.lane == "recovery"
     assert route.task_class == "test_failure"
 
 
 def test_default_route_recovery_via_recovery_dict() -> None:
-    route = _default_route({
-        "request": "try again",
-        "verification": {"recovery": {"failure_class": "compile_error", "context_scope": "stable_prefix"}},
-        "repo_context": {"planner_context": {"token_estimate": 100}},
-        "facts": [],
-        "budgets": {"current_loop": 0},
-        "_model_routing_policy": {"interactive_context_limit": 1800, "default_cache_affinity": "workspace"},
-    })
+    route = _default_route(
+        {
+            "request": "try again",
+            "verification": {
+                "recovery": {"failure_class": "compile_error", "context_scope": "stable_prefix"}
+            },
+            "repo_context": {"planner_context": {"token_estimate": 100}},
+            "facts": [],
+            "budgets": {"current_loop": 0},
+            "_model_routing_policy": {
+                "interactive_context_limit": 1800,
+                "default_cache_affinity": "workspace",
+            },
+        }
+    )
     assert route.lane == "recovery"
     assert route.prefix_segment == "stable_prefix"
 
 
 def test_default_route_deep_planning_high_tokens() -> None:
-    route = _default_route({
-        "request": "summarize the repository",
-        "repo_context": {
-            "planner_context": {
-                "token_estimate": 5000,
-                "working_set_token_estimate": 200,
-                "compression_pressure": 0,
-                "fact_count": 0,
+    route = _default_route(
+        {
+            "request": "summarize the repository",
+            "repo_context": {
+                "planner_context": {
+                    "token_estimate": 5000,
+                    "working_set_token_estimate": 200,
+                    "compression_pressure": 0,
+                    "fact_count": 0,
+                },
+                "compression": {"pressure": {"overall": {"score": 0}}},
             },
-            "compression": {"pressure": {"overall": {"score": 0}}},
-        },
-        "facts": [],
-        "budgets": {"current_loop": 0},
-        "_model_routing_policy": {"interactive_context_limit": 1800, "default_cache_affinity": "workspace"},
-    })
+            "facts": [],
+            "budgets": {"current_loop": 0},
+            "_model_routing_policy": {
+                "interactive_context_limit": 1800,
+                "default_cache_affinity": "workspace",
+            },
+        }
+    )
     assert route.lane == "deep_planning"
 
 
 def test_default_route_deep_planning_compression_pressure() -> None:
-    route = _default_route({
-        "request": "summarize",
-        "repo_context": {
-            "planner_context": {
-                "token_estimate": 100,
-                "compression_pressure": 5,
+    route = _default_route(
+        {
+            "request": "summarize",
+            "repo_context": {
+                "planner_context": {
+                    "token_estimate": 100,
+                    "compression_pressure": 5,
+                },
+                "compression": {"pressure": {"overall": {"score": 5}}},
             },
-            "compression": {"pressure": {"overall": {"score": 5}}},
-        },
-        "facts": [],
-        "budgets": {"current_loop": 0},
-        "_model_routing_policy": {"interactive_context_limit": 1800, "default_cache_affinity": "workspace"},
-    })
+            "facts": [],
+            "budgets": {"current_loop": 0},
+            "_model_routing_policy": {
+                "interactive_context_limit": 1800,
+                "default_cache_affinity": "workspace",
+            },
+        }
+    )
     assert route.lane == "deep_planning"
     assert "compression" in route.rationale
 
 
 def test_default_route_deep_planning_high_fact_count() -> None:
-    route = _default_route({
-        "request": "summarize",
-        "repo_context": {
-            "planner_context": {
-                "token_estimate": 100,
-                "fact_count": 5,
+    route = _default_route(
+        {
+            "request": "summarize",
+            "repo_context": {
+                "planner_context": {
+                    "token_estimate": 100,
+                    "fact_count": 5,
+                },
+                "compression": {"pressure": {"overall": {"score": 0}}},
             },
-            "compression": {"pressure": {"overall": {"score": 0}}},
-        },
-        "facts": ["a", "b", "c", "d", "e"],
-        "budgets": {"current_loop": 0},
-        "_model_routing_policy": {"interactive_context_limit": 1800, "default_cache_affinity": "workspace"},
-    })
+            "facts": ["a", "b", "c", "d", "e"],
+            "budgets": {"current_loop": 0},
+            "_model_routing_policy": {
+                "interactive_context_limit": 1800,
+                "default_cache_affinity": "workspace",
+            },
+        }
+    )
     assert route.lane == "deep_planning"
     assert "recovery memory" in route.rationale
 
 
 def test_default_route_interactive_with_failure_fingerprint() -> None:
-    route = _default_route({
-        "request": "summarize",
-        "verification": {"failure_fingerprint": "fp123"},
-        "repo_context": {
-            "planner_context": {"token_estimate": 100},
-            "compression": {"pressure": {"overall": {"score": 0}}},
-        },
-        "facts": [],
-        "budgets": {"current_loop": 0},
-        "_model_routing_policy": {"interactive_context_limit": 1800, "default_cache_affinity": "workspace"},
-    })
+    route = _default_route(
+        {
+            "request": "summarize",
+            "verification": {"failure_fingerprint": "fp123"},
+            "repo_context": {
+                "planner_context": {"token_estimate": 100},
+                "compression": {"pressure": {"overall": {"score": 0}}},
+            },
+            "facts": [],
+            "budgets": {"current_loop": 0},
+            "_model_routing_policy": {
+                "interactive_context_limit": 1800,
+                "default_cache_affinity": "workspace",
+            },
+        }
+    )
     assert route.lane == "interactive"
     assert "failure signal" in route.rationale
 
 
 def test_default_route_recovery_via_recovery_packet() -> None:
     """When verification.recovery_packet is set, it takes priority."""
-    route = _default_route({
-        "request": "fix",
-        "verification": {
-            "recovery_packet": {"failure_class": "runtime_error", "context_scope": "working_set"},
-        },
-        "repo_context": {"planner_context": {"token_estimate": 100}},
-        "facts": [],
-        "budgets": {"current_loop": 0},
-        "_model_routing_policy": {"interactive_context_limit": 1800, "default_cache_affinity": "workspace"},
-    })
+    route = _default_route(
+        {
+            "request": "fix",
+            "verification": {
+                "recovery_packet": {
+                    "failure_class": "runtime_error",
+                    "context_scope": "working_set",
+                },
+            },
+            "repo_context": {"planner_context": {"token_estimate": 100}},
+            "facts": [],
+            "budgets": {"current_loop": 0},
+            "_model_routing_policy": {
+                "interactive_context_limit": 1800,
+                "default_cache_affinity": "workspace",
+            },
+        }
+    )
     assert route.lane == "recovery"
     assert route.task_class == "runtime_error"

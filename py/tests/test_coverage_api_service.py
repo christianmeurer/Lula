@@ -1,20 +1,18 @@
 """Tests for api/service.py helper functions to boost coverage."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from lg_orch.api.service import (
     RunRecord,
-    _RateLimiter,
     _apply_trace_state_to_payload,
     _non_empty_str,
     _normalized_run_id,
+    _RateLimiter,
     _utc_now,
 )
-
 
 # ---------------------------------------------------------------------------
 # _utc_now
@@ -130,7 +128,8 @@ def test_apply_trace_state_to_payload_basic() -> None:
     assert result["thread_id"] == "t1"
     assert result["checkpoint_id"] == "cp1"
     assert result["pending_approval"] is True
-    assert "approval" in result["pending_approval_summary"].lower() or len(result["pending_approval_summary"]) > 0
+    summary = result["pending_approval_summary"]
+    assert "approval" in summary.lower() or len(summary) > 0
 
 
 def test_apply_trace_state_to_payload_no_trace() -> None:

@@ -1,7 +1,7 @@
 """Tests for logging.py uncovered lines and commands/heal.py."""
+
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10,12 +10,10 @@ import pytest
 
 import lg_orch.logging as _logging_mod
 from lg_orch.logging import (
-    _level_to_int,
     _redact_event_dict,
     configure_logging,
     init_telemetry,
 )
-
 
 # ---------------------------------------------------------------------------
 # _redact_event_dict: additional edge cases

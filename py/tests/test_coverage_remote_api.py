@@ -1,11 +1,10 @@
 """Tests for remote_api.py handler helpers and route dispatch to boost coverage."""
+
 from __future__ import annotations
 
 import io
 import json
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,7 +18,6 @@ from lg_orch.remote_api import (
     _request_client_ip,
     _request_scheme,
 )
-
 
 # ---------------------------------------------------------------------------
 # _json_response
@@ -119,7 +117,7 @@ def test_authorize_healthz_unauthenticated() -> None:
 
 
 def test_authorize_metrics_always_allowed() -> None:
-    subject, err = _authorize_request(
+    _subject, err = _authorize_request(
         route="/metrics",
         request_path="/metrics",
         auth_mode="bearer",
@@ -131,7 +129,7 @@ def test_authorize_metrics_always_allowed() -> None:
 
 
 def test_authorize_off_mode() -> None:
-    subject, err = _authorize_request(
+    _subject, err = _authorize_request(
         route="/v1/runs",
         request_path="/v1/runs",
         auth_mode="off",
@@ -152,7 +150,7 @@ def test_authorize_unsupported_auth_mode() -> None:
         allow_unauthenticated_healthz=False,
     )
     assert err is not None
-    status, _, body = err
+    status, _, _body = err
     assert status == 500
 
 
@@ -189,7 +187,7 @@ def test_authorize_bearer_from_query_string() -> None:
 
 
 def test_audit_action_run_create() -> None:
-    action, rid = _audit_action_and_resource(
+    action, _rid = _audit_action_and_resource(
         method="POST", route="/v1/runs", path_parts=["v1", "runs"], status=201
     )
     assert action == "run.create"
@@ -344,7 +342,7 @@ def test_api_root_redirects_to_spa(tmp_path: Path) -> None:
 
 def test_api_root_rejects_post(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/",
@@ -355,7 +353,7 @@ def test_api_root_rejects_post(tmp_path: Path) -> None:
 
 def test_api_healthz_rejects_post(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/healthz",
@@ -388,9 +386,7 @@ def test_api_runs_search_missing_query(tmp_path: Path) -> None:
     assert json.loads(body)["error"] == "missing_required_param"
 
 
-def test_api_runs_search_with_query(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_api_runs_search_with_query(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     monkeypatch.setattr(
         remote_api,
@@ -419,7 +415,7 @@ def test_api_runs_search_with_query(
 
 def test_api_v1_runs_method_not_allowed(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="DELETE",
         request_path="/v1/runs",
@@ -431,7 +427,7 @@ def test_api_v1_runs_method_not_allowed(tmp_path: Path) -> None:
 
 def test_api_v1_run_logs_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/v1/runs/missing/logs",
@@ -442,7 +438,7 @@ def test_api_v1_run_logs_not_found(tmp_path: Path) -> None:
 
 def test_api_v1_run_cancel_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs/missing/cancel",
@@ -465,7 +461,7 @@ def test_api_v1_run_approve_rejects_bad_json(tmp_path: Path) -> None:
 
 def test_api_v1_run_approve_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs/missing/approve",
@@ -476,7 +472,7 @@ def test_api_v1_run_approve_not_found(tmp_path: Path) -> None:
 
 def test_api_v1_run_reject_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs/missing/reject",
@@ -487,7 +483,7 @@ def test_api_v1_run_reject_not_found(tmp_path: Path) -> None:
 
 def test_api_v1_run_get_method_not_allowed(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs/some-run",
@@ -499,7 +495,7 @@ def test_api_v1_run_get_method_not_allowed(tmp_path: Path) -> None:
 
 def test_api_metrics_endpoint(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, ct, body = _api_http_response(
+    status, _ct, _body = _api_http_response(
         service,
         method="GET",
         request_path="/metrics",

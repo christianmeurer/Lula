@@ -3,12 +3,12 @@
 These tests verify the API contract that the SPA and VS Code extension
 depend on, without requiring a running agent or external services.
 """
+
 from __future__ import annotations
 
 import io
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -55,7 +55,7 @@ def test_spa_dist_served_or_503(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
 
     # Without dist directory: expect 503 (dist not found)
-    status, ct, body = _api_http_response(
+    status, _ct, body = _api_http_response(
         service,
         method="GET",
         request_path="/app/",
@@ -70,9 +70,7 @@ def test_spa_dist_served_or_503(tmp_path: Path) -> None:
         assert len(decoded) > 0
 
 
-def test_sse_stream_endpoint_exists(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sse_stream_endpoint_exists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify /v1/runs/{id}/stream returns SSE content-type or 404 for missing run.
 
     The SSE endpoint is the backbone of the real-time operations console in
@@ -88,10 +86,12 @@ def test_sse_stream_endpoint_exists(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "Analyze the codebase",
-            "run_id": "sse-test-run",
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "Analyze the codebase",
+                "run_id": "sse-test-run",
+            }
+        ).encode(),
     )
     assert status == 201
 
@@ -168,9 +168,7 @@ def test_approval_endpoint_rejects_bad_json(tmp_path: Path) -> None:
     assert status == 405
 
 
-def test_run_submission_returns_run_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_submission_returns_run_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify POST /v1/runs returns a run_id in the response.
 
     This is the primary endpoint used by both the VS Code extension and
@@ -185,10 +183,12 @@ def test_run_submission_returns_run_id(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "Implement feature X",
-            "run_id": "explicit-id",
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "Implement feature X",
+                "run_id": "explicit-id",
+            }
+        ).encode(),
     )
     assert status == 201
     assert ct == "application/json; charset=utf-8"
@@ -203,9 +203,11 @@ def test_run_submission_returns_run_id(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "Analyze code quality",
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "Analyze code quality",
+            }
+        ).encode(),
     )
     assert status == 201
     payload = json.loads(body.decode("utf-8"))
@@ -226,10 +228,12 @@ def test_run_submission_returns_run_id(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "Another request",
-            "run_id": "explicit-id",
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "Another request",
+                "run_id": "explicit-id",
+            }
+        ).encode(),
     )
     assert status == 409
     payload = json.loads(body.decode("utf-8"))

@@ -1,4 +1,5 @@
 """Tests for config.py helper functions and edge cases to boost coverage."""
+
 from __future__ import annotations
 
 import tempfile
@@ -29,7 +30,6 @@ from lg_orch.config import (
     _require_str,
     load_config,
 )
-
 
 # ---------------------------------------------------------------------------
 # _is_valid_sha256_hex
@@ -445,12 +445,16 @@ def test_parse_model_routing_empty_local_provider_falls_back() -> None:
 
 
 def test_parse_model_routing_empty_cache_affinity_falls_back() -> None:
-    routing = _parse_model_routing({"routing": {"local_provider": "local", "default_cache_affinity": ""}})
+    routing = _parse_model_routing(
+        {"routing": {"local_provider": "local", "default_cache_affinity": ""}}
+    )
     assert routing.default_cache_affinity == "workspace"
 
 
 def test_parse_model_routing_empty_fallback_classes_defaults() -> None:
-    routing = _parse_model_routing({"routing": {"local_provider": "local", "fallback_task_classes": []}})
+    routing = _parse_model_routing(
+        {"routing": {"local_provider": "local", "fallback_task_classes": []}}
+    )
     assert "summarization" in routing.fallback_task_classes
 
 
@@ -552,7 +556,9 @@ def test_load_config_invalid_toml_raises(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_load_config_sla_with_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [trace]
 enabled = false
 
@@ -564,6 +570,7 @@ model_id = "gpt-4"
 threshold_p95_s = 5.0
 fallback_model_id = "gpt-3.5-turbo"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -575,12 +582,15 @@ fallback_model_id = "gpt-3.5-turbo"
 
 
 def test_load_config_sla_bad_threshold_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [[sla.entries]]
 model_id = "gpt-4"
 threshold_p95_s = "not_a_number"
 fallback_model_id = "gpt-3.5-turbo"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -589,11 +599,14 @@ fallback_model_id = "gpt-3.5-turbo"
 
 
 def test_load_config_sla_missing_model_id_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [[sla.entries]]
 threshold_p95_s = 5.0
 fallback_model_id = "gpt-3.5-turbo"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -602,10 +615,13 @@ fallback_model_id = "gpt-3.5-turbo"
 
 
 def test_load_config_bad_auth_mode_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [remote_api]
 auth_mode = "oauth"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -614,10 +630,13 @@ auth_mode = "oauth"
 
 
 def test_load_config_bearer_without_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [remote_api]
 auth_mode = "bearer"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     monkeypatch.delenv("LG_REMOTE_API_BEARER_TOKEN", raising=False)
     with tempfile.TemporaryDirectory() as td:
@@ -627,11 +646,14 @@ auth_mode = "bearer"
 
 
 def test_load_config_bad_namespace_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [remote_api]
 auth_mode = "off"
 default_namespace = "invalid namespace with spaces!!"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -640,22 +662,28 @@ default_namespace = "invalid namespace with spaces!!"
 
 
 def test_load_config_bad_checkpoint_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [checkpoint]
 backend = "mysql"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
-        with pytest.raises(ConfigError, match="checkpoint.backend"):
+        with pytest.raises(ConfigError, match=r"checkpoint\.backend"):
             load_config(repo_root=root)
 
 
 def test_load_config_bad_audit_sink_type_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [audit]
 sink_type = "azure"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)

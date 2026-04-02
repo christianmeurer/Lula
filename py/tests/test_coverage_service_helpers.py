@@ -2,27 +2,22 @@
 _write_trace_approval_state, _apply_approval_state_to_record.
 Also covers api/metrics.py and more of api/streaming.py.
 """
+
 from __future__ import annotations
 
 import json
-import subprocess
-from dataclasses import field
 from pathlib import Path
 from typing import Any
-
-import pytest
 
 from lg_orch.api.service import (
     RunRecord,
     _apply_approval_state_to_record,
-    _approval_state_from_trace,
     _resume_argv,
     _semantic_memories_from_trace,
     _trace_path_for_run,
     _utc_now,
     _write_trace_approval_state,
 )
-
 
 # ---------------------------------------------------------------------------
 # _trace_path_for_run
@@ -230,31 +225,38 @@ def test_write_trace_approval_state_invalid_json(tmp_path: Path) -> None:
 
 def test_apply_approval_state_to_record_basic() -> None:
     record = _make_record()
-    _apply_approval_state_to_record(record, {
-        "pending": True,
-        "summary": "Needs approval",
-        "details": {"challenge_id": "ch1", "operation_class": "apply_patch"},
-        "history": [{"action": "requested", "tool": "apply_patch"}],
-        "thread_id": "t1",
-        "checkpoint_id": "cp1",
-    })
+    _apply_approval_state_to_record(
+        record,
+        {
+            "pending": True,
+            "summary": "Needs approval",
+            "details": {"challenge_id": "ch1", "operation_class": "apply_patch"},
+            "history": [{"action": "requested", "tool": "apply_patch"}],
+            "thread_id": "t1",
+            "checkpoint_id": "cp1",
+        },
+    )
     assert record.thread_id == "t1"
     assert record.checkpoint_id == "cp1"
     assert record.pending_approval is True
-    assert "approval" in record.pending_approval_summary.lower() or len(record.pending_approval_summary) > 0
+    summary = record.pending_approval_summary
+    assert "approval" in summary.lower() or len(summary) > 0
     assert len(record.approval_history) == 1
 
 
 def test_apply_approval_state_to_record_no_pending() -> None:
     record = _make_record()
-    _apply_approval_state_to_record(record, {
-        "pending": False,
-        "summary": "",
-        "details": {},
-        "history": [],
-        "thread_id": "",
-        "checkpoint_id": "",
-    })
+    _apply_approval_state_to_record(
+        record,
+        {
+            "pending": False,
+            "summary": "",
+            "details": {},
+            "history": [],
+            "thread_id": "",
+            "checkpoint_id": "",
+        },
+    )
     assert record.pending_approval is False
     assert record.pending_approval_summary == ""
 
@@ -267,7 +269,7 @@ def test_apply_approval_state_to_record_no_pending() -> None:
 def test_metrics_handle_returns_200() -> None:
     from lg_orch.api.metrics import handle_metrics
 
-    status, ct, body = handle_metrics("GET")
+    status, ct, _body = handle_metrics("GET")
     assert status == 200
     assert "text/plain" in ct or "text" in ct
 

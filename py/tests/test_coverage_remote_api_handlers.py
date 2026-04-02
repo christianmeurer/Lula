@@ -1,4 +1,5 @@
 """Additional remote_api handler coverage for approval-policy, vote, SPA, and admin routes."""
+
 from __future__ import annotations
 
 import io
@@ -87,7 +88,7 @@ def test_legacy_runs_approve_non_dict(tmp_path: Path) -> None:
 
 def test_legacy_runs_approve_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/runs/missing/approve",
@@ -98,7 +99,7 @@ def test_legacy_runs_approve_not_found(tmp_path: Path) -> None:
 
 def test_legacy_runs_reject_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/runs/missing/reject",
@@ -148,50 +149,42 @@ def test_runs_approval_policy_unknown_kind(tmp_path: Path) -> None:
     assert json.loads(body)["error"] == "unknown_policy_kind"
 
 
-def test_runs_approval_policy_timed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_runs_approval_policy_timed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _create_run(service, monkeypatch, "r1")
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/runs/r1/approval-policy",
-        request_body=json.dumps({
-            "policy": {"kind": "timed", "timeout_seconds": 60, "auto_action": "approve"}
-        }).encode(),
+        request_body=json.dumps(
+            {"policy": {"kind": "timed", "timeout_seconds": 60, "auto_action": "approve"}}
+        ).encode(),
     )
     assert status == 200
 
 
-def test_runs_approval_policy_quorum(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_runs_approval_policy_quorum(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _create_run(service, monkeypatch, "r2")
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/runs/r2/approval-policy",
-        request_body=json.dumps({
-            "policy": {"kind": "quorum", "required_approvals": 2, "required_rejections": 1}
-        }).encode(),
+        request_body=json.dumps(
+            {"policy": {"kind": "quorum", "required_approvals": 2, "required_rejections": 1}}
+        ).encode(),
     )
     assert status == 200
 
 
-def test_runs_approval_policy_role(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_runs_approval_policy_role(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _create_run(service, monkeypatch, "r3")
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/runs/r3/approval-policy",
-        request_body=json.dumps({
-            "policy": {"kind": "role", "required_roles": ["admin"]}
-        }).encode(),
+        request_body=json.dumps({"policy": {"kind": "role", "required_roles": ["admin"]}}).encode(),
     )
     assert status == 200
 
@@ -243,9 +236,7 @@ def test_runs_vote_policy_not_found(tmp_path: Path) -> None:
         service,
         method="POST",
         request_path="/runs/run1/vote",
-        request_body=json.dumps({
-            "reviewer_id": "alice", "action": "approve"
-        }).encode(),
+        request_body=json.dumps({"reviewer_id": "alice", "action": "approve"}).encode(),
     )
     assert status == 404
     assert json.loads(body)["error"] == "policy_not_found"
@@ -259,7 +250,7 @@ def test_runs_vote_policy_not_found(tmp_path: Path) -> None:
 def test_spa_route_returns_response(tmp_path: Path) -> None:
     """SPA route via /app/ should return either dist content or 503."""
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/app/",
@@ -271,7 +262,7 @@ def test_spa_route_returns_response(tmp_path: Path) -> None:
 
 def test_spa_route_rejects_post(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/app/something",
@@ -287,7 +278,7 @@ def test_spa_route_rejects_post(tmp_path: Path) -> None:
 
 def test_runs_search_rejects_post(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/runs/search",
@@ -303,7 +294,7 @@ def test_runs_search_rejects_post(tmp_path: Path) -> None:
 
 def test_unknown_route_returns_404(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/v1/unknown/path",
@@ -319,7 +310,7 @@ def test_unknown_route_returns_404(tmp_path: Path) -> None:
 
 def test_legacy_runs_list_rejects_post(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/runs/",
@@ -335,7 +326,7 @@ def test_legacy_runs_list_rejects_post(tmp_path: Path) -> None:
 
 def test_v1_run_approve_rejects_get(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/v1/runs/some-run/approve",
@@ -346,7 +337,7 @@ def test_v1_run_approve_rejects_get(tmp_path: Path) -> None:
 
 def test_v1_run_cancel_rejects_get(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/v1/runs/some-run/cancel",
@@ -357,7 +348,7 @@ def test_v1_run_cancel_rejects_get(tmp_path: Path) -> None:
 
 def test_v1_run_logs_rejects_post(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs/some-run/logs",

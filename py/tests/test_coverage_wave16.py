@@ -3,15 +3,15 @@
 Focuses on api/service.py helpers, api/approvals.py, api/streaming.py,
 and api/admin.py.
 """
+
 from __future__ import annotations
 
 import io
 import json
 import queue
-import threading
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,15 +24,10 @@ from lg_orch.api.approvals import (
 )
 from lg_orch.api.service import (
     RemoteAPIService,
-    RunRecord,
-    _approval_state_from_trace,
     _apply_trace_state_to_payload,
-    _non_empty_str,
-    _normalized_run_id,
-    _RateLimiter,
-    _utc_now,
+    _approval_state_from_trace,
 )
-from lg_orch.api.streaming import push_run_event, _run_streams, _run_streams_lock
+from lg_orch.api.streaming import _run_streams, _run_streams_lock, push_run_event
 from lg_orch.remote_api import _api_http_response
 
 
@@ -78,7 +73,8 @@ def test_approval_token_for_challenge_hmac(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_tool_name_for_approval_apply_patch() -> None:
-    assert tool_name_for_approval(operation_class="apply_patch", challenge_id="ch1") == "apply_patch"
+    result = tool_name_for_approval(operation_class="apply_patch", challenge_id="ch1")
+    assert result == "apply_patch"
 
 
 def test_tool_name_for_approval_exec() -> None:
@@ -96,26 +92,32 @@ def test_approval_summary_text_basic() -> None:
 
 
 def test_approval_summary_text_with_challenge() -> None:
-    text = approval_summary_text({
-        "operation_class": "apply_patch",
-        "challenge_id": "ch1",
-    })
+    text = approval_summary_text(
+        {
+            "operation_class": "apply_patch",
+            "challenge_id": "ch1",
+        }
+    )
     assert "ch1" in text
 
 
 def test_approval_summary_text_with_custom_reason() -> None:
-    text = approval_summary_text({
-        "operation_class": "apply_patch",
-        "reason": "custom explanation",
-    })
+    text = approval_summary_text(
+        {
+            "operation_class": "apply_patch",
+            "reason": "custom explanation",
+        }
+    )
     assert "custom explanation" in text
 
 
 def test_approval_summary_text_standard_reason_not_appended() -> None:
-    text = approval_summary_text({
-        "operation_class": "apply_patch",
-        "reason": "approval_required",
-    })
+    text = approval_summary_text(
+        {
+            "operation_class": "apply_patch",
+            "reason": "approval_required",
+        }
+    )
     # Should NOT append the reason because it's one of the standard reasons
     assert text.count("approval_required") <= 1
 
@@ -234,7 +236,7 @@ def test_push_run_event_with_active_stream() -> None:
 
 def test_admin_healing_start_method_not_allowed(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/healing/start",
@@ -281,7 +283,7 @@ def test_admin_healing_start_missing_repo_path(tmp_path: Path) -> None:
 
 def test_admin_healing_stop_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/healing/loop1/stop",
@@ -292,7 +294,7 @@ def test_admin_healing_stop_not_found(tmp_path: Path) -> None:
 
 def test_admin_healing_jobs_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/healing/loop1/jobs",
@@ -327,13 +329,12 @@ def test_apply_trace_state_preserves_existing_payload() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_api_v1_run_stream_sentinel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_api_v1_run_stream_sentinel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The stream endpoint returns a special sentinel for SSE handling."""
     service = RemoteAPIService(repo_root=tmp_path)
     monkeypatch.setattr(
-        remote_api, "_spawn_run_subprocess",
+        remote_api,
+        "_spawn_run_subprocess",
         lambda *, argv, cwd, env=None: DummyProcess(output="done\n", returncode=0),
     )
     monkeypatch.setattr(remote_api, "_start_daemon_thread", lambda *, target, name: target())
@@ -344,7 +345,7 @@ def test_api_v1_run_stream_sentinel(
         request_path="/v1/runs",
         request_body=json.dumps({"request": "test", "run_id": "stream-test"}).encode(),
     )
-    status, ct, body = _api_http_response(
+    status, ct, _body = _api_http_response(
         service,
         method="GET",
         request_path="/v1/runs/stream-test/stream",
@@ -355,13 +356,12 @@ def test_api_v1_run_stream_sentinel(
     assert ct == "sse"
 
 
-def test_api_runs_stream_legacy(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_api_runs_stream_legacy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Legacy /runs/{id}/stream returns SSE or 404."""
     service = RemoteAPIService(repo_root=tmp_path)
     monkeypatch.setattr(
-        remote_api, "_spawn_run_subprocess",
+        remote_api,
+        "_spawn_run_subprocess",
         lambda *, argv, cwd, env=None: DummyProcess(output="done\n", returncode=0),
     )
     monkeypatch.setattr(remote_api, "_start_daemon_thread", lambda *, target, name: target())
@@ -372,7 +372,7 @@ def test_api_runs_stream_legacy(
         request_path="/v1/runs",
         request_body=json.dumps({"request": "test", "run_id": "stream-legacy"}).encode(),
     )
-    status, ct, body = _api_http_response(
+    status, ct, _body = _api_http_response(
         service,
         method="GET",
         request_path="/runs/stream-legacy/stream",
@@ -384,7 +384,7 @@ def test_api_runs_stream_legacy(
 
 def test_api_runs_stream_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/runs/nonexistent/stream",

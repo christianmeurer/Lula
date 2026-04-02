@@ -1,4 +1,5 @@
 """Tests for load_config validation branches that remain uncovered."""
+
 from __future__ import annotations
 
 import tempfile
@@ -179,7 +180,9 @@ def test_load_config_working_set_tokens_too_low_raises(monkeypatch: pytest.Monke
             load_config(repo_root=root)
 
 
-def test_load_config_tool_result_summary_chars_too_low_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_config_tool_result_summary_chars_too_low_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     toml = _MINIMAL_TOML.replace(
         "tool_timeout_s = 300",
         "tool_timeout_s = 300\ntool_result_summary_chars = 10",
@@ -192,11 +195,14 @@ def test_load_config_tool_result_summary_chars_too_low_raises(monkeypatch: pytes
 
 
 def test_load_config_mcp_server_bad_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML.replace("enabled = false", "enabled = true") + """
+    toml = (
+        _MINIMAL_TOML.replace("enabled = false", "enabled = true")
+        + """
 [mcp.servers.bad]
 command = "echo"
 timeout_s = 0
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -205,10 +211,13 @@ timeout_s = 0
 
 
 def test_load_config_mcp_server_bad_command_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML.replace("enabled = false", "enabled = true") + """
+    toml = (
+        _MINIMAL_TOML.replace("enabled = false", "enabled = true")
+        + """
 [mcp.servers.bad]
 command = ""
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -217,11 +226,14 @@ command = ""
 
 
 def test_load_config_mcp_server_bad_args_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML.replace("enabled = false", "enabled = true") + """
+    toml = (
+        _MINIMAL_TOML.replace("enabled = false", "enabled = true")
+        + """
 [mcp.servers.bad]
 command = "echo"
 args = "not_a_list"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -230,11 +242,14 @@ args = "not_a_list"
 
 
 def test_load_config_mcp_server_bad_schema_hash_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML.replace("enabled = false", "enabled = true") + """
+    toml = (
+        _MINIMAL_TOML.replace("enabled = false", "enabled = true")
+        + """
 [mcp.servers.bad]
 command = "echo"
 schema_hash = "not-a-valid-sha256"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -244,11 +259,14 @@ schema_hash = "not-a-valid-sha256"
 
 def test_load_config_mcp_server_valid_schema_hash(monkeypatch: pytest.MonkeyPatch) -> None:
     valid_sha = "a" * 64
-    toml = _MINIMAL_TOML.replace("enabled = false", "enabled = true") + f"""
+    toml = (
+        _MINIMAL_TOML.replace("enabled = false", "enabled = true")
+        + f"""
 [mcp.servers.good]
 command = "echo"
 schema_hash = "{valid_sha}"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -257,11 +275,14 @@ schema_hash = "{valid_sha}"
 
 
 def test_load_config_rate_limit_rps_negative_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [remote_api]
 auth_mode = "off"
 rate_limit_rps = -1
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -274,10 +295,13 @@ rate_limit_rps = -1
 
 
 def test_load_config_checkpoint_redis_ttl_zero_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML + """
+    toml = (
+        _MINIMAL_TOML
+        + """
 [checkpoint]
 redis_ttl_seconds = 0
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -304,11 +328,14 @@ def test_load_config_runner_base_url_from_env(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_load_config_mcp_server_cwd_non_string_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML.replace("enabled = false", "enabled = true") + """
+    toml = (
+        _MINIMAL_TOML.replace("enabled = false", "enabled = true")
+        + """
 [mcp.servers.bad]
 command = "echo"
 cwd = 123
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)
@@ -317,11 +344,14 @@ cwd = 123
 
 
 def test_load_config_mcp_server_env_non_dict_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    toml = _MINIMAL_TOML.replace("enabled = false", "enabled = true") + """
+    toml = (
+        _MINIMAL_TOML.replace("enabled = false", "enabled = true")
+        + """
 [mcp.servers.bad]
 command = "echo"
 env = "not_a_dict"
 """
+    )
     monkeypatch.setenv("LG_PROFILE", "dev")
     with tempfile.TemporaryDirectory() as td:
         root = _write_config(td, "dev", toml)

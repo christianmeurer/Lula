@@ -1,14 +1,12 @@
 """Deep coverage for api/service.py: create_run, get_run, list_runs, approve flow,
 and more edge cases through the _api_http_response interface.
 """
+
 from __future__ import annotations
 
 import io
 import json
-import time
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -67,29 +65,27 @@ def _setup_spawn(monkeypatch: pytest.MonkeyPatch, process: DummyProcess | None =
 # ---------------------------------------------------------------------------
 
 
-def test_create_run_with_trace_out_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_create_run_with_trace_out_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
     status, _, body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "hello",
-            "run_id": "trace-test",
-            "trace_out_dir": "custom/traces",
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "hello",
+                "run_id": "trace-test",
+                "trace_out_dir": "custom/traces",
+            }
+        ).encode(),
     )
     assert status == 201
     payload = json.loads(body)
     assert payload["run_id"] == "trace-test"
 
 
-def test_create_run_auto_generates_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_create_run_auto_generates_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
     status, _, body = _api_http_response(
@@ -104,30 +100,28 @@ def test_create_run_auto_generates_id(
     assert len(payload["run_id"]) > 0
 
 
-def test_create_run_with_config_overrides(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_create_run_with_config_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "with config",
-            "run_id": "cfg-test",
-            "config": {"max_loops": 3},
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "with config",
+                "run_id": "cfg-test",
+                "config": {"max_loops": 3},
+            }
+        ).encode(),
     )
     assert status == 201
 
 
-def test_create_run_empty_request_rejected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_create_run_empty_request_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs",
@@ -136,20 +130,20 @@ def test_create_run_empty_request_rejected(
     assert status == 400
 
 
-def test_create_run_with_view_parameter(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_create_run_with_view_parameter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "view test",
-            "run_id": "view-test",
-            "view": "console",
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "view test",
+                "run_id": "view-test",
+                "view": "console",
+            }
+        ).encode(),
     )
     assert status == 201
 
@@ -159,9 +153,7 @@ def test_create_run_with_view_parameter(
 # ---------------------------------------------------------------------------
 
 
-def test_get_run_with_trace_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_run_with_trace_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
 
@@ -170,11 +162,13 @@ def test_get_run_with_trace_file(
         service,
         method="POST",
         request_path="/v1/runs",
-        request_body=json.dumps({
-            "request": "test trace",
-            "run_id": "trace-read",
-            "trace_out_dir": "artifacts/test",
-        }).encode(),
+        request_body=json.dumps(
+            {
+                "request": "test trace",
+                "run_id": "trace-read",
+                "trace_out_dir": "artifacts/test",
+            }
+        ).encode(),
     )
     assert status == 201
 
@@ -182,17 +176,22 @@ def test_get_run_with_trace_file(
     trace_dir = tmp_path / "artifacts" / "test"
     trace_dir.mkdir(parents=True, exist_ok=True)
     trace_path = trace_dir / "run-trace-read.json"
-    trace_path.write_text(json.dumps({
-        "request": "test trace",
-        "final": "Result of trace",
-        "checkpoint": {"thread_id": "t1", "latest_checkpoint_id": "cp1"},
-        "approval": {
-            "pending": True,
-            "summary": "Needs approval",
-            "pending_details": {"challenge_id": "ch1", "operation_class": "apply_patch"},
-            "history": [],
-        },
-    }), encoding="utf-8")
+    trace_path.write_text(
+        json.dumps(
+            {
+                "request": "test trace",
+                "final": "Result of trace",
+                "checkpoint": {"thread_id": "t1", "latest_checkpoint_id": "cp1"},
+                "approval": {
+                    "pending": True,
+                    "summary": "Needs approval",
+                    "pending_details": {"challenge_id": "ch1", "operation_class": "apply_patch"},
+                    "history": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     # Read run detail
     status, _, body = _api_http_response(
@@ -213,9 +212,7 @@ def test_get_run_with_trace_file(
 # ---------------------------------------------------------------------------
 
 
-def test_list_runs_multiple(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_runs_multiple(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
 
@@ -243,9 +240,7 @@ def test_list_runs_multiple(
 # ---------------------------------------------------------------------------
 
 
-def test_search_runs_with_limit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_search_runs_with_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
 
@@ -254,7 +249,9 @@ def test_search_runs_with_limit(
             service,
             method="POST",
             request_path="/v1/runs",
-            request_body=json.dumps({"request": f"search test {i}", "run_id": f"search-{i}"}).encode(),
+            request_body=json.dumps(
+                {"request": f"search test {i}", "run_id": f"search-{i}"}
+            ).encode(),
         )
 
     status, _, body = _api_http_response(
@@ -273,9 +270,7 @@ def test_search_runs_with_limit(
 # ---------------------------------------------------------------------------
 
 
-def test_approve_run_already_completed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_approve_run_already_completed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
 
@@ -288,7 +283,7 @@ def test_approve_run_already_completed(
     )
 
     # Try to approve a completed run
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs/done-run/approve",
@@ -300,7 +295,7 @@ def test_approve_run_already_completed(
 
 def test_reject_run_not_found(tmp_path: Path) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
-    status, _, body = _api_http_response(
+    status, _, _body = _api_http_response(
         service,
         method="POST",
         request_path="/v1/runs/nonexistent/reject",
@@ -314,9 +309,7 @@ def test_reject_run_not_found(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_logs_for_completed_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_logs_for_completed_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     service = RemoteAPIService(repo_root=tmp_path)
     _setup_spawn(monkeypatch)
 
@@ -360,7 +353,7 @@ def test_rate_limiter_on_service(tmp_path: Path) -> None:
     assert status1 == 200
 
     # Subsequent requests may be rate-limited
-    status2, _, body = _api_http_response(
+    status2, _, _body = _api_http_response(
         service,
         method="GET",
         request_path="/healthz",

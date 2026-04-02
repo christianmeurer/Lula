@@ -1,11 +1,20 @@
 """Tests for memory.py helpers and auth.py coverage gaps."""
-from __future__ import annotations
 
-from typing import Any
+from __future__ import annotations
 
 import pytest
 from pydantic import BaseModel
 
+from lg_orch.auth import (
+    AuthError,
+    JWTSettings,
+    TokenClaims,
+    _check_roles,
+    _extract_bearer_token,
+    _route_policy,
+    authorize_stdlib,
+    jwt_settings_from_config,
+)
 from lg_orch.memory import (
     _as_int,
     _normalize_history_policy,
@@ -15,7 +24,6 @@ from lg_orch.memory import (
     _tool_results,
     approx_token_count,
 )
-
 
 # ---------------------------------------------------------------------------
 # _state_get
@@ -126,19 +134,23 @@ def test_normalize_history_policy_defaults() -> None:
 
 
 def test_normalize_history_policy_custom_values() -> None:
-    result = _normalize_history_policy({
-        "retain_recent_tool_results": 50,
-        "read_file_prune_threshold_chars": 5000,
-    })
+    result = _normalize_history_policy(
+        {
+            "retain_recent_tool_results": 50,
+            "read_file_prune_threshold_chars": 5000,
+        }
+    )
     assert result["retain_recent_tool_results"] == 50
     assert result["read_file_prune_threshold_chars"] == 5000
 
 
 def test_normalize_history_policy_clamps_low() -> None:
-    result = _normalize_history_policy({
-        "retain_recent_tool_results": 1,
-        "read_file_prune_threshold_chars": 10,
-    })
+    result = _normalize_history_policy(
+        {
+            "retain_recent_tool_results": 1,
+            "read_file_prune_threshold_chars": 10,
+        }
+    )
     assert result["retain_recent_tool_results"] >= 5
     assert result["read_file_prune_threshold_chars"] >= 200
 
@@ -195,20 +207,11 @@ def test_approx_token_count_longer() -> None:
 # ---------------------------------------------------------------------------
 
 
-from lg_orch.auth import (
-    AuthError,
-    JWTSettings,
-    TokenClaims,
-    _check_roles,
-    _extract_bearer_token,
-    _route_policy,
-    authorize_stdlib,
-    jwt_settings_from_config,
-)
-
-
 def test_route_policy_healthz() -> None:
-    assert _route_policy(route="/healthz", method="GET", path_parts=["healthz"], jwt_enabled=True) == ()
+    assert (
+        _route_policy(route="/healthz", method="GET", path_parts=["healthz"], jwt_enabled=True)
+        == ()
+    )
 
 
 def test_route_policy_root() -> None:
@@ -220,7 +223,10 @@ def test_route_policy_ui() -> None:
 
 
 def test_route_policy_metrics_jwt_disabled() -> None:
-    assert _route_policy(route="/metrics", method="GET", path_parts=["metrics"], jwt_enabled=False) == ()
+    assert (
+        _route_policy(route="/metrics", method="GET", path_parts=["metrics"], jwt_enabled=False)
+        == ()
+    )
 
 
 def test_route_policy_metrics_jwt_enabled() -> None:
@@ -229,66 +235,116 @@ def test_route_policy_metrics_jwt_enabled() -> None:
 
 
 def test_route_policy_app() -> None:
-    assert _route_policy(route="/app/index.html", method="GET", path_parts=["app", "index.html"], jwt_enabled=True) == ()
+    assert (
+        _route_policy(
+            route="/app/index.html",
+            method="GET",
+            path_parts=["app", "index.html"],
+            jwt_enabled=True,
+        )
+        == ()
+    )
 
 
 def test_route_policy_post_v1_runs() -> None:
-    roles = _route_policy(route="/v1/runs", method="POST", path_parts=["v1", "runs"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/v1/runs", method="POST", path_parts=["v1", "runs"], jwt_enabled=True
+    )
     assert "operator" in roles
 
 
 def test_route_policy_get_v1_runs() -> None:
-    roles = _route_policy(route="/v1/runs", method="GET", path_parts=["v1", "runs"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/v1/runs", method="GET", path_parts=["v1", "runs"], jwt_enabled=True
+    )
     assert "viewer" in roles
 
 
 def test_route_policy_runs_search() -> None:
-    roles = _route_policy(route="/runs/search", method="GET", path_parts=["runs", "search"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/runs/search", method="GET", path_parts=["runs", "search"], jwt_enabled=True
+    )
     assert "viewer" in roles
 
 
 def test_route_policy_get_v1_run_detail() -> None:
-    roles = _route_policy(route="/v1/runs/abc", method="GET", path_parts=["v1", "runs", "abc"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/v1/runs/abc", method="GET", path_parts=["v1", "runs", "abc"], jwt_enabled=True
+    )
     assert "viewer" in roles
 
 
 def test_route_policy_get_runs_detail() -> None:
-    roles = _route_policy(route="/runs/abc", method="GET", path_parts=["runs", "abc"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/runs/abc", method="GET", path_parts=["runs", "abc"], jwt_enabled=True
+    )
     assert "viewer" in roles
 
 
 def test_route_policy_get_runs_stream() -> None:
-    roles = _route_policy(route="/runs/abc/stream", method="GET", path_parts=["runs", "abc", "stream"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/runs/abc/stream",
+        method="GET",
+        path_parts=["runs", "abc", "stream"],
+        jwt_enabled=True,
+    )
     assert "viewer" in roles
 
 
 def test_route_policy_logs() -> None:
-    roles = _route_policy(route="/v1/runs/abc/logs", method="GET", path_parts=["v1", "runs", "abc", "logs"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/v1/runs/abc/logs",
+        method="GET",
+        path_parts=["v1", "runs", "abc", "logs"],
+        jwt_enabled=True,
+    )
     assert "viewer" in roles
 
 
 def test_route_policy_approve() -> None:
-    roles = _route_policy(route="/v1/runs/abc/approve", method="POST", path_parts=["v1", "runs", "abc", "approve"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/v1/runs/abc/approve",
+        method="POST",
+        path_parts=["v1", "runs", "abc", "approve"],
+        jwt_enabled=True,
+    )
     assert "operator" in roles
 
 
 def test_route_policy_vote() -> None:
-    roles = _route_policy(route="/runs/abc/vote", method="POST", path_parts=["runs", "abc", "vote"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/runs/abc/vote",
+        method="POST",
+        path_parts=["runs", "abc", "vote"],
+        jwt_enabled=True,
+    )
     assert "operator" in roles
 
 
 def test_route_policy_approval_policy() -> None:
-    roles = _route_policy(route="/runs/abc/approval-policy", method="POST", path_parts=["runs", "abc", "approval-policy"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/runs/abc/approval-policy",
+        method="POST",
+        path_parts=["runs", "abc", "approval-policy"],
+        jwt_enabled=True,
+    )
     assert "admin" in roles
 
 
 def test_route_policy_delete_runs() -> None:
-    roles = _route_policy(route="/runs/abc", method="DELETE", path_parts=["runs", "abc"], jwt_enabled=True)
+    roles = _route_policy(
+        route="/runs/abc", method="DELETE", path_parts=["runs", "abc"], jwt_enabled=True
+    )
     assert "admin" in roles
 
 
 def test_route_policy_delete_v1_runs() -> None:
-    roles = _route_policy(route="/v1/runs/abc", method="DELETE", path_parts=["v1", "runs", "abc"], jwt_enabled=False)
+    roles = _route_policy(
+        route="/v1/runs/abc",
+        method="DELETE",
+        path_parts=["v1", "runs", "abc"],
+        jwt_enabled=False,
+    )
     # even with jwt_enabled=False, DELETE requires admin
     assert "admin" in roles
 

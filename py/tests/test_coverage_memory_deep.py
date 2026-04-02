@@ -2,25 +2,22 @@
 _fit_segments, dedupe_semantic_hits, context_budget_settings, ensure_history_policy,
 prune_pre_verification_history.
 """
+
 from __future__ import annotations
 
 from typing import Any
-
-import pytest
 
 from lg_orch.memory import (
     _first_nonempty_line,
     _fit_segments,
     _safe_json,
     _truncate_text_to_budget,
-    approx_token_count,
     context_budget_settings,
     dedupe_semantic_hits,
     ensure_history_policy,
     prune_pre_verification_history,
     summarize_tool_result,
 )
-
 
 # ---------------------------------------------------------------------------
 # _safe_json
@@ -196,7 +193,7 @@ def test_fit_segments_drops_when_exhausted() -> None:
         ("big", "x" * 10000),
         ("small", "tiny"),
     ]
-    combined, decisions = _fit_segments(segments, budget_tokens=10)
+    _combined, decisions = _fit_segments(segments, budget_tokens=10)
     # At least one segment should be dropped or compressed
     actions = [d["action"] for d in decisions]
     assert "dropped" in actions or "compressed" in actions
@@ -204,7 +201,7 @@ def test_fit_segments_drops_when_exhausted() -> None:
 
 def test_fit_segments_empty_segments_skipped() -> None:
     segments = [("empty", "  "), ("valid", "content")]
-    combined, decisions = _fit_segments(segments, budget_tokens=100)
+    combined, _decisions = _fit_segments(segments, budget_tokens=100)
     assert "valid" in combined
 
 
@@ -221,13 +218,15 @@ def test_context_budget_settings_defaults() -> None:
 
 
 def test_context_budget_settings_custom() -> None:
-    result = context_budget_settings({
-        "_budget_context": {
-            "stable_prefix_tokens": 500,
-            "working_set_tokens": 800,
-            "tool_result_summary_chars": 200,
+    result = context_budget_settings(
+        {
+            "_budget_context": {
+                "stable_prefix_tokens": 500,
+                "working_set_tokens": 800,
+                "tool_result_summary_chars": 200,
+            }
         }
-    })
+    )
     assert result["stable_prefix_tokens"] == 500
     assert result["working_set_tokens"] == 800
     assert result["tool_result_summary_chars"] == 200
@@ -249,7 +248,11 @@ def test_ensure_history_policy_adds_default() -> None:
 
 def test_ensure_history_policy_preserves_existing() -> None:
     state: dict[str, Any] = {
-        "history_policy": {"schema_version": 1, "retain_recent_tool_results": 100, "read_file_prune_threshold_chars": 5000}
+        "history_policy": {
+            "schema_version": 1,
+            "retain_recent_tool_results": 100,
+            "read_file_prune_threshold_chars": 5000,
+        }
     }
     result = ensure_history_policy(state)
     assert result["history_policy"]["retain_recent_tool_results"] == 100
