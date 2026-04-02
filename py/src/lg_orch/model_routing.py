@@ -5,6 +5,7 @@ from __future__ import annotations
 import collections
 import os
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
@@ -598,3 +599,56 @@ def get_routing_policy(
     if sla_config is not None:
         return build_sla_policy(sla_config)
     return None
+
+
+# ---------------------------------------------------------------------------
+# SYMPHONY pool-wise memory sharing
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FailureReflection:
+    """A natural language reflection on why a plan failed."""
+
+    loop_index: int
+    model_used: str
+    failure_class: str
+    reflection: str
+    timestamp: float = field(default_factory=time.time)
+
+
+class SharedReflectionPool:
+    """Pool-wise memory sharing across planning iterations.
+
+    When a plan fails, the executing agent generates a natural language
+    reflection. This reflection is broadcast to all future iterations,
+    allowing the entire agent pool to learn from isolated errors without
+    backpropagation (SYMPHONY, NeurIPS 2025).
+    """
+
+    def __init__(self, max_reflections: int = 20) -> None:
+        self._reflections: list[FailureReflection] = []
+        self._max = max_reflections
+        self._lock = threading.Lock()
+
+    def add_reflection(self, reflection: FailureReflection) -> None:
+        with self._lock:
+            self._reflections.append(reflection)
+            if len(self._reflections) > self._max:
+                self._reflections = self._reflections[-self._max :]
+
+    def get_context(self) -> str:
+        """Format reflections as context for the planner system prompt."""
+        with self._lock:
+            if not self._reflections:
+                return ""
+            lines = ["Previous failure reflections:"]
+            for r in self._reflections:
+                lines.append(
+                    f"- Loop {r.loop_index} ({r.model_used}): {r.failure_class} — {r.reflection}"
+                )
+            return "\n".join(lines)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._reflections.clear()
