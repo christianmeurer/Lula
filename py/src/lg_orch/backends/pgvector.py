@@ -59,7 +59,7 @@ class PgVectorMemoryStore:
         embedding_dim: int = 128,
         table_name: str = "semantic_memories",
     ) -> None:
-        import psycopg
+        import psycopg  # type: ignore[import-not-found]
 
         self._dsn = dsn
         self._embedder = embedder
@@ -110,7 +110,8 @@ class PgVectorMemoryStore:
                 (content, meta_json, vec_str, now),
             )
             row = cur.fetchone()
-            return int(row[0])  # type: ignore[index]
+            assert row is not None
+            return int(row[0])
 
     def search_semantic(
         self,
