@@ -198,9 +198,33 @@ _Derived from `docs/quality_report.md` (2026-03-20). Items are ordered by severi
 - **DNS:** `lula.eiv.eng.br` A record created (NS delegation pending at registrar)
 - **Direct access:** `curl -sk https://134.199.245.159/healthz -H "Host: lula.eiv.eng.br"`
 
-## Wave 19 (Planned)
+## Wave 19 — Advanced Features & Production Hardening (2026-04-02) ✅
 
-- [ ] Publish VS Code extension to marketplace (pending publisher documentation review)
-- [ ] Complete DNS NS delegation at registrar for lula.eiv.eng.br
-- [ ] Ratchet coverage to 85% (target: verifier.py, planner.py)
-- [ ] Q-RAG embedder optimization — RL-trained multi-step retrieval
+- [x] Q-RAG value-based multi-step retrieval — recency/diversity/success re-ranking (`qrag.py`)
+- [x] GLEAN audit summary wired into verifier — blocking violations now fail verification
+- [x] Token bucket rate limiter — per-client IP rate limiting, opt-in via `LG_RATE_LIMIT_ENABLED` (`rate_limit.py`)
+- [x] Prometheus alert rules — 7 production alerts (service down, latency, error rate, memory, approvals)
+- [x] 1,929 tests, 84.5% coverage
+
+## Deployment Status (2026-04-02)
+
+- **Cluster:** DOKS `lula-prod` in nyc3, 2× `s-2vcpu-4gb` nodes, autoscale to 4
+- **Image:** `registry.digitalocean.com/lula-orch/lula:v1.2.0`
+- **Helm chart:** `oci://registry.digitalocean.com/lula-orch/lula:1.2.0`
+- **Pods:** 2 orchestrator + 2 runner, all healthy
+- **Ingress:** nginx + cert-manager, TLS via Let's Encrypt
+- **DNS:** `lula.eiv.eng.br` A record created (NS delegation pending at registrar)
+
+## Wave 20 (Planned)
+
+### Blocked on User
+- [ ] Complete DNS NS delegation at registrar for `lula.eiv.eng.br`
+- [ ] Publish VS Code extension to marketplace (pending publisher documentation)
+
+### Code
+- [ ] Ratchet coverage gate from 84% to 88%
+- [ ] Wire Q-RAG retriever into LongTermMemoryStore.search_semantic() as opt-in re-ranker
+- [ ] Wire rate limiter summary into Prometheus metrics (rate_limit_requests_total, rate_limit_rejections_total)
+- [ ] Add structured logging for GLEAN violations (integrate with S3/GCS audit export)
+- [ ] Multi-repo meta-graph: test with 2+ repos on DOKS deployment
+- [ ] Chaos testing: verify HPA, PDB, and pod restart behavior under load
