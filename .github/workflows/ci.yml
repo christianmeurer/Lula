@@ -65,7 +65,7 @@ jobs:
 
       - name: Run pytest
         working-directory: py
-        run: uv run pytest tests/ -x -q --tb=short --cov=lg_orch --cov-fail-under=75
+        run: uv run pytest tests/ -x -q --tb=short --cov=lg_orch --cov-fail-under=81
 
       - name: Upload coverage report
         if: always()
@@ -183,7 +183,7 @@ jobs:
           workspaces: "rs -> rs/target"
 
       - name: Install trunk
-        run: curl -sSL https://github.com/trunk-rs/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar xz && sudo mv trunk /usr/local/bin/
+        run: curl -sSL https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz | tar xz && sudo mv trunk /usr/local/bin/
 
       - name: Build SPA
         working-directory: rs/spa-leptos
