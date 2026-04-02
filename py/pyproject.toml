@@ -41,6 +41,7 @@ dependencies = [
 [project.optional-dependencies]
 redis = ["redis[hiredis]>=5.0", "msgpack>=1.0"]
 postgres = ["psycopg[binary,pool]>=3.1"]
+pgvector = ["psycopg[binary]>=3.1,<4"]
 
 [build-system]
 requires = ["hatchling>=1.25,<2"]
@@ -104,7 +105,7 @@ files = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 # Coverage gate: ratchet up as test suite grows (target: 85%)
-addopts = "--cov=lg_orch --cov-report=xml:coverage.xml --cov-report=term-missing --cov-fail-under=81"
+addopts = "--cov=lg_orch --cov-report=xml:coverage.xml --cov-report=term-missing --cov-fail-under=82"
 markers = [
     "e2e: end-to-end smoke tests (run with LG_E2E=1)",
 ]

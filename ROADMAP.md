@@ -161,27 +161,34 @@ _Derived from `docs/quality_report.md` (2026-03-20). Items are ordered by severi
 - [x] GLEAN verification framework — guideline-grounded agent action auditing (`glean.py`, 11 tests)
 - [x] Temperature diversity mixin for pluralistic alignment (`model_routing.py`)
 
+## Wave 17 — Production Deployment (2026-04-02) ✅
+
+### Infrastructure
+- [x] nginx ingress controller installed on DOKS with cert-manager + Let's Encrypt ClusterIssuer
+- [x] DNS A record `lula.eiv.eng.br → 134.199.245.159` (pending NS delegation at registrar)
+- [x] Service switched from LoadBalancer to ClusterIP (ingress handles routing)
+- [x] Helm chart published to OCI registry: `oci://registry.digitalocean.com/lula-orch/lula:1.1.0`
+
+### Architecture
+- [x] 1,647 tests, 82% coverage, gate ratcheted to 82%
+- [x] pgvector backend for PostgreSQL-backed long-term memory (`backends/pgvector.py`)
+- [x] SYMPHONY SharedReflectionPool for cross-iteration failure learning (`model_routing.py`)
+
 ## Deployment Status (2026-04-02)
 
 - **Cluster:** DOKS `lula-prod` in nyc3, 2x `s-2vcpu-4gb` nodes, autoscale to 4
 - **Image:** `registry.digitalocean.com/lula-orch/lula:v1.1.0`
+- **Helm chart:** `oci://registry.digitalocean.com/lula-orch/lula:1.1.0`
 - **Pods:** 2 orchestrator + 2 runner, all healthy
-- **Access:** `kubectl port-forward svc/lula-orch -n lula-orch 8080:80`
-- **LB:** External IP assigned, pending ingress controller for public routing
+- **Ingress:** nginx + cert-manager, TLS via Let's Encrypt
+- **DNS:** `lula.eiv.eng.br` A record created (NS delegation pending at registrar)
+- **Direct access:** `curl -sk https://134.199.245.159/healthz -H "Host: lula.eiv.eng.br"`
 
-## Next Level — Wave 17 (Planned)
+## Next Level — Wave 18 (Planned)
 
-### Product
 - [ ] Publish VS Code extension to marketplace (pending publisher documentation review)
-- [ ] Ingress controller (nginx) for DOKS public routing with TLS
-- [ ] DNS record (lula.eiv.eng.br) pointing to ingress
-
-### Architecture
+- [ ] Complete DNS NS delegation at registrar for lula.eiv.eng.br
 - [ ] Ratchet coverage to 85% (target: verifier.py, planner.py)
-- [ ] pgvector backend option for long-term memory
 - [ ] Q-RAG embedder optimization — RL-trained multi-step retrieval
-
-### Research
-- [ ] SYMPHONY pool-wise memory sharing — cross-agent failure reflection
 - [ ] Edge deployment profile — local/air-gapped config
-- [ ] Publish Helm chart to OCI registry
+- [ ] Horizontal pod autoscaler tuning based on production load patterns
