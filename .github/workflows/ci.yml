@@ -13,6 +13,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   lint-python:
     name: "Python Lint & Type Check"
@@ -65,7 +68,7 @@ jobs:
 
       - name: Run pytest
         working-directory: py
-        run: uv run pytest tests/ -x -q --tb=short --cov=lg_orch --cov-fail-under=81
+        run: uv run pytest tests/ -x -q --tb=short --cov=lg_orch --cov-fail-under=82
 
       - name: Upload coverage report
         if: always()
