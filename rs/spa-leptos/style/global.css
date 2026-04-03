@@ -471,3 +471,91 @@ input:focus {
 }
 .streaming-dots span:nth-child(2) { animation-delay: 0.2s; }
 .streaming-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Animations ── */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+@keyframes typing-dot {
+    0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+}
+@keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes card-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card-enter {
+    animation: card-enter 0.3s ease-out;
+}
+
+/* ── Run Detail Layout ── */
+.run-detail-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+.run-detail-header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+.run-detail-header-left {
+    display: flex;
+    flex-direction: column;
+}
+.run-detail-request {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    max-width: 800px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.run-detail-pipeline {
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    overflow-x: auto;
+}
+.run-detail-panels {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+.run-detail-terminal-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+}
+.run-detail-tabs-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+/* ── Pipeline SVG ── */
+.pipeline-svg-container {
+    min-height: 80px;
+}
+.pipeline-node-active circle {
+    animation: pulse 1.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 6px rgba(0, 212, 170, 0.5));
+}
+
+/* ── Pipeline stage (list fallback, used by run cards) ── */
+.pipeline-active {
+    animation: pulse 1.5s ease-in-out infinite;
+}
