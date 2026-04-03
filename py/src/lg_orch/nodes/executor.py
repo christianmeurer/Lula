@@ -502,11 +502,14 @@ def executor(state: dict[str, Any] | BaseModel) -> dict[str, Any]:
         violations = glean_auditor.export_violations()
         if violations:
             blocking_count = sum(1 for v in violations if v.get("severity") == "block")
-            log.warning(
-                "glean.violations_recorded",
-                count=len(violations),
-                blocking=blocking_count,
-            )
+            try:
+                log.warning(
+                    "glean.violations_recorded",
+                    count=len(violations),
+                    blocking=blocking_count,
+                )
+            except ValueError:
+                pass  # stderr closed in test environments
             # Wire blocking violations into audit trail if AuditLogger available
             audit_logger = state.get("_audit_logger")
             if audit_logger is not None:
