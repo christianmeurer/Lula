@@ -499,6 +499,32 @@ def executor(state: dict[str, Any] | BaseModel) -> dict[str, Any]:
         "budgets": budgets,
     }
     if glean_auditor is not None:
+        violations = glean_auditor.export_violations()
+        if violations:
+            blocking_count = sum(1 for v in violations if v.get("severity") == "block")
+            log.warning(
+                "glean.violations_recorded",
+                count=len(violations),
+                blocking=blocking_count,
+            )
+            # Wire blocking violations into audit trail if AuditLogger available
+            audit_logger = state.get("_audit_logger")
+            if audit_logger is not None:
+                from lg_orch.audit import AuditEvent, utc_now_iso
+
+                for v in violations:
+                    if v.get("severity") == "block":
+                        audit_logger.log(
+                            AuditEvent(
+                                ts=utc_now_iso(),
+                                subject="system",
+                                roles=[],
+                                action="glean_violation",
+                                resource_id=v.get("guideline_id"),
+                                outcome="denied",
+                                detail=json.dumps(v, ensure_ascii=False),
+                            )
+                        )
         out = append_event(out, kind="glean", data=glean_auditor.summary())
     out = append_event(out, kind="node", data={"name": "executor", "phase": "end"})
     return prune_pre_verification_history(out)
