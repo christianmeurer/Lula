@@ -169,3 +169,15 @@ class GleanAuditor:
             "evidence_entries": len(self._evidence),
             "compliant": len(blocking) == 0,
         }
+
+    def export_violations(self) -> list[dict[str, Any]]:
+        """Return all recorded violations as serializable dicts."""
+        return [
+            {
+                "guideline_id": v.guideline_id,
+                "tool_name": v.tool_name,
+                "detail": v.detail,
+                "severity": v.severity,
+            }
+            for v in self._violations
+        ]
