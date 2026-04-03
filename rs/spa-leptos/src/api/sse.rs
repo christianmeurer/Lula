@@ -23,7 +23,10 @@ struct RunSummaryEvent {
     #[serde(default)]
     trace: Option<serde_json::Value>,
     #[serde(default)]
-    _current_node: Option<String>,
+    #[serde(rename = "final")]
+    final_text: Option<String>,
+    #[serde(default)]
+    _trace_ready: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +148,27 @@ pub fn connect_sse(
                                 summary: summary.pending_approval_summary.clone(),
                                 operation_class: None,
                             });
+                        }
+
+                        // Extract final output
+                        if s.final_output.is_none() {
+                            // Try top-level "final" field first
+                            if let Some(ref f) = summary.final_text {
+                                if !f.is_empty() {
+                                    s.final_output = Some(f.clone());
+                                }
+                            }
+                            // Then try trace.final
+                            if s.final_output.is_none() {
+                                if let Some(ref trace_val) = summary.trace {
+                                    if let Some(f) = trace_val.get("final").and_then(|v| v.as_str())
+                                    {
+                                        if !f.is_empty() {
+                                            s.final_output = Some(f.to_string());
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // Extract trace events if present
