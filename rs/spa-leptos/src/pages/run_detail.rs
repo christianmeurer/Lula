@@ -53,7 +53,7 @@ pub fn RunDetailPage() -> impl IntoView {
     // Elapsed time counter (seconds since page load)
     let (elapsed, set_elapsed) = signal(0u64);
     {
-        let _interval_handle = leptos::task::spawn_local(async move {
+        leptos::task::spawn_local(async move {
             loop {
                 gloo_timers::future::TimeoutFuture::new(1_000).await;
                 set_elapsed.update(|e| *e += 1);
