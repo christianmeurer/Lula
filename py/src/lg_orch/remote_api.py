@@ -157,6 +157,13 @@ def _authorize_request(
         return "", None
     if route == "/metrics":
         return "", None
+    # SPA static assets served without auth — token entered in the UI
+    if route.startswith("/app"):
+        return "", None
+    # Trunk-built WASM/JS/CSS assets served at root
+    _spa_exts = (".js", ".css", ".wasm", ".svg", ".png", ".ico")
+    if any(route.endswith(ext) for ext in _spa_exts):
+        return "", None
     if auth_mode == "off":
         return "", None
     if auth_mode != "bearer":
@@ -609,7 +616,12 @@ def _hdl_spa(
         return _json_response(405, {"error": "method_not_allowed"})
     from lg_orch.spa.router import create_spa_router
 
-    subpath = "/".join(path_parts[1:]) if len(path_parts) > 1 else ""
+    # Root-level assets (e.g., /global-xxx.css) keep their full name
+    # /app/... assets strip the "app" prefix
+    if path_parts and path_parts[0] != "app":
+        subpath = "/".join(path_parts)
+    else:
+        subpath = "/".join(path_parts[1:]) if len(path_parts) > 1 else ""
     return create_spa_router()(subpath)
 
 
@@ -680,6 +692,10 @@ def _match_parameterized(
         return _hdl_runs_vote
     # /app/...
     if path_parts and path_parts[0] == "app":
+        return _hdl_spa
+    # Trunk-built SPA assets at root (hashed .js/.css/.wasm files)
+    _spa_asset_exts = (".js", ".css", ".wasm")
+    if n == 1 and any(path_parts[0].endswith(ext) for ext in _spa_asset_exts):
         return _hdl_spa
     return None
 
