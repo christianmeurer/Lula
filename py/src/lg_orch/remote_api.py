@@ -160,6 +160,10 @@ def _authorize_request(
     # SPA static assets served without auth — token entered in the UI
     if route.startswith("/app"):
         return "", None
+    # Trunk-built WASM/JS/CSS assets served at root
+    _spa_exts = (".js", ".css", ".wasm", ".svg", ".png", ".ico")
+    if any(route.endswith(ext) for ext in _spa_exts):
+        return "", None
     if auth_mode == "off":
         return "", None
     if auth_mode != "bearer":
