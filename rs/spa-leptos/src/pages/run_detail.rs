@@ -46,18 +46,31 @@ pub fn RunDetailPage() -> impl IntoView {
     let left_panel = ViewFn::from(move || {
         view! {
             <div style="border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;height:100%;">
-                <div style="padding:16px;font-size:11px;color:var(--text-muted);letter-spacing:0.5px;font-weight:600;">
-                    "LIVE AGENT"
+                <div style="padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);background:var(--bg-surface);">
+                    <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.5px;font-weight:600;">
+                        "LIVE AGENT"
+                    </div>
+                    {move || {
+                        let s = sse_state.get();
+                        let badge_class = if s.is_done { "badge badge-passed" } else { "badge badge-running" };
+                        let badge_text = if s.is_done { "Done" } else { "Running" };
+                        view! { <span class=badge_class>{badge_text}</span> }
+                    }}
                 </div>
-                <div style="flex:1;overflow-y:auto;padding:0 12px 12px 12px;">
+                <div style="flex:1;overflow-y:auto;padding:12px;">
                     <RunStream state=state_signal />
                     {move || {
                         let s = sse_state.get();
                         if !s.is_done {
                             view! {
                                 <div style="display:flex;align-items:center;gap:8px;padding:12px 0;color:var(--text-muted);font-size:13px;">
-                                    <span class="spinner" style="width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;"></span>
-                                    "Streaming..."
+                                    <span class="spinner"></span>
+                                    "Processing"
+                                    <span class="streaming-dots">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </span>
                                 </div>
                             }.into_any()
                         } else if let Some(output) = s.final_output {
