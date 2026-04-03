@@ -206,25 +206,38 @@ _Derived from `docs/quality_report.md` (2026-03-20). Items are ordered by severi
 - [x] Prometheus alert rules — 7 production alerts (service down, latency, error rate, memory, approvals)
 - [x] 1,929 tests, 84.5% coverage
 
-## Deployment Status (2026-04-02)
-
-- **Cluster:** DOKS `lula-prod` in nyc3, 2× `s-2vcpu-4gb` nodes, autoscale to 4
-- **Image:** `registry.digitalocean.com/lula-orch/lula:v1.2.0`
-- **Helm chart:** `oci://registry.digitalocean.com/lula-orch/lula:1.2.0`
-- **Pods:** 2 orchestrator + 2 runner, all healthy
-- **Ingress:** nginx + cert-manager, TLS via Let's Encrypt
-- **DNS:** `lula.eiv.eng.br` A record created (NS delegation pending at registrar)
-
-## Wave 20 (Planned)
-
-### Blocked on User
-- [ ] Complete DNS NS delegation at registrar for `lula.eiv.eng.br`
-- [ ] Publish VS Code extension to marketplace (pending publisher documentation)
+## Wave 20 — Production Validation & API Integration (2026-04-03) ✅
 
 ### Code
-- [ ] Ratchet coverage gate from 84% to 88%
-- [ ] Wire Q-RAG retriever into LongTermMemoryStore.search_semantic() as opt-in re-ranker
-- [ ] Wire rate limiter summary into Prometheus metrics (rate_limit_requests_total, rate_limit_rejections_total)
-- [ ] Add structured logging for GLEAN violations (integrate with S3/GCS audit export)
-- [ ] Multi-repo meta-graph: test with 2+ repos on DOKS deployment
-- [ ] Chaos testing: verify HPA, PDB, and pod restart behavior under load
+- [x] Q-RAG retriever wired into `search_semantic()` as opt-in re-ranker (`LG_QRAG_ENABLED`)
+- [x] Rate limiter Prometheus metrics on `/metrics` endpoint (`rate_limit_requests_total`, `rate_limit_rejections_total`)
+- [x] GLEAN violations exported to structured audit trail (S3/GCS compatible)
+- [x] Multi-repo meta-graph smoke tests (20 tests covering DAG validation, cycle detection, parallel structure)
+- [x] Chaos testing script + live verification: pod recovery, health after disruption, PDB enforcement — all pass
+
+### Infrastructure
+- [x] DNS configured via Cloudflare A record → ingress IP
+- [x] TLS certificate automatically issued by Let's Encrypt (cert-manager)
+- [x] DO Gradient Platform API key configured, model `alibaba-qwen3-32b` active
+- [x] SPA event parsing fixed — node names, pipeline graph, audit trail display correctly
+- [x] SPA static assets (JS/CSS/WASM) served without authentication
+
+### Deployment Status (2026-04-03)
+
+- **URL:** https://lula.eiv.eng.br/app/
+- **Cluster:** DOKS `lula-prod` in nyc3, 2× `s-2vcpu-4gb` nodes, autoscale to 4
+- **Image:** `registry.digitalocean.com/lula-orch/lula:v1.2.4`
+- **Helm chart:** `oci://registry.digitalocean.com/lula-orch/lula:1.2.0`
+- **Model:** `alibaba-qwen3-32b` via DO Gradient Platform
+- **Pods:** 2 orchestrator + 2 runner, all healthy
+- **TLS:** Let's Encrypt via cert-manager, auto-renewing
+- **Chaos tested:** pod recovery, health continuity, PDB — all verified
+
+## Wave 21 (Planned)
+
+- [ ] Publish VS Code extension to marketplace (pending publisher documentation)
+- [ ] Ratchet coverage to 88% (focus: verifier.py, planner.py deep paths)
+- [ ] WebSocket upgrade for SSE (reduce reconnection overhead)
+- [ ] Multi-tenant support: per-team namespaces with RBAC isolation
+- [ ] Observability: wire Grafana dashboard + Prometheus alerts into DOKS monitoring stack
+- [ ] Model benchmarking: compare qwen3-32b vs Claude vs GPT on the eval framework
