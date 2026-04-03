@@ -929,12 +929,12 @@ def test_rate_limiter_cleanup() -> None:
     rl = RateLimiter()
     rl.check("c1")
     rl.check("c2")
-    # With max_idle 0 seconds, all buckets should be "stale" (just created but idle > 0)
-    # Actually, we just created them, so they won't be idle long enough.
-    # Use very short idle time check:
-    removed = rl.cleanup(max_idle_seconds=0.0)
-    # Monotonic clock: just created so _last_refill ≈ now → not stale
+    # With a large idle threshold, nothing should be cleaned up
+    removed = rl.cleanup(max_idle_seconds=3600.0)
     assert removed == 0
-    # But metrics should reflect 2 active buckets
     m = rl.metrics()
     assert m["active_buckets"] == 2
+    # With zero threshold, everything is stale
+    removed = rl.cleanup(max_idle_seconds=0.0)
+    assert removed == 2
+    assert rl.metrics()["active_buckets"] == 0

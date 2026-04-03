@@ -157,6 +157,9 @@ def _authorize_request(
         return "", None
     if route == "/metrics":
         return "", None
+    # SPA static assets served without auth — token entered in the UI
+    if route.startswith("/app"):
+        return "", None
     if auth_mode == "off":
         return "", None
     if auth_mode != "bearer":
