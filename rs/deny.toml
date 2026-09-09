@@ -5,6 +5,19 @@ version = 2
 ignore = [
     "RUSTSEC-2026-0009", # CVSS 4.0 advisory; cargo-deny parser does not support CVSS 4.0
     "RUSTSEC-2024-0436", # paste crate unmaintained; transitive dep from Leptos, macro-only
+    # h2 0.3.x "unbounded empty DATA frames": the fix exists only in h2 0.4, which
+    # requires the axum 0.7 / tonic 0.12 / opentelemetry 0.27 migration.  h2 0.3 is
+    # reached through hyper 0.14 + tonic 0.11 (OTLP export *client*); the runner
+    # itself serves HTTP/1.1 (axum's http2 feature is off), so the server-side DoS
+    # vector does not apply.  Revisit when the OpenTelemetry stack is upgraded.
+    "RUSTSEC-2026-0258",
+    # proc-macro-error2 unmaintained: compile-time only, transitive from
+    # leptos_macro / leptos_router_macro / reactive_stores_macro (SPA crate).
+    "RUSTSEC-2026-0173",
+    # ttf-parser unmaintained: transitive from pdf-extract -> lopdf 0.42 (font
+    # parsing while extracting text from PDFs inside the workspace); no maintained
+    # alternative in the pdf-extract line yet.
+    "RUSTSEC-2026-0192",
 ]
 
 [licenses]
