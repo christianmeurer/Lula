@@ -1,6 +1,13 @@
-# DOKS deployment values — DigitalOcean Kubernetes
-# Usage: helm install lula charts/lula -f charts/lula/values-doks.yaml
-
+# DOKS deployment values — DigitalOcean Kubernetes (EXAMPLE, safe to commit)
+#
+# 1. Copy this file to charts/lula/values-doks.local.yaml (gitignored) and fill in
+#    the secrets, OR keep secrets out of files entirely:
+#      helm upgrade --install lula charts/lula -n lula-orch #        -f charts/lula/values-doks.example.yaml #        --set secrets.remoteApiBearerToken="$(openssl rand -hex 32)" #        --set secrets.runnerApiKey="$(openssl rand -hex 24)" #        --set secrets.hmacSecret="$(openssl rand -hex 32)" #        --set secrets.digitalOceanModelAccessKey="$DIGITAL_OCEAN_MODEL_ACCESS_KEY"
+#    OR let the External Secrets Operator manage the lula-secrets Secret
+#    (infra/k8s/external-secrets/) and leave the secrets block empty.
+# 2. Never commit a values file with real secrets. CI runs gitleaks on every push
+#    and pull request (.github/workflows/secret-scan.yml); the pre-commit hook in
+#    .pre-commit-config.yaml catches them locally.
 image:
   repository: registry.digitalocean.com/lula-orch/lula
   pullPolicy: Always
@@ -62,9 +69,9 @@ ingress:
         - lula.eiv.eng.br
 
 secrets:
-  remoteApiBearerToken: "***REMOVED***"
-  runnerApiKey: "***REMOVED***"
-  digitalOceanModelAccessKey: "***REMOVED***"
+  remoteApiBearerToken: "CHANGE_ME_bearer_token_32+_random_chars"
+  runnerApiKey: "CHANGE_ME_runner_api_key"
+  digitalOceanModelAccessKey: "CHANGE_ME_do_model_access_key"
   checkpointRedisUrl: ""
   checkpointPostgresDsn: ""
-  hmacSecret: "***REMOVED***"
+  hmacSecret: "CHANGE_ME_hmac_secret_32+_random_chars"

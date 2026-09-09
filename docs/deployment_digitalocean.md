@@ -53,7 +53,8 @@ This deploys both the orchestrator and the rust runner networked securely togeth
 Instead of manually applying 5+ manifests and substituting secrets manually, use the provided Helm chart in `charts/lula/`.
 
 ```sh
-# Override values or pass secrets directly
+# Start from the committed example (no real secrets); keep your filled-in copy
+# as charts/lula/values-doks.local.yaml, which is gitignored, or pass secrets with --set
 helm upgrade --install lula ./charts/lula \
   --namespace lula-orch \
   --create-namespace \

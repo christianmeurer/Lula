@@ -1,0 +1,34 @@
+# gitleaks configuration — https://github.com/gitleaks/gitleaks#configuration
+#
+# Used by .github/workflows/secret-scan.yml (every push and pull request, full
+# history) and by the pre-commit hook in .pre-commit-config.yaml.  Run locally:
+#     gitleaks git .            # whole history
+#     gitleaks dir .            # working tree only
+title = "Lula secret scanning"
+
+[extend]
+# Start from the built-in rule set (cloud provider keys, generic API keys,
+# private keys, JWTs, ...) and only add allowlists below.
+useDefault = true
+
+[allowlist]
+description = "Known non-secrets"
+paths = [
+  # Test fixtures use fixed, obviously fake material (HMAC test secrets,
+  # guideline ids that look like tokens).  Real credentials never belong here.
+  '''py/tests/.*''',
+  '''eval/fixtures/.*''',
+  # Lock files and generated artefacts.
+  '''py/uv\.lock''',
+  '''.*\.lock$''',
+  '''rs/spa-leptos/dist/.*''',
+]
+regexes = [
+  # Placeholders used throughout the docs, charts and manifests.
+  '''CHANGE_ME[A-Za-z0-9_+-]*''',
+  '''REPLACE_ME[A-Za-z0-9_-]*''',
+  '''\*\*\*REMOVED\*\*\*''',
+  '''your-secret[A-Za-z0-9_-]*''',
+  # Local development defaults that are documented as insecure.
+  '''dev-insecure''',
+]

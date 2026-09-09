@@ -1,0 +1,11 @@
+# Local guardrails that mirror CI.  One-time setup:
+#     pip install pre-commit      (or: uv tool install pre-commit)
+#     pre-commit install          # installs the git pre-commit hook
+# Run on demand:
+#     pre-commit run --all-files
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks (block credentials before they are committed)

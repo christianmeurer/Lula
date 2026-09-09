@@ -66,3 +66,18 @@ out/
 
 # Leptos SPA build output
 rs/spa-leptos/dist/
+
+# Deployment values with real credentials: only the *.example.yaml is tracked.
+charts/lula/values-doks.yaml
+charts/**/values-*.local.yaml
+charts/**/values-secrets*.yaml
+
+# Docker registry logins (base64 of a DigitalOcean API token) copied for image
+# builds — never track them.
+.docker-cfg/
+.docker-cfg-rw/
+.docker-cfgconfig.json
+**/.docker/config.json
+
+# Claude Code local settings can carry allow-listed commands that embed tokens.
+.claude/settings.local.json

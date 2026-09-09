@@ -53,6 +53,15 @@ cargo test --all-features
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
+## Secrets
+
+Never commit credentials. `charts/lula/values-doks.yaml`, `.docker-cfg*`, `infra/k8s/secrets.yaml` and `.env*` are gitignored on purpose; commit only `*.example.yaml` files with `CHANGE_ME` placeholders. CI runs gitleaks over the full history on every push and pull request (`.github/workflows/secret-scan.yml`). Install the same check locally once:
+
+```bash
+pip install pre-commit   # or: uv tool install pre-commit
+pre-commit install       # gitleaks now runs before every commit
+```
+
 ## Code quality
 
 - Python: `ruff format --check`, `ruff check`, `mypy`, `pytest`
