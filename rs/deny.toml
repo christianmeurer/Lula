@@ -3,7 +3,6 @@ version = 2
 # All advisories without an explicit ignore entry are denied by default in v2.
 # Add RUSTSEC IDs here only to suppress known false-positives.
 ignore = [
-    "RUSTSEC-2026-0009", # CVSS 4.0 advisory; cargo-deny parser does not support CVSS 4.0
     "RUSTSEC-2024-0436", # paste crate unmaintained; transitive dep from Leptos, macro-only
     # h2 0.3.x "unbounded empty DATA frames": the fix exists only in h2 0.4, which
     # requires the axum 0.7 / tonic 0.12 / opentelemetry 0.27 migration.  h2 0.3 is
